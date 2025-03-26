@@ -26,9 +26,6 @@ impl PointerGrab<NuonuoState> for MoveSurfaceGrab {
   }
   
   fn button(&mut self, data: &mut NuonuoState, handle: &mut smithay::input::pointer::PointerInnerHandle<'_, NuonuoState>, event: &smithay::input::pointer::ButtonEvent) {
-    
-    tracing::info!("move_grab button event, position: {:?}", self.initial_window_location);
-
     handle.button(data, event);
 
     // The button is a button code as defined in the

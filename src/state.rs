@@ -15,7 +15,7 @@ use smithay::{backend::{allocator::dmabuf::Dmabuf, renderer::{utils::on_commit_b
   shell::xdg::{PopupSurface, XdgShellState}, shm::{ShmHandler, ShmState}, socket::ListeningSocketSource
 }};
 
-use crate::backend::winit::WinitData;
+use crate::{backend::winit::WinitData, config::Configs, CalloopData};
 use crate::handler::xdg_shell::handle_commit;
 
 #[derive(Debug, Default)]
@@ -57,8 +57,9 @@ pub struct NuonuoState {
 impl NuonuoState {
   pub fn new (
     display_handle: DisplayHandle,
-    loop_handle: &LoopHandle<'static, NuonuoState>,
+    loop_handle: &LoopHandle<'static, CalloopData>,
     backend_data: WinitData,
+    configs: &Configs,
   ) -> Self {
     let start_time = std::time::Instant::now();
 
@@ -87,6 +88,7 @@ impl NuonuoState {
     // Notify clients that we have a keyboard, for the sake of the example we assume that keyboard is always present.
     // You may want to track keyboard hot-plug in real compositor.
     seat.add_keyboard(Default::default(), 200, 25).unwrap();
+    
 
     // Notify clients that we have a pointer (mouse)
     // Here we assume that there is always pointer plugged in
@@ -112,13 +114,13 @@ impl NuonuoState {
 
   }
 
-  fn init_wayland_listener (loop_handle: &LoopHandle<'static, NuonuoState>,) -> String {
+  fn init_wayland_listener (loop_handle: &LoopHandle<'static, CalloopData>,) -> String {
     let source = ListeningSocketSource::new_auto().unwrap();
     let socket_name = source.socket_name().to_string_lossy().into_owned();
 
     loop_handle
-      .insert_source(source, move |client_stream, _, nuonuo_state| {
-        nuonuo_state
+      .insert_source(source, move |client_stream, _, calloop_data| {
+        calloop_data.state
           .display_handle
           .insert_client(client_stream, Arc::new(ClientState::default()))
           .unwrap();

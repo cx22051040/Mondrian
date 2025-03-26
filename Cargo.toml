@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 anyhow = "1.0.97"
+itertools = "0.14.0"
 regex = "1.11.1"
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
@@ -16,6 +17,7 @@ version = "^0.5"
 git = "https://github.com/Smithay/smithay.git"
 
 [features]
-default = ["egl", "winit"]
+default = ["egl", "winit", "trace_input"]
 egl = ["smithay/use_system_lib", "smithay/backend_egl"]
 winit = ["smithay/backend_winit", "smithay/backend_drm"]
+trace_input = []

@@ -9,7 +9,7 @@ use smithay::{
     reexports::{calloop::LoopHandle, wayland_server::DisplayHandle}, utils::{Rectangle, Transform}, wayland::dmabuf::{DmabufFeedback, DmabufFeedbackBuilder, DmabufGlobal, DmabufState},
 };
 
-use crate::{input::input::process_input_event, state::NuonuoState};
+use crate::{input::input::process_input_event, state::NuonuoState, CalloopData};
 
 pub const OUTPUT_NAME: &str = "winit";
 
@@ -21,7 +21,7 @@ pub struct WinitData {
     pub output: Output,
 }
 
-pub fn init_winit(loop_handle: &LoopHandle<'_, NuonuoState>, display_handle: &DisplayHandle) -> WinitData {
+pub fn init_winit(loop_handle: &LoopHandle<'_, CalloopData>, display_handle: &DisplayHandle) -> WinitData {
 
     let (mut backend, winit) = winit::init::<GlesRenderer>().unwrap();
 
@@ -98,9 +98,10 @@ pub fn init_winit(loop_handle: &LoopHandle<'_, NuonuoState>, display_handle: &Di
         }
     };
 
-    loop_handle.insert_source(winit, move |event, _, nuonuo_state| {
-        let display_handle = &mut nuonuo_state.display_handle;
-        let output = &nuonuo_state.backend_data.output;
+    loop_handle.insert_source(winit, move |event, _, calloop_data| {
+        let state = &mut calloop_data.state;
+        let display_handle = &mut state.display_handle;
+        let output = &state.backend_data.output;
 
         match event {
             WinitEvent::Resized { size, .. } => {
@@ -115,10 +116,10 @@ pub fn init_winit(loop_handle: &LoopHandle<'_, NuonuoState>, display_handle: &Di
                 );
             }
             WinitEvent::Input(event) => {
-                process_input_event(event, nuonuo_state);
+                process_input_event(event, calloop_data);
             }
             WinitEvent::Redraw => {
-                let backend = &mut nuonuo_state.backend_data.backend;
+                let backend = &mut state.backend_data.backend;
                 let size = backend.window_size();
                 let damage = Rectangle::from_size(size);
                 let mut damage_tracker = OutputDamageTracker::from_output(&output);
@@ -136,7 +137,7 @@ pub fn init_winit(loop_handle: &LoopHandle<'_, NuonuoState>, display_handle: &Di
                         &mut framebuffer,
                         1.0,
                         0,
-                        [&nuonuo_state.space],
+                        [&state.space],
                         &[],
                         &mut damage_tracker,
                         [0.0, 0.0, 1.0, 1.0],
@@ -145,17 +146,17 @@ pub fn init_winit(loop_handle: &LoopHandle<'_, NuonuoState>, display_handle: &Di
                 }
                 backend.submit(Some(&[damage])).unwrap();
 
-                nuonuo_state.space.elements().for_each(|window| {
+                state.space.elements().for_each(|window| {
                     window.send_frame(
                         &output,
-                        nuonuo_state.start_time.elapsed(),
+                        state.start_time.elapsed(),
                         Some(Duration::ZERO),
                         |_, _| Some(output.clone()),
                     )
                 });
 
-                nuonuo_state.space.refresh();
-                nuonuo_state.popups.cleanup();
+                state.space.refresh();
+                state.popups.cleanup();
                 let _ = display_handle.flush_clients();
 
                 // Ask for redraw to schedule new frame.
