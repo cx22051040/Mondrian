@@ -9,7 +9,7 @@ mod input;
 mod render;
 mod state;
 mod elements;
-mod xdg_shell;
+mod handler;
 
 use smithay::
     reexports::{

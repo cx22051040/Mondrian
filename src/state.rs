@@ -1,15 +1,22 @@
 
 
-use std::sync::{atomic::AtomicBool, Arc};
+use std::sync::Arc;
 
-use smithay::{backend::{allocator::dmabuf::Dmabuf, renderer::{utils::on_commit_buffer_handler, ImportDma}}, delegate_compositor, delegate_data_device, delegate_dmabuf, delegate_output, delegate_seat, delegate_shm, delegate_xdg_shell, desktop::{find_popup_root_surface, get_popup_toplevel_coords, PopupKind, PopupManager, Space, Window}, input::{Seat, SeatHandler, SeatState}, reexports::{calloop::{generic::Generic, Interest, LoopHandle, LoopSignal, Mode, PostAction}, wayland_protocols::xdg::shell::server::xdg_toplevel, wayland_server::{backend::ClientData, protocol::{wl_buffer, wl_seat, wl_surface::WlSurface}, Client, Display, DisplayHandle, Resource}}, utils::{Clock, Serial}, wayland::{buffer::BufferHandler, compositor::{get_parent, is_sync_subsurface, CompositorClientState, CompositorHandler, CompositorState}, 
+use smithay::{backend::{allocator::dmabuf::Dmabuf, renderer::{utils::on_commit_buffer_handler, ImportDma}}, delegate_compositor, delegate_data_device, delegate_dmabuf, delegate_output, delegate_seat, delegate_shm, 
+  desktop::{find_popup_root_surface, get_popup_toplevel_coords, PopupKind, PopupManager, Space, Window}, 
+  input::{Seat, SeatHandler, SeatState}, 
+  reexports::{calloop::LoopHandle,
+  wayland_server::{backend::ClientData, 
+  protocol::{wl_buffer, wl_surface::WlSurface}, Client, DisplayHandle, Resource}}, 
+  wayland::{buffer::BufferHandler, 
+  compositor::{get_parent, is_sync_subsurface, CompositorClientState, CompositorHandler, CompositorState}, 
   dmabuf::{DmabufGlobal, DmabufHandler, DmabufState, ImportNotifier}, output::{OutputHandler, OutputManagerState}, security_context::SecurityContext, 
   selection::{data_device::{set_data_device_focus, ClientDndGrabHandler, DataDeviceHandler, DataDeviceState, ServerDndGrabHandler}, SelectionHandler}, 
-  shell::xdg::{PopupSurface, PositionerState, ToplevelSurface, XdgShellHandler, XdgShellState}, shm::{ShmHandler, ShmState}, socket::ListeningSocketSource
+  shell::xdg::{PopupSurface, XdgShellState}, shm::{ShmHandler, ShmState}, socket::ListeningSocketSource
 }};
 
 use crate::backend::winit::WinitData;
-use crate::xdg_shell::handle_commit;
+use crate::handler::xdg_shell::handle_commit;
 
 #[derive(Debug, Default)]
 pub struct ClientState {
@@ -122,7 +129,7 @@ impl NuonuoState {
     socket_name
   }
 
-  fn unconstrain_popup(&self, popup: &PopupSurface) {
+  pub fn unconstrain_popup(&self, popup: &PopupSurface) {
     let Ok(root) = find_popup_root_surface(&PopupKind::Xdg(popup.clone())) else {
         return;
     };
@@ -250,47 +257,4 @@ impl DmabufHandler for NuonuoState {
 }
 delegate_dmabuf!(NuonuoState);
 
-impl XdgShellHandler for NuonuoState {
-  fn xdg_shell_state(&mut self) -> &mut XdgShellState {
-      &mut self.xdg_shell_state
-  }
 
-  fn new_toplevel(&mut self, surface: ToplevelSurface) {
-      let window = Window::new_wayland_window(surface);
-      self.space.map_element(window, (0, 0), false);
-  }
-
-  fn new_popup(&mut self, surface: PopupSurface, _positioner: PositionerState) {
-      self.unconstrain_popup(&surface);
-      let _ = self.popups.track_popup(PopupKind::Xdg(surface));
-  }
-
-  fn reposition_request(&mut self, surface: PopupSurface, positioner: PositionerState, token: u32) {
-      surface.with_pending_state(|state| {
-          let geometry = positioner.get_geometry();
-          state.geometry = geometry;
-          state.positioner = positioner;
-      });
-      self.unconstrain_popup(&surface);
-      surface.send_repositioned(token);
-  }
-
-  fn move_request(&mut self, _surface: ToplevelSurface, _seat: wl_seat::WlSeat, _serial: Serial) {
-    // TODO
-  }
-
-  fn resize_request(
-      &mut self,
-      _surface: ToplevelSurface,
-      _seat: wl_seat::WlSeat,
-      _serial: Serial,
-      _edges: xdg_toplevel::ResizeEdge,
-  ) {
-    // TODO
-  }
-
-  fn grab(&mut self, _surface: PopupSurface, _seat: wl_seat::WlSeat, _serial: Serial) {
-      // TODO popup grabs
-  }
-}
-delegate_xdg_shell!(NuonuoState);

@@ -9,7 +9,7 @@ use smithay::{
     reexports::{calloop::LoopHandle, wayland_server::DisplayHandle}, utils::{Rectangle, Transform}, wayland::dmabuf::{DmabufFeedback, DmabufFeedbackBuilder, DmabufGlobal, DmabufState},
 };
 
-use crate::state::NuonuoState;
+use crate::{input::input::process_input_event, state::NuonuoState};
 
 pub const OUTPUT_NAME: &str = "winit";
 
@@ -45,8 +45,6 @@ pub fn init_winit(loop_handle: &LoopHandle<'_, NuonuoState>, display_handle: &Di
     let _global = output.create_global::<NuonuoState>(&display_handle);
     output.change_current_state(Some(mode), Some(Transform::Flipped180), None, Some((0, 0).into()));
     output.set_preferred(mode);
-    
-
 
     let render_node = EGLDevice::device_for_display(backend.renderer().egl_context().display())
         .and_then(|device| device.try_get_render_node());
@@ -116,7 +114,9 @@ pub fn init_winit(loop_handle: &LoopHandle<'_, NuonuoState>, display_handle: &Di
                     None,
                 );
             }
-            WinitEvent::Input(_event) => {}
+            WinitEvent::Input(event) => {
+                process_input_event(event, nuonuo_state);
+            }
             WinitEvent::Redraw => {
                 let backend = &mut nuonuo_state.backend_data.backend;
                 let size = backend.window_size();
