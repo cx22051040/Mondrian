@@ -97,7 +97,7 @@ pub fn process_input_event(event: InputEvent<WinitInput>, calloop_data: &mut Cal
 			#[cfg(feature = "trace_input")]
 			tracing::info!("The PointerButton event, button: {button}, location: {:?}", pointer.current_location());
 
-			if button_state == ButtonState::Pressed {
+			if button_state == ButtonState::Pressed && !pointer.is_grabbed() {
 				if let Some((window, _loc)) = calloop_data.state
 					.space
 					.element_under(pointer.current_location())

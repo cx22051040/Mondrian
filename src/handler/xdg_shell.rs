@@ -1,7 +1,7 @@
-use smithay::{delegate_xdg_shell, desktop::{PopupKind, PopupManager, Space, Window}, input::{pointer::Focus, Seat}, reexports::{wayland_protocols::xdg::shell::server::xdg_toplevel, wayland_server::{protocol::{wl_seat, wl_surface::WlSurface}, Resource}}, utils::Serial, wayland::{compositor::with_states,
+use smithay::{delegate_xdg_shell, desktop::{PopupKind, PopupManager, Space, Window}, input::{pointer::Focus, Seat}, reexports::{wayland_protocols::xdg::shell::server::xdg_toplevel, wayland_server::{protocol::{wl_seat, wl_surface::WlSurface}, Resource}}, utils::{Rectangle, Serial}, wayland::{compositor::with_states,
     shell::xdg::{PopupSurface, PositionerState, ToplevelSurface, XdgShellHandler, XdgShellState, XdgToplevelSurfaceData}}};
 use smithay::input::pointer::GrabStartData as PointerGrabStartData;
-use crate::{input::move_grab::MoveSurfaceGrab, state::NuonuoState};
+use crate::{input::{move_grab::MoveSurfaceGrab, resize_grab::ResizeSurfaceGrab}, state::NuonuoState};
 
 /// Should be called on `WlSurface::commit`
 pub fn handle_commit(popups: &mut PopupManager, space: &Space<Window>, surface: &WlSurface) {
@@ -92,12 +92,41 @@ impl XdgShellHandler for NuonuoState {
   
     fn resize_request(
         &mut self,
-        _surface: ToplevelSurface,
-        _seat: wl_seat::WlSeat,
-        _serial: Serial,
-        _edges: xdg_toplevel::ResizeEdge,
+        surface: ToplevelSurface,
+        seat: wl_seat::WlSeat,
+        serial: Serial,
+        edges: xdg_toplevel::ResizeEdge,
     ) {
-      // TODO
+        let seat = Seat::from_resource(&seat).unwrap();
+        let wl_surface = surface.wl_surface();
+        if let Some(start_data) = check_grab(&seat, wl_surface, serial) {
+            let pointer = seat.get_pointer().unwrap();
+
+            let window = self
+                .space
+                .elements()
+                .find(|w| w.toplevel().unwrap().wl_surface() == wl_surface)
+                .unwrap()
+                .clone();
+
+            let initial_window_location = self.space.element_location(&window).unwrap();
+            let initial_window_size = window.geometry().size;
+
+            surface.with_pending_state(|state| {
+                state.states.set(xdg_toplevel::State::Resizing);
+            });
+
+            surface.send_pending_configure();
+
+            let grab = ResizeSurfaceGrab::start(
+                start_data,
+                window,
+                edges.into(),
+                Rectangle::new(initial_window_location, initial_window_size),
+            );
+
+            pointer.set_grab(self, grab, serial, Focus::Clear);
+        }
     }
   
     fn grab(&mut self, _surface: PopupSurface, _seat: wl_seat::WlSeat, _serial: Serial) {
