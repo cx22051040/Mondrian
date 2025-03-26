@@ -16,7 +16,6 @@ use smithay::{backend::{allocator::dmabuf::Dmabuf, renderer::{utils::on_commit_b
 }};
 
 use crate::{backend::winit::WinitData, config::Configs, CalloopData};
-use crate::handler::xdg_shell::handle_commit;
 
 #[derive(Debug, Default)]
 pub struct ClientState {
@@ -160,35 +159,6 @@ impl NuonuoState {
 
 }
 
-
-impl CompositorHandler for NuonuoState {
-  fn compositor_state(&mut self) -> &mut CompositorState {
-    &mut self.compositor_state
-  }
-
-  fn client_compositor_state<'a>(&self, client: &'a Client) -> &'a CompositorClientState {
-    &client.get_data::<ClientState>().unwrap().compositor_state
-  }
-
-  fn commit(&mut self, surface: &WlSurface) {
-    on_commit_buffer_handler::<Self>(surface);
-    if !is_sync_subsurface(surface) {
-      let mut root = surface.clone();
-      while let Some(parent) = get_parent(&root) {
-        root = parent;
-      }
-      if let Some(window) = self
-        .space
-        .elements()
-        .find(|w| w.toplevel().unwrap().wl_surface() == &root)
-      {
-        window.on_commit();
-      }
-      handle_commit(&mut self.popups, &self.space, surface);
-    };
-  }
-}
-delegate_compositor!(NuonuoState);
 
 impl SelectionHandler for NuonuoState {
   type SelectionUserData = ();

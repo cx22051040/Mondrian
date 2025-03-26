@@ -1,6 +1,8 @@
 use std::cell::RefCell;
 
-use smithay::{desktop::Window, input::pointer::{GrabStartData as PointerGrabStartData, PointerGrab}, reexports::{wayland_protocols::xdg::shell::server::xdg_toplevel, wayland_server::protocol::wl_surface::WlSurface}, utils::{Logical, Rectangle, Size}, wayland::{compositor, shell::xdg::SurfaceCachedState}};
+use smithay::{desktop::{Space, Window}, input::pointer::{GrabStartData as PointerGrabStartData, PointerGrab}, 
+reexports::{wayland_protocols::xdg::shell::server::xdg_toplevel, wayland_server::protocol::wl_surface::WlSurface}, 
+utils::{Logical, Rectangle, Size, Point}, wayland::{compositor, shell::xdg::SurfaceCachedState}};
 
 use crate::state::NuonuoState;
 
@@ -34,19 +36,19 @@ impl From<xdg_toplevel::ResizeEdge> for ResizeEdge {
 /// and can be accessed using [`ResizeSurfaceState::with`]
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Default)]
 enum ResizeSurfaceState {
-    #[default]
-    Idle,
-    Resizing {
-        edges: ResizeEdge,
-        /// The initial window size and location.
-        initial_rect: Rectangle<i32, Logical>,
-    },
-    /// Resize is done, we are now waiting for last commit, to do the final move
-    WaitingForLastCommit {
-        edges: ResizeEdge,
-        /// The initial window size and location.
-        initial_rect: Rectangle<i32, Logical>,
-    },
+  #[default]
+  Idle,
+  Resizing {
+    edges: ResizeEdge,
+    /// The initial window size and location.
+    initial_rect: Rectangle<i32, Logical>,
+  },
+  /// Resize is done, we are now waiting for last commit, to do the final move
+  WaitingForLastCommit {
+    edges: ResizeEdge,
+    /// The initial window size and location.
+    initial_rect: Rectangle<i32, Logical>,
+  },
 }
 
 impl ResizeSurfaceState {
@@ -278,4 +280,46 @@ impl PointerGrab<NuonuoState> for ResizeSurfaceGrab {
     handle.gesture_hold_end(data, event);
   }
 
+}
+
+pub fn handle_commit(space: &mut Space<Window>, surface: &WlSurface) -> Option<()> {
+  let window = space
+    .elements()
+    .find(|w| w.toplevel().unwrap().wl_surface() == surface)
+    .cloned()?;
+
+  let mut window_loc = space.element_location(&window)?;
+  let geometry = window.geometry();
+
+  let new_loc: Point<Option<i32>, Logical> = ResizeSurfaceState::with(surface, |state| {
+    state
+      .commit()
+      .and_then(|(edges, initial_rect)| {
+        // If the window is being resized by top or left, its location must be adjusted
+        // accordingly.
+        edges.intersects(ResizeEdge::TOP_LEFT).then(|| {
+          let new_x = edges
+            .intersects(ResizeEdge::LEFT)
+            .then_some(initial_rect.loc.x + (initial_rect.size.w - geometry.size.w));
+          let new_y = edges
+            .intersects(ResizeEdge::TOP)
+            .then_some(initial_rect.loc.y + (initial_rect.size.h - geometry.size.h));
+          (new_x, new_y).into()
+        })
+      })
+      .unwrap_or_default()
+  });
+
+  if let Some(new_x) = new_loc.x {
+      window_loc.x = new_x;
+  }
+  if let Some(new_y) = new_loc.y {
+      window_loc.y = new_y;
+  }
+
+  if new_loc.x.is_some() || new_loc.y.is_some() {
+      // If TOP or LEFT side of the window got resized, we have to move it
+      space.map_element(window, window_loc, false);
+  }
+  Some(())
 }
