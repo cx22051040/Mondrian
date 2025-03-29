@@ -5,22 +5,20 @@ extern crate tracing;
 
 mod backend;
 mod config;
+mod handler;
 mod input;
 mod render;
 mod state;
-mod elements;
-mod handler;
 
-use smithay::
-    reexports::{
-        calloop::{generic::Generic, EventLoop, Interest, Mode, PostAction}, 
-        wayland_server::Display
+use smithay::reexports::{
+    calloop::{EventLoop, Interest, Mode, PostAction, generic::Generic},
+    wayland_server::Display,
 };
 
 use tracing_subscriber;
 
-use state::NuonuoState;
 use config::Configs;
+use state::NuonuoState;
 
 pub const OUTPUT_NAME: &str = "winit";
 
@@ -29,7 +27,7 @@ pub struct CalloopData {
     state: NuonuoState,
 }
 
-fn main (){
+fn main() {
     if let Ok(env_filter) = tracing_subscriber::EnvFilter::try_from_default_env() {
         tracing_subscriber::fmt().with_env_filter(env_filter).init();
     } else {
@@ -43,17 +41,20 @@ fn main (){
     let display_handle = display.handle();
 
     loop_handle
-      .insert_source(
-          Generic::new(display, Interest::READ, Mode::Level),
-          |_, display, calloop_data| {
-              // Safety: we don't drop the display
-              unsafe {
-                  display.get_mut().dispatch_clients(&mut calloop_data.state).unwrap();
-              }
-              Ok(PostAction::Continue)
-          },
-      )
-      .expect("Failed to init wayland server source");
+        .insert_source(
+            Generic::new(display, Interest::READ, Mode::Level),
+            |_, display, calloop_data| {
+                // Safety: we don't drop the display
+                unsafe {
+                    display
+                        .get_mut()
+                        .dispatch_clients(&mut calloop_data.state)
+                        .unwrap();
+                }
+                Ok(PostAction::Continue)
+            },
+        )
+        .expect("Failed to init wayland server source");
 
     let configs = Configs::new("src/config/keybindings.conf".to_string());
 
@@ -83,8 +84,9 @@ fn main (){
 
     tracing::info!("Initialization completed, starting the main loop.");
 
-    event_loop.run(None, &mut calloop_data, move |_| {
-        // Nuonuo is running
-    }).unwrap();
-
+    event_loop
+        .run(None, &mut calloop_data, move |_| {
+            // Nuonuo is running
+        })
+        .unwrap();
 }

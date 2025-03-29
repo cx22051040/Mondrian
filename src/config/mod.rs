@@ -1,4 +1,3 @@
-
 use itertools::Itertools;
 use regex::Regex;
 use std::collections::HashMap;
@@ -54,7 +53,6 @@ impl Configs {
             (";", vec!["semicolon"]),
             (".", vec!["period"]),
             ("'", vec!["apostrophe"]),
-
         ]
         .into_iter()
         .collect();
