@@ -1,3 +1,4 @@
+use border::BorderShader;
 use cursor::{RenderCursor, XCursor};
 use elements::CustomRenderElements;
 use smithay::{backend::renderer::{element::{memory::MemoryRenderBufferRenderElement, surface::render_elements_from_surface_tree, Kind}, gles::GlesRenderer}, utils::Scale};
@@ -5,12 +6,12 @@ use smithay::{backend::renderer::{element::{memory::MemoryRenderBufferRenderElem
 use crate::state::NuonuoState;
 
 pub mod cursor;
-pub mod draw;
 pub mod elements;
 pub mod renders;
+pub mod border;
 
 impl NuonuoState {
-  pub fn get_cursor_render_elements(&mut self) -> Vec<CustomRenderElements<GlesRenderer>> {
+  pub fn get_cursor_render_elements(&mut self) -> Vec<CustomRenderElements> {
     self.cursor_manager.check_cursor_image_surface_alive();
 
     let output_scale = self.backend_data.output.current_scale();
@@ -24,7 +25,7 @@ impl NuonuoState {
 
     let output_scale = Scale::from(output_scale.fractional_scale());
 
-    let pointer_render_elements: Vec<CustomRenderElements<GlesRenderer>> = match render_cursor {
+    let pointer_render_elements: Vec<CustomRenderElements> = match render_cursor {
         RenderCursor::Hidden => vec![],
         RenderCursor::Surface { hotspot, surface } => {
             let real_pointer_pos = 
@@ -75,6 +76,21 @@ impl NuonuoState {
     pointer_render_elements
   }
 
-  
+  pub fn get_border_render_elements(&mut self) -> Vec<CustomRenderElements> {
+    let mut elements: Vec<CustomRenderElements> = vec![]; 
+    for window in self.space.elements() {
+        let geometry = self.space.element_geometry(window).unwrap();
+        elements.push(
+            CustomRenderElements::Border(
+                BorderShader::element(
+                    &self.backend_data.backend.renderer(), 
+                    geometry, 
+                    1.0
+                )
+            )
+        );
+    }
+    elements
+  }
 
 }

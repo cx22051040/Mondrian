@@ -7,17 +7,19 @@ use smithay::{
     backend::{
         egl::EGLDevice,
         renderer::{
-            damage::OutputDamageTracker, element::{
-                memory::MemoryRenderBufferRenderElement, surface::{render_elements_from_surface_tree, WaylandSurfaceRenderElement}, Kind
-            }, gles::GlesRenderer, ImportDma
+            damage::OutputDamageTracker, gles::GlesRenderer, ImportDma
         },
         winit::{self, WinitEvent, WinitGraphicsBackend},
-    }, desktop::space::render_output, output::{Mode, Output, PhysicalProperties, Subpixel}, reexports::{calloop::LoopHandle, wayland_server::DisplayHandle}, utils::{Physical, Point, Rectangle, Scale, Transform}, wayland::dmabuf::{DmabufFeedback, DmabufFeedbackBuilder, DmabufGlobal, DmabufState}
+    }, 
+    desktop::space::render_output, output::{Mode, Output, PhysicalProperties, Subpixel}, 
+    reexports::{calloop::LoopHandle, wayland_server::DisplayHandle}, 
+    utils::{Rectangle, Transform}, 
+    wayland::dmabuf::{DmabufFeedback, DmabufFeedbackBuilder, DmabufGlobal, DmabufState}
 };
 
 use crate::{
     input::input::process_input_event, render::{
-        cursor::{RenderCursor, XCursor}, elements::CustomRenderElements
+        border::{compile_shaders, BorderShader}, elements::CustomRenderElements
     }, NuonuoState
 };
 
@@ -101,6 +103,9 @@ pub fn init_winit(
         tracing::info!("EGL hardware-acceleration enabled");
     };
 
+    // TODO: tidy it
+    compile_shaders(backend.renderer());
+
     let backend_data = {
         let damage_tracker = OutputDamageTracker::from_output(&output);
 
@@ -135,16 +140,21 @@ pub fn init_winit(
                     let mut damage_tracker = OutputDamageTracker::from_output(&nuonuo_state.backend_data.output);
                     
                     {
-                        let mut custom_elements: Vec<CustomRenderElements<GlesRenderer>> = vec![];
+                        let mut custom_elements: Vec<CustomRenderElements> = vec![];
 
                         // add pointer elements
                         custom_elements.extend(
                             nuonuo_state.get_cursor_render_elements()
                         );
 
-                        let (renderer, mut framebuffer) = nuonuo_state.backend_data.backend.bind().unwrap();
+                        // add window's border
+                        custom_elements.extend(
+                            nuonuo_state.get_border_render_elements()
+                        );
 
-                        render_output::<_, CustomRenderElements<GlesRenderer>, _, _>(
+                        let (renderer, mut framebuffer) = nuonuo_state.backend_data.backend.bind().unwrap();
+                        
+                        render_output::<_, CustomRenderElements, _, _>(
                             &nuonuo_state.backend_data.output,
                             renderer,
                             &mut framebuffer,

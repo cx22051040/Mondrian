@@ -9,6 +9,7 @@ mod handler;
 mod input;
 mod render;
 mod state;
+mod layout;
 
 use smithay::reexports::calloop::EventLoop;
 
