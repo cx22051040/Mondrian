@@ -207,7 +207,6 @@ impl CursorManager {
                         .unwrap()
                         .hotspot
                 });
-                tracing::info!("hotspot: {hotspot:?}");
                 RenderCursor::Surface { hotspot, surface }
             }
             CursorImageStatus::Named(icon) => {

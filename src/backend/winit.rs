@@ -7,31 +7,18 @@ use smithay::{
     backend::{
         egl::EGLDevice,
         renderer::{
-            ImportDma,
-            damage::OutputDamageTracker,
-            element::{
-                Kind, memory::MemoryRenderBufferRenderElement,
-                surface::render_elements_from_surface_tree,
-            },
-            gles::GlesRenderer,
+            damage::OutputDamageTracker, element::{
+                memory::MemoryRenderBufferRenderElement, surface::{render_elements_from_surface_tree, WaylandSurfaceRenderElement}, Kind
+            }, gles::GlesRenderer, ImportDma
         },
         winit::{self, WinitEvent, WinitGraphicsBackend},
-    },
-    output::{Mode, Output, PhysicalProperties, Subpixel},
-    reexports::{calloop::LoopHandle, wayland_server::DisplayHandle},
-    utils::{Physical, Point, Rectangle, Scale, Transform},
-    wayland::dmabuf::{DmabufFeedback, DmabufFeedbackBuilder, DmabufGlobal, DmabufState},
+    }, desktop::space::render_output, output::{Mode, Output, PhysicalProperties, Subpixel}, reexports::{calloop::LoopHandle, wayland_server::DisplayHandle}, utils::{Physical, Point, Rectangle, Scale, Transform}, wayland::dmabuf::{DmabufFeedback, DmabufFeedbackBuilder, DmabufGlobal, DmabufState}
 };
 
 use crate::{
-    CalloopData,
-    input::input::process_input_event,
-    render::{
-        cursor::{RenderCursor, XCursor},
-        elements::PointerRenderElement,
-        renders::render_output,
-    },
-    state::NuonuoState,
+    input::input::process_input_event, render::{
+        cursor::{RenderCursor, XCursor}, elements::CustomRenderElements
+    }, NuonuoState
 };
 
 pub const OUTPUT_NAME: &str = "winit";
@@ -45,7 +32,7 @@ pub struct WinitData {
 }
 
 pub fn init_winit(
-    loop_handle: &LoopHandle<'_, CalloopData>,
+    loop_handle: &LoopHandle<'_, NuonuoState>,
     display_handle: &DisplayHandle,
 ) -> WinitData {
     let (mut backend, winit) = winit::init::<GlesRenderer>().unwrap();
@@ -126,14 +113,10 @@ pub fn init_winit(
     };
 
     loop_handle
-        .insert_source(winit, move |event, _, calloop_data| {
-            let state = &mut calloop_data.state;
-            let display_handle = &mut state.display_handle;
-            let output = &state.backend_data.output;
-
+        .insert_source(winit, move |event, _, nuonuo_state| {
             match event {
                 WinitEvent::Resized { size, .. } => {
-                    output.change_current_state(
+                    nuonuo_state.backend_data.output.change_current_state(
                         Some(Mode {
                             size,
                             refresh: 60_000,
@@ -144,124 +127,60 @@ pub fn init_winit(
                     );
                 }
                 WinitEvent::Input(event) => {
-                    process_input_event(event, calloop_data);
+                    process_input_event(event, nuonuo_state);
                 }
                 WinitEvent::Redraw => {
-                    let backend = &mut state.backend_data.backend;
-                    let size = backend.window_size();
+                    let size = nuonuo_state.backend_data.backend.window_size();
                     let damage = Rectangle::from_size(size);
-                    let mut damage_tracker = OutputDamageTracker::from_output(&output);
-                    let age = backend.buffer_age().unwrap_or(0);
-
+                    let mut damage_tracker = OutputDamageTracker::from_output(&nuonuo_state.backend_data.output);
+                    
                     {
-                        let (renderer, mut framebuffer) = backend.bind().unwrap();
+                        let mut custom_elements: Vec<CustomRenderElements<GlesRenderer>> = vec![];
 
-                        let mut elements = Vec::<PointerRenderElement<GlesRenderer>>::new();
-                        
-                        // add cursor render elements.
-                        {
-                            state.cursor_manager.check_cursor_image_surface_alive();
+                        // add pointer elements
+                        custom_elements.extend(
+                            nuonuo_state.get_cursor_render_elements()
+                        );
 
-                            let output_scale = output.current_scale();
-                            let output_pos = state.space.output_geometry(output).unwrap().loc;
+                        let (renderer, mut framebuffer) = nuonuo_state.backend_data.backend.bind().unwrap();
 
-                            let pointer_pos = state.seat.get_pointer().unwrap().current_location();
-                            let pointer_pos = pointer_pos - output_pos.to_f64();
-
-                            let cursor_scale = output_scale.integer_scale();
-                            let render_cursor = state.cursor_manager.get_render_cursor(cursor_scale);
-
-                            let output_scale = Scale::from(output.current_scale().fractional_scale());
-      
-                            elements.extend(match render_cursor {
-                                RenderCursor::Hidden => vec![],
-                                RenderCursor::Surface { hotspot, surface } => {
-                                    // Get the real surface location.
-                                    let real_pointer_pos: Point<i32, Physical> = (pointer_pos
-                                        - hotspot.to_f64())
-                                    .to_physical_precise_round(output_scale);
-                                    let render_elements: Vec<PointerRenderElement<GlesRenderer>> =
-                                        render_elements_from_surface_tree(
-                                            renderer,
-                                            &surface,
-                                            real_pointer_pos,
-                                            output_scale,
-                                            1.0,
-                                            Kind::Cursor,
-                                        );
-                                    render_elements
-                                }
-                                RenderCursor::Named {
-                                    icon,
-                                    scale,
-                                    cursor,
-                                } => {
-                                    let (idx, frame) =
-                                        cursor.frame(state.start_time.elapsed().as_millis() as u32);
-
-                                    let hotspot = XCursor::hotspot(frame).to_logical(scale);
-                                    let real_pointer_pos: Point<i32, Physical> = (pointer_pos
-                                        - hotspot.to_f64())
-                                    .to_physical_precise_round(output_scale);
-
-                                    let texture =
-                                        state.cursor_texture_cache.get(icon, scale, &cursor, idx);
-
-                                    let elements: Vec<PointerRenderElement<GlesRenderer>> = vec![
-                                        PointerRenderElement::<GlesRenderer>::from(
-                                            MemoryRenderBufferRenderElement::from_buffer(
-                                                renderer,
-                                                real_pointer_pos.to_f64(),
-                                                &texture,
-                                                None,
-                                                None,
-                                                None,
-                                                Kind::Cursor,
-                                            )
-                                            .expect("Lost system pointer buffer"),
-                                        )
-                                        .into(),
-                                    ];
-                                    elements
-                                }
-                            });
-                        } 
-
-                        render_output(
-                            &output,
-                            &state.space,
-                            elements,
+                        render_output::<_, CustomRenderElements<GlesRenderer>, _, _>(
+                            &nuonuo_state.backend_data.output,
                             renderer,
                             &mut framebuffer,
+                            1.0,
+                            0,
+                            [&nuonuo_state.space],
+                            custom_elements.as_slice(),
                             &mut damage_tracker,
-                            age,
+                            [0.0, 0.0, 1.0, 1.0],
                         )
                         .unwrap();
                     }
 
-                    backend.submit(Some(&[damage])).unwrap();
+                    nuonuo_state.backend_data.backend.submit(Some(&[damage])).unwrap();
 
                     // For each of the windows send the frame callbacks to tell them to draw next frame.
-                    state
+                    nuonuo_state
                         .space
                         .elements()
                         .for_each(|window: &smithay::desktop::Window| {
                             window.send_frame(
-                                &output,
-                                state.start_time.elapsed(),
+                                &nuonuo_state.backend_data.output,
+                                nuonuo_state.start_time.elapsed(),
                                 Some(Duration::ZERO),
-                                |_, _| Some(output.clone()),
+                                |_, _| Some(nuonuo_state.backend_data.output.clone()),
                             )
                         });
 
-                    // Refresh space state and handle certain events like enter/leave for outputs/windows
-                    state.space.refresh();
-                    state.popups.cleanup();
+                    // Refresh space nuonuo_state and handle certain events like enter/leave for outputs/windows
+                    nuonuo_state.space.refresh();
+                    nuonuo_state.popups.cleanup();
                     // Flush the outgoing buffers caontaining events so the clients get them.
-                    let _ = display_handle.flush_clients();
+                    let _ = nuonuo_state.display_handle.flush_clients();
 
                     // Ask for redraw to schedule new frame.
-                    backend.window().request_redraw();
+                    nuonuo_state.backend_data.backend.window().request_redraw();
                 }
                 WinitEvent::CloseRequested => {}
                 _ => (),

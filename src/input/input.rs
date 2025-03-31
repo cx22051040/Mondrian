@@ -15,21 +15,23 @@ use smithay::{
     utils::SERIAL_COUNTER,
 };
 
-use crate::CalloopData;
+use crate::NuonuoState;
 
-pub fn process_input_event(event: InputEvent<WinitInput>, calloop_data: &mut CalloopData) {
+pub fn process_input_event(event: InputEvent<WinitInput>, nuonuo_state: &mut NuonuoState) {
     match event {
         InputEvent::Keyboard { event, .. } => {
             let serial = SERIAL_COUNTER.next_serial();
             let time = Event::time_msec(&event);
             let event_state = event.state();
-
-            let keyboard = &mut calloop_data.state.seat.get_keyboard().unwrap();
+            let conf_priority_map = nuonuo_state.configs.conf_priority_map.clone();
+            let conf_keybindings = nuonuo_state.configs.conf_keybindings.clone();
+            
+            let keyboard = &mut nuonuo_state.seat.get_keyboard().unwrap();
 
             // TODO: inhabit shift+word when other modifiers are actived
 
             keyboard.input::<(), _>(
-                &mut calloop_data.state,
+                nuonuo_state,
                 event.key_code(),
                 event_state,
                 serial,
@@ -48,9 +50,7 @@ pub fn process_input_event(event: InputEvent<WinitInput>, calloop_data: &mut Cal
                             });
 
                         pressed_keys_name.sort_by_key(|key| {
-                            calloop_data
-                                .configs
-                                .conf_priority_map
+                            conf_priority_map
                                 .get(key)
                                 .cloned()
                                 .unwrap_or(3)
@@ -61,7 +61,7 @@ pub fn process_input_event(event: InputEvent<WinitInput>, calloop_data: &mut Cal
                         #[cfg(feature = "trace_input")]
                         tracing::info!("Keys: {:?}", keys);
 
-                        if let Some(command) = calloop_data.configs.conf_keybindings.get(&keys) {
+                        if let Some(command) = conf_keybindings.get(&keys) {
                             tracing::info!("Command: {}", command);
                             std::process::Command::new(command).spawn().ok();
                         }
@@ -77,15 +77,15 @@ pub fn process_input_event(event: InputEvent<WinitInput>, calloop_data: &mut Cal
         }
 
         InputEvent::PointerMotionAbsolute { event } => {
-            let output = calloop_data.state.space.outputs().next().unwrap();
-            let output_geo = calloop_data.state.space.output_geometry(output).unwrap();
+            let output = nuonuo_state.space.outputs().next().unwrap();
+            let output_geo = nuonuo_state.space.output_geometry(output).unwrap();
             let position = event.position_transformed(output_geo.size) + output_geo.loc.to_f64();
 
             let serial = SERIAL_COUNTER.next_serial();
-            let pointer = calloop_data.state.seat.get_pointer().unwrap();
+            let pointer = nuonuo_state.seat.get_pointer().unwrap();
             let under =
                 {
-                    calloop_data.state.space.element_under(position).and_then(
+                    nuonuo_state.space.element_under(position).and_then(
                         |(window, location)| {
                             window
                                 .surface_under(position - location.to_f64(), WindowSurfaceType::ALL)
@@ -97,7 +97,7 @@ pub fn process_input_event(event: InputEvent<WinitInput>, calloop_data: &mut Cal
             // TODO: change keyboard focus here when any window under the pointer
 
             pointer.motion(
-                &mut calloop_data.state,
+                nuonuo_state,
                 under,
                 &MotionEvent {
                     location: position,
@@ -105,12 +105,12 @@ pub fn process_input_event(event: InputEvent<WinitInput>, calloop_data: &mut Cal
                     time: event.time_msec(),
                 },
             );
-            pointer.frame(&mut calloop_data.state);
+            pointer.frame(nuonuo_state);
         }
 
         InputEvent::PointerButton { event, .. } => {
-            let pointer = calloop_data.state.seat.get_pointer().unwrap();
-            let keyboard = calloop_data.state.seat.get_keyboard().unwrap();
+            let pointer = nuonuo_state.seat.get_pointer().unwrap();
+            let keyboard = nuonuo_state.seat.get_keyboard().unwrap();
 
             let serial = SERIAL_COUNTER.next_serial();
 
@@ -124,30 +124,30 @@ pub fn process_input_event(event: InputEvent<WinitInput>, calloop_data: &mut Cal
             );
 
             if button_state == ButtonState::Pressed && !pointer.is_grabbed() {
-                if let Some((window, _loc)) = calloop_data
-                    .state
-                    .space
-                    .element_under(pointer.current_location())
-                    .map(|(w, l)| (w.clone(), l))
+                if let Some((window, _loc)) =                     
+                    nuonuo_state
+                        .space
+                        .element_under(pointer.current_location())
+                        .map(|(w, l)| (w.clone(), l))
                 {
-                    calloop_data.state.space.raise_element(&window, true);
+                    nuonuo_state.space.raise_element(&window, true);
                     keyboard.set_focus(
-                        &mut calloop_data.state,
+                        nuonuo_state,
                         Some(window.toplevel().unwrap().wl_surface().clone()),
                         serial,
                     );
                 } else {
-                    calloop_data.state.space.elements().for_each(|window| {
+                    nuonuo_state.space.elements().for_each(|window| {
                         window.set_activated(false);
                         window.toplevel().unwrap().send_pending_configure();
                     });
-                    keyboard.set_focus(&mut calloop_data.state, Option::<WlSurface>::None, serial);
+                    keyboard.set_focus(nuonuo_state, Option::<WlSurface>::None, serial);
                 }
             }
 
             // modify pointer state
             pointer.button(
-                &mut calloop_data.state,
+                nuonuo_state,
                 &ButtonEvent {
                     button,
                     state: button_state,
@@ -155,7 +155,7 @@ pub fn process_input_event(event: InputEvent<WinitInput>, calloop_data: &mut Cal
                     time: event.time_msec(),
                 },
             );
-            pointer.frame(&mut calloop_data.state);
+            pointer.frame(nuonuo_state);
         }
 
         InputEvent::PointerAxis { .. } => {

@@ -11,8 +11,8 @@ use smithay::{
     },
     input::{Seat, SeatHandler, SeatState},
     reexports::{
-        calloop::LoopHandle, wayland_server::{
-            backend::ClientData, protocol::{wl_buffer, wl_surface::WlSurface}, DisplayHandle, Resource
+        calloop::{generic::Generic, Interest, LoopHandle, Mode, PostAction}, wayland_server::{
+            backend::ClientData, protocol::{wl_buffer, wl_surface::WlSurface}, Display, DisplayHandle, Resource
         }
     },
     wayland::{
@@ -35,10 +35,7 @@ use smithay::{
 };
 
 use crate::{
-    CalloopData,
-    backend::winit::WinitData,
-    config::Configs,
-    render::cursor::{CursorManager, CursorTextureCache},
+    backend::{self, winit::WinitData}, config::Configs, render::cursor::{CursorManager, CursorTextureCache}
 };
 
 #[derive(Debug, Default)]
@@ -69,6 +66,7 @@ pub struct NuonuoState {
 
     pub backend_data: WinitData,
     pub socket_name: String,
+    pub loop_handle: LoopHandle<'static, NuonuoState>,
     pub display_handle: DisplayHandle,
 
     // desktop
@@ -86,36 +84,43 @@ pub struct NuonuoState {
 
     pub cursor_manager: CursorManager,
     pub cursor_texture_cache: CursorTextureCache,
+
+    // configs
+    pub configs: Configs,
 }
 
 impl NuonuoState {
     pub fn new(
-        display_handle: DisplayHandle,
-        loop_handle: &LoopHandle<'static, CalloopData>,
-        backend_data: WinitData,
-        configs: &Configs,
+        loop_handle: LoopHandle<'static, NuonuoState>,
     ) -> Self {
+        
         let start_time = std::time::Instant::now();
 
+        let configs = Configs::new("src/config/keybindings.conf".to_string());
+
+        let display_handle: DisplayHandle = Self::init_display_handle(&loop_handle);
+
         // init wayland clients
-        let socket_name = Self::init_wayland_listener(loop_handle);
+        let socket_name = Self::init_wayland_listener(&loop_handle);
 
+        // init smithay state
         let compositor_state = CompositorState::new::<Self>(&display_handle);
-
         let data_device_state = DataDeviceState::new::<Self>(&display_handle);
-
         let output_manager_state = OutputManagerState::new_with_xdg_output::<Self>(&display_handle);
-
         let shm_state = ShmState::new::<Self>(&display_handle, vec![]);
-
         let xdg_shell_state = XdgShellState::new::<Self>(&display_handle);
         let popups = PopupManager::default();
-
         let mut seat_state = SeatState::new();
         let seat_name = String::from("winit");
         let mut seat: Seat<Self> = seat_state.new_wl_seat(&display_handle, seat_name);
-
         let mut space = Space::default();
+        
+        // TODO: use config file
+        let cursor_manager = CursorManager::new("default", 24);
+        let cursor_texture_cache = Default::default();
+
+        #[cfg(feature = "winit")]
+        let backend_data = backend::winit::init_winit(&loop_handle, &display_handle);
 
         space.map_output(&backend_data.output, (0, 0));
 
@@ -127,14 +132,11 @@ impl NuonuoState {
         // Here we assume that there is always pointer plugged in
         seat.add_pointer();
 
-        // TODO: use config file
-        let cursor_manager = CursorManager::new("default", 24);
-        let cursor_texture_cache = Default::default();
-
         NuonuoState {
             start_time,
             backend_data,
             socket_name,
+            loop_handle,
             display_handle,
 
             space,
@@ -150,17 +152,41 @@ impl NuonuoState {
 
             cursor_manager,
             cursor_texture_cache,
+
+            configs,
         }
     }
 
-    fn init_wayland_listener(loop_handle: &LoopHandle<'static, CalloopData>) -> String {
+    fn init_display_handle(loop_handle: &LoopHandle<'static, NuonuoState>) -> DisplayHandle{
+        let display: Display<NuonuoState> = Display::new().unwrap();
+        let display_handle = display.handle();
+    
+        loop_handle
+            .insert_source(
+                Generic::new(display, Interest::READ, Mode::Level),
+                |_, display, nuonuo_state| {
+                    // Safety: we don't drop the display
+                    unsafe {
+                        display
+                            .get_mut()
+                            .dispatch_clients(nuonuo_state)
+                            .unwrap();
+                    }
+                    Ok(PostAction::Continue)
+                },
+            )
+            .expect("Failed to init wayland server source");
+
+        display_handle
+    }
+
+    fn init_wayland_listener(loop_handle: &LoopHandle<'static, NuonuoState>) -> String {
         let source = ListeningSocketSource::new_auto().unwrap();
         let socket_name = source.socket_name().to_string_lossy().into_owned();
 
         loop_handle
-            .insert_source(source, move |client_stream, _, calloop_data| {
-                calloop_data
-                    .state
+            .insert_source(source, move |client_stream, _, nuonuo_state| {
+                nuonuo_state
                     .display_handle
                     .insert_client(client_stream, Arc::new(ClientState::default()))
                     .unwrap();
@@ -261,9 +287,6 @@ impl SeatHandler for NuonuoState {
         _seat: &Seat<Self>,
         image: smithay::input::pointer::CursorImageStatus,
     ) {
-        #[cfg(feature = "trace_input")]
-        tracing::info!("cursor_image event. {:?}", &image);
-        
         self.cursor_manager.set_cursor_image(image);
     }
 
