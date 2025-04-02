@@ -15,7 +15,7 @@ use smithay::{
     utils::SERIAL_COUNTER,
 };
 
-use crate::NuonuoState;
+use crate::{input::keybindings::{FunctionEnum, KeyAction}, NuonuoState};
 
 pub fn process_input_event(event: InputEvent<WinitInput>, nuonuo_state: &mut NuonuoState) {
     match event {
@@ -23,8 +23,8 @@ pub fn process_input_event(event: InputEvent<WinitInput>, nuonuo_state: &mut Nuo
             let serial = SERIAL_COUNTER.next_serial();
             let time = Event::time_msec(&event);
             let event_state = event.state();
-            let conf_priority_map = nuonuo_state.configs.conf_priority_map.clone();
-            let conf_keybindings = nuonuo_state.configs.conf_keybindings.clone();
+            let conf_priority_map = nuonuo_state.configs.conf_keybinding_manager.conf_priority_map.clone();
+            let conf_keybindings = nuonuo_state.configs.conf_keybinding_manager.conf_keybindings.clone();
             
             let keyboard = &mut nuonuo_state.seat.get_keyboard().unwrap();
 
@@ -36,7 +36,7 @@ pub fn process_input_event(event: InputEvent<WinitInput>, nuonuo_state: &mut Nuo
                 event_state,
                 serial,
                 time,
-                |_data, _modifiers, _keysym_handle| {
+                |state, _modifiers, _keysym_handle| {
                     if event_state == KeyState::Pressed {
                         let mut pressed_keys_name: Vec<String> =
                             keyboard.with_pressed_keysyms(|keysym_handles| {
@@ -62,8 +62,23 @@ pub fn process_input_event(event: InputEvent<WinitInput>, nuonuo_state: &mut Nuo
                         tracing::info!("Keys: {:?}", keys);
 
                         if let Some(command) = conf_keybindings.get(&keys) {
-                            tracing::info!("Command: {}", command);
-                            std::process::Command::new(command).spawn().ok();
+                            match command {
+                                KeyAction::Command(cmd) => {
+                                    tracing::info!("Command: {}", cmd);
+                                    std::process::Command::new(cmd).spawn().ok();
+                                }
+                                KeyAction::Internal(func) => {
+                                    let keybinding_manager = &mut state.configs.conf_keybinding_manager;
+                                    match func {
+                                        FunctionEnum::SwitchWorkspace1 => {
+                                            keybinding_manager.switch_workspace1(&mut state.space_manager);
+                                        },
+                                        FunctionEnum::SwitchWorkspace2 => {
+                                            keybinding_manager.switch_workspace2(&mut state.space_manager);
+                                        },
+                                    }
+                                }
+                            }
                         }
                     }
 
@@ -77,15 +92,15 @@ pub fn process_input_event(event: InputEvent<WinitInput>, nuonuo_state: &mut Nuo
         }
 
         InputEvent::PointerMotionAbsolute { event } => {
-            let output = nuonuo_state.space.outputs().next().unwrap();
-            let output_geo = nuonuo_state.space.output_geometry(output).unwrap();
+            let output = nuonuo_state.space_manager.current_space().outputs().next().unwrap();
+            let output_geo = nuonuo_state.space_manager.current_space().output_geometry(output).unwrap();
             let position = event.position_transformed(output_geo.size) + output_geo.loc.to_f64();
 
             let serial = SERIAL_COUNTER.next_serial();
             let pointer = nuonuo_state.seat.get_pointer().unwrap();
             let under =
                 {
-                    nuonuo_state.space.element_under(position).and_then(
+                    nuonuo_state.space_manager.current_space().element_under(position).and_then(
                         |(window, location)| {
                             window
                                 .surface_under(position - location.to_f64(), WindowSurfaceType::ALL)
@@ -126,18 +141,19 @@ pub fn process_input_event(event: InputEvent<WinitInput>, nuonuo_state: &mut Nuo
             if button_state == ButtonState::Pressed && !pointer.is_grabbed() {
                 if let Some((window, _loc)) =                     
                     nuonuo_state
-                        .space
+                        .space_manager
+                        .current_space()
                         .element_under(pointer.current_location())
                         .map(|(w, l)| (w.clone(), l))
                 {
-                    nuonuo_state.space.raise_element(&window, true);
+                    nuonuo_state.space_manager.raise_element(&window, true);
                     keyboard.set_focus(
                         nuonuo_state,
                         Some(window.toplevel().unwrap().wl_surface().clone()),
                         serial,
                     );
                 } else {
-                    nuonuo_state.space.elements().for_each(|window| {
+                    nuonuo_state.space_manager.current_space().elements().for_each(|window| {
                         window.set_activated(false);
                         window.toplevel().unwrap().send_pending_configure();
                     });

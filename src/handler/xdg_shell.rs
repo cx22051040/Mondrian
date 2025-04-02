@@ -69,8 +69,10 @@ impl XdgShellHandler for NuonuoState {
     }
 
     fn new_toplevel(&mut self, surface: ToplevelSurface) {
-        let window = Window::new_wayland_window(surface);
-        self.space.map_element(window, (0, 0), false);
+        // TODO: improve
+        let window = Window::new_wayland_window(surface.clone());
+        // TODO: activate use config
+        self.space_manager.map_element(window, (0, 0).into(), true);
     }
 
     fn new_popup(&mut self, surface: PopupSurface, _positioner: PositionerState) {
@@ -101,13 +103,14 @@ impl XdgShellHandler for NuonuoState {
             let pointer = seat.get_pointer().unwrap();
             // TODO: Maybe can improve this find action
             let window = self
-                .space
+                .space_manager
+                .current_space()
                 .elements()
                 .find(|w| w.toplevel().unwrap().wl_surface() == wl_surface)
                 .unwrap()
                 .clone();
 
-            let initial_window_location = self.space.element_location(&window).unwrap();
+            let initial_window_location = self.space_manager.current_space().element_location(&window).unwrap();
             let grab = PointerMoveSurfaceGrab {
                 start_data,
                 window,
@@ -137,13 +140,14 @@ impl XdgShellHandler for NuonuoState {
             let pointer = seat.get_pointer().unwrap();
 
             let window = self
-                .space
+                .space_manager
+                .current_space()
                 .elements()
                 .find(|w| w.toplevel().unwrap().wl_surface() == wl_surface)
                 .unwrap()
                 .clone();
 
-            let initial_window_location = self.space.element_location(&window).unwrap();
+            let initial_window_location = self.space_manager.current_space().element_location(&window).unwrap();
             let initial_window_size = window.geometry().size;
 
             surface.with_pending_state(|state| {

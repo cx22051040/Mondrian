@@ -11,7 +11,7 @@ use smithay::{
     wayland::{compositor, shell::xdg::SurfaceCachedState},
 };
 
-use crate::state::NuonuoState;
+use crate::{space::workspace::WorkspaceManager, state::NuonuoState};
 
 bitflags::bitflags! {
   #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -323,13 +323,14 @@ impl PointerGrab<NuonuoState> for ResizeSurfaceGrab {
     }
 }
 
-pub fn handle_commit(space: &mut Space<Window>, surface: &WlSurface) -> Option<()> {
-    let window = space
+pub fn handle_commit(workspace_manager: &mut WorkspaceManager, surface: &WlSurface) -> Option<()> {
+    let window = workspace_manager
+        .current_space()
         .elements()
         .find(|w| w.toplevel().unwrap().wl_surface() == surface)
         .cloned()?;
 
-    let mut window_loc = space.element_location(&window)?;
+    let mut window_loc = workspace_manager.current_space().element_location(&window)?;
     let geometry = window.geometry();
 
     let new_loc: Point<Option<i32>, Logical> = ResizeSurfaceState::with(surface, |state| {
@@ -360,7 +361,7 @@ pub fn handle_commit(space: &mut Space<Window>, surface: &WlSurface) -> Option<(
 
     if new_loc.x.is_some() || new_loc.y.is_some() {
         // If TOP or LEFT side of the window got resized, we have to move it
-        space.map_element(window, window_loc, false);
+        workspace_manager.map_element(window, window_loc, false);
     }
     Some(())
 }

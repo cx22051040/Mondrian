@@ -11,26 +11,22 @@ use smithay::{
         },
         winit::{self, WinitEvent, WinitGraphicsBackend},
     }, 
-    desktop::space::render_output, output::{Mode, Output, PhysicalProperties, Subpixel}, 
+    desktop::space::render_output, output::Mode, 
     reexports::{calloop::LoopHandle, wayland_server::DisplayHandle}, 
-    utils::{Rectangle, Transform}, 
+    utils::Rectangle, 
     wayland::dmabuf::{DmabufFeedback, DmabufFeedbackBuilder, DmabufGlobal, DmabufState}
 };
 
 use crate::{
     input::input::process_input_event, render::{
-        border::{compile_shaders, BorderShader}, elements::CustomRenderElements
+        border::compile_shaders, elements::CustomRenderElements
     }, NuonuoState
 };
-
-pub const OUTPUT_NAME: &str = "winit";
 
 #[derive(Debug)]
 pub struct WinitData {
     pub backend: WinitGraphicsBackend<GlesRenderer>,
-    pub damage_tracker: OutputDamageTracker,
     pub dmabuf_state: (DmabufState, DmabufGlobal, Option<DmabufFeedback>),
-    pub output: Output,
 }
 
 pub fn init_winit(
@@ -38,32 +34,6 @@ pub fn init_winit(
     display_handle: &DisplayHandle,
 ) -> WinitData {
     let (mut backend, winit) = winit::init::<GlesRenderer>().unwrap();
-
-    let size = backend.window_size();
-
-    let mode = Mode {
-        size,
-        refresh: 60_000,
-    };
-
-    let output = Output::new(
-        OUTPUT_NAME.to_string(),
-        PhysicalProperties {
-            size: (0, 0).into(),
-            subpixel: Subpixel::Unknown,
-            make: "Smithay".into(),
-            model: "Winit".into(),
-        },
-    );
-
-    let _global = output.create_global::<NuonuoState>(&display_handle);
-    output.change_current_state(
-        Some(mode),
-        Some(Transform::Flipped180),
-        None,
-        Some((0, 0).into()),
-    );
-    output.set_preferred(mode);
 
     let render_node = EGLDevice::device_for_display(backend.renderer().egl_context().display())
         .and_then(|device| device.try_get_render_node());
@@ -107,13 +77,10 @@ pub fn init_winit(
     compile_shaders(backend.renderer());
 
     let backend_data = {
-        let damage_tracker = OutputDamageTracker::from_output(&output);
 
         WinitData {
             backend,
-            damage_tracker,
             dmabuf_state,
-            output,
         }
     };
 
@@ -121,7 +88,7 @@ pub fn init_winit(
         .insert_source(winit, move |event, _, nuonuo_state| {
             match event {
                 WinitEvent::Resized { size, .. } => {
-                    nuonuo_state.backend_data.output.change_current_state(
+                    nuonuo_state.output_manager.change_current_state(
                         Some(Mode {
                             size,
                             refresh: 60_000,
@@ -137,7 +104,7 @@ pub fn init_winit(
                 WinitEvent::Redraw => {
                     let size = nuonuo_state.backend_data.backend.window_size();
                     let damage = Rectangle::from_size(size);
-                    let mut damage_tracker = OutputDamageTracker::from_output(&nuonuo_state.backend_data.output);
+                    let mut damage_tracker = OutputDamageTracker::from_output(nuonuo_state.output_manager.current_output());
                     
                     {
                         let mut custom_elements: Vec<CustomRenderElements> = vec![];
@@ -155,12 +122,12 @@ pub fn init_winit(
                         let (renderer, mut framebuffer) = nuonuo_state.backend_data.backend.bind().unwrap();
                         
                         render_output::<_, CustomRenderElements, _, _>(
-                            &nuonuo_state.backend_data.output,
+                            nuonuo_state.output_manager.current_output(),
                             renderer,
                             &mut framebuffer,
                             1.0,
                             0,
-                            [&nuonuo_state.space],
+                            [nuonuo_state.space_manager.current_space()],
                             custom_elements.as_slice(),
                             &mut damage_tracker,
                             [0.0, 0.0, 1.0, 1.0],
@@ -172,19 +139,20 @@ pub fn init_winit(
 
                     // For each of the windows send the frame callbacks to tell them to draw next frame.
                     nuonuo_state
-                        .space
+                        .space_manager
+                        .current_space()
                         .elements()
                         .for_each(|window: &smithay::desktop::Window| {
                             window.send_frame(
-                                &nuonuo_state.backend_data.output,
+                                nuonuo_state.output_manager.current_output(),
                                 nuonuo_state.start_time.elapsed(),
                                 Some(Duration::ZERO),
-                                |_, _| Some(nuonuo_state.backend_data.output.clone()),
+                                |_, _| Some(nuonuo_state.output_manager.current_output().clone()),
                             )
                         });
 
                     // Refresh space nuonuo_state and handle certain events like enter/leave for outputs/windows
-                    nuonuo_state.space.refresh();
+                    nuonuo_state.space_manager.refresh();
                     nuonuo_state.popups.cleanup();
                     // Flush the outgoing buffers caontaining events so the clients get them.
                     let _ = nuonuo_state.display_handle.flush_clients();

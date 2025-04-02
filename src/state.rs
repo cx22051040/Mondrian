@@ -2,20 +2,14 @@ use std::sync::Arc;
 
 use smithay::{
     backend::{
-        allocator::dmabuf::Dmabuf, input::{Device, DeviceCapability}, renderer::ImportDma
-    },
-    delegate_data_device, delegate_dmabuf, delegate_output, delegate_seat,
-    delegate_shm,
-    desktop::{
-        find_popup_root_surface, get_popup_toplevel_coords, PopupKind, PopupManager, Space, Window
-    },
-    input::{Seat, SeatHandler, SeatState},
-    reexports::{
+        allocator::dmabuf::Dmabuf, renderer::ImportDma
+    }, delegate_data_device, delegate_dmabuf, delegate_output, delegate_seat, delegate_shm, desktop::{
+        find_popup_root_surface, get_popup_toplevel_coords, PopupKind, PopupManager
+    }, input::{Seat, SeatHandler, SeatState}, output::Mode as OutputMode, reexports::{
         calloop::{generic::Generic, Interest, LoopHandle, Mode, PostAction}, wayland_server::{
             backend::ClientData, protocol::{wl_buffer, wl_surface::WlSurface}, Display, DisplayHandle, Resource
         }
-    },
-    wayland::{
+    }, utils::Transform, wayland::{
         buffer::BufferHandler,
         compositor::{
             CompositorClientState, CompositorState
@@ -30,12 +24,12 @@ use smithay::{
         },
         shell::xdg::{PopupSurface, XdgShellState},
         shm::{ShmHandler, ShmState},
-        socket::ListeningSocketSource, tablet_manager::{TabletDescriptor, TabletSeatTrait},
-    },
+        socket::ListeningSocketSource,
+    }
 };
 
 use crate::{
-    backend::{self, winit::WinitData}, config::Configs, render::cursor::{CursorManager, CursorTextureCache}
+    backend::{self, winit::WinitData}, config::Configs, render::cursor::{CursorManager, CursorTextureCache}, space::{output::OutputManager, workspace::WorkspaceManager}
 };
 
 #[derive(Debug, Default)]
@@ -70,12 +64,12 @@ pub struct NuonuoState {
     pub display_handle: DisplayHandle,
 
     // desktop
-    pub space: Space<Window>,
+    pub space_manager: WorkspaceManager,
+    pub output_manager: OutputManager,
 
     // smithay state
     pub compositor_state: CompositorState,
     pub data_device_state: DataDeviceState,
-    pub output_manager_state: OutputManagerState,
     pub seat_state: SeatState<NuonuoState>,
     pub shm_state: ShmState,
     pub popups: PopupManager,
@@ -96,24 +90,25 @@ impl NuonuoState {
         
         let start_time = std::time::Instant::now();
 
-        let configs = Configs::new("src/config/keybindings.conf".to_string());
+        let configs = Configs::new("src/config/keybindings.conf");
 
         let display_handle: DisplayHandle = Self::init_display_handle(&loop_handle);
 
         // init wayland clients
         let socket_name = Self::init_wayland_listener(&loop_handle);
 
+        let mut space_manager = WorkspaceManager::new();
+        let mut output_manager = OutputManager::new(&display_handle);
+
         // init smithay state
         let compositor_state = CompositorState::new::<Self>(&display_handle);
         let data_device_state = DataDeviceState::new::<Self>(&display_handle);
-        let output_manager_state = OutputManagerState::new_with_xdg_output::<Self>(&display_handle);
         let shm_state = ShmState::new::<Self>(&display_handle, vec![]);
         let xdg_shell_state = XdgShellState::new::<Self>(&display_handle);
         let popups = PopupManager::default();
         let mut seat_state = SeatState::new();
         let seat_name = String::from("winit");
         let mut seat: Seat<Self> = seat_state.new_wl_seat(&display_handle, seat_name);
-        let mut space = Space::default();
         
         // TODO: use config file
         let cursor_manager = CursorManager::new("default", 24);
@@ -122,7 +117,28 @@ impl NuonuoState {
         #[cfg(feature = "winit")]
         let backend_data = backend::winit::init_winit(&loop_handle, &display_handle);
 
-        space.map_output(&backend_data.output, (0, 0));
+        let size = backend_data.backend.window_size();
+        let mode = OutputMode {
+            size,
+            refresh: 60_000,
+        };
+
+        // TODO: manage more output, get the output physical name as output name
+        // Now provided we only have one output
+        output_manager.add_output("winit", &display_handle, true);
+        output_manager.change_current_state(
+            Some(mode), 
+            Some(Transform::Flipped180),
+            None,
+            Some((0, 0).into()),
+        );
+        output_manager.set_preferred(mode);
+
+        space_manager.add_workspace(output_manager.current_output(), (0, 0), None, true);
+        // TODO: delete this test: add space-2 for test workspace switch
+        space_manager.add_workspace(output_manager.current_output(), (0, 0), None, true);
+
+        // space_manager.current_space().map_output(&backend_data.output, (0, 0));
 
         // Notify clients that we have a keyboard, for the sake of the example we assume that keyboard is always present.
         // You may want to track keyboard hot-plug in real compositor.
@@ -139,12 +155,12 @@ impl NuonuoState {
             loop_handle,
             display_handle,
 
-            space,
+            space_manager,
+            output_manager,
             popups,
 
             compositor_state,
             data_device_state,
-            output_manager_state,
             seat_state,
             shm_state,
             xdg_shell_state,
@@ -203,16 +219,17 @@ impl NuonuoState {
             return;
         };
         let Some(window) = self
-            .space
+            .space_manager
+            .current_space()
             .elements()
             .find(|w| w.toplevel().unwrap().wl_surface() == &root)
         else {
             return;
         };
 
-        let output = self.space.outputs().next().unwrap();
-        let output_geo = self.space.output_geometry(output).unwrap();
-        let window_geo = self.space.element_geometry(window).unwrap();
+        let output = self.space_manager.current_space().outputs().next().unwrap();
+        let output_geo = self.space_manager.current_space().output_geometry(output).unwrap();
+        let window_geo = self.space_manager.current_space().element_geometry(window).unwrap();
 
         // The target geometry for the positioner should be relative to its parent's geometry, so
         // we will compute that here.
