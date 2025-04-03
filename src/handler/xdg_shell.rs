@@ -72,7 +72,8 @@ impl XdgShellHandler for NuonuoState {
         // TODO: improve
         let window = Window::new_wayland_window(surface.clone());
         // TODO: activate use config
-        self.space_manager.map_element(window, (0, 0).into(), true);
+        self.workspace_manager.current_workspace_mut().map_tiled_element(window, (0, 0).into(), true);
+        // self.space_manager.map_tiled_element(window, self.output_manager.current_output());
     }
 
     fn new_popup(&mut self, surface: PopupSurface, _positioner: PositionerState) {
@@ -97,20 +98,18 @@ impl XdgShellHandler for NuonuoState {
 
     fn move_request(&mut self, surface: ToplevelSurface, seat: wl_seat::WlSeat, serial: Serial) {
         let seat: Seat<NuonuoState> = Seat::from_resource(&seat).unwrap();
-        let wl_surface = surface.wl_surface();
+        let wl_surface: &WlSurface = surface.wl_surface();
 
         if let Some(start_data) = check_grab(&seat, wl_surface, serial) {
             let pointer = seat.get_pointer().unwrap();
-            // TODO: Maybe can improve this find action
+
             let window = self
-                .space_manager
-                .current_space()
-                .elements()
-                .find(|w| w.toplevel().unwrap().wl_surface() == wl_surface)
-                .unwrap()
+                .workspace_manager
+                .current_workspace()
+                .find_window(wl_surface)
                 .clone();
 
-            let initial_window_location = self.space_manager.current_space().element_location(&window).unwrap();
+            let initial_window_location = self.workspace_manager.current_workspace().element_location(&window);
             let grab = PointerMoveSurfaceGrab {
                 start_data,
                 window,
@@ -140,14 +139,12 @@ impl XdgShellHandler for NuonuoState {
             let pointer = seat.get_pointer().unwrap();
 
             let window = self
-                .space_manager
-                .current_space()
-                .elements()
-                .find(|w| w.toplevel().unwrap().wl_surface() == wl_surface)
-                .unwrap()
+                .workspace_manager
+                .current_workspace()
+                .find_window(wl_surface)
                 .clone();
 
-            let initial_window_location = self.space_manager.current_space().element_location(&window).unwrap();
+            let initial_window_location = self.workspace_manager.current_workspace().element_location(&window);
             let initial_window_size = window.geometry().size;
 
             surface.with_pending_state(|state| {

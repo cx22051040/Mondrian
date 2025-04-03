@@ -18,6 +18,8 @@ pub enum KeyAction {
     Internal(FunctionEnum),
 }
 
+
+#[derive(Debug, Clone)]
 pub struct KeybindingsManager {
   pub conf_keybindings: HashMap<String, KeyAction>,
   pub conf_priority_map: HashMap<String, i32>,
@@ -120,11 +122,11 @@ impl KeybindingsManager {
     }
 
     pub fn switch_workspace1(&self, workspace_manager: &mut WorkspaceManager) {
-        workspace_manager.switch_workspace(1);
+        workspace_manager.set_activated(1);
     }
 
     pub fn switch_workspace2(&self, workspace_manager: &mut WorkspaceManager) {
-        workspace_manager.switch_workspace(2);
+        workspace_manager.set_activated(2);
     }
 
 }

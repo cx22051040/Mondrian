@@ -2,14 +2,12 @@ use smithay::{
     backend::renderer::
     {element::
         {
-            memory::MemoryRenderBufferRenderElement, surface::WaylandSurfaceRenderElement, AsRenderElements
+            memory::MemoryRenderBufferRenderElement, surface::WaylandSurfaceRenderElement
         }, 
-        gles::{element::PixelShaderElement, GlesRenderer}, ImportAll, ImportMem, Renderer
+        gles::{element::PixelShaderElement, GlesRenderer}
     }, 
     render_elements
 };
-
-
 
 render_elements! {
     pub CustomRenderElements<=GlesRenderer>;

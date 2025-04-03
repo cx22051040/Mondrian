@@ -1,6 +1,6 @@
 use smithay::{output::{Mode, Output, PhysicalProperties, Scale, Subpixel}, 
 reexports::wayland_server::DisplayHandle, 
-utils::{Transform, Logical, Point}, wayland::output::OutputManagerState};
+utils::{Logical, Point, Transform}, wayland::output::OutputManagerState};
 
 use crate::state::NuonuoState;
 
@@ -68,12 +68,8 @@ impl OutputManager {
         );
     }
 
-    pub fn remove_output() {
+    pub fn _remove_output() {
         todo!()
-    }
-
-    pub fn current_output_element(&self) -> &OutputElement {
-        self.outputs.iter().find(|o| o.activate).expect("cannot find active output")
     }
 
     pub fn current_output(&self) -> &Output {

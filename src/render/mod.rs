@@ -20,7 +20,7 @@ impl NuonuoState {
     self.cursor_manager.check_cursor_image_surface_alive();
 
     let output_scale = self.output_manager.current_output().current_scale();
-    let output_pos = self.space_manager.current_space().output_geometry(self.output_manager.current_output()).unwrap().loc;
+    let output_pos = self.workspace_manager.current_workspace().space.output_geometry(self.output_manager.current_output()).unwrap().loc;
 
     let pointer_pos = self.seat.get_pointer().unwrap().current_location();
     let pointer_pos = pointer_pos - output_pos.to_f64();
@@ -84,8 +84,13 @@ impl NuonuoState {
  
   pub fn get_border_render_elements(&mut self) -> Vec<CustomRenderElements> {
     let mut elements: Vec<CustomRenderElements> = vec![]; 
-    for window in self.space_manager.current_space().elements() {
-        let geometry = self.space_manager.current_space().element_geometry(window).unwrap();
+
+    // TODO: only for focus window
+    // let focus = self.seat.get_keyboard().unwrap().current_focus();
+
+    for window in self.workspace_manager.current_workspace().elements() {
+        
+        let geometry = self.workspace_manager.current_workspace().element_geometry(window);
         elements.push(
             CustomRenderElements::Border(
                 BorderShader::element(

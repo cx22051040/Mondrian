@@ -1,8 +1,8 @@
 use smithay::{
-  backend::renderer::{element::{Element, Id, Kind}, gles::{
+  backend::renderer::{element::Kind, gles::{
        element::PixelShaderElement, GlesPixelProgram, GlesRenderer, Uniform, UniformName, UniformType
-  }, utils::{CommitCounter, DamageSet}, Color32F},
-  utils::{Logical, Rectangle, Size, Transform},
+  }, Color32F},
+  utils::{Logical, Rectangle},
 };
 
 const BORDER_SHADER: &str = include_str!("shaders/border.frag");

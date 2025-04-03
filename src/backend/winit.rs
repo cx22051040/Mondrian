@@ -127,7 +127,7 @@ pub fn init_winit(
                             &mut framebuffer,
                             1.0,
                             0,
-                            [nuonuo_state.space_manager.current_space()],
+                            [&nuonuo_state.workspace_manager.current_workspace().space],
                             custom_elements.as_slice(),
                             &mut damage_tracker,
                             [0.0, 0.0, 1.0, 1.0],
@@ -139,8 +139,8 @@ pub fn init_winit(
 
                     // For each of the windows send the frame callbacks to tell them to draw next frame.
                     nuonuo_state
-                        .space_manager
-                        .current_space()
+                        .workspace_manager
+                        .current_workspace()
                         .elements()
                         .for_each(|window: &smithay::desktop::Window| {
                             window.send_frame(
@@ -152,7 +152,7 @@ pub fn init_winit(
                         });
 
                     // Refresh space nuonuo_state and handle certain events like enter/leave for outputs/windows
-                    nuonuo_state.space_manager.refresh();
+                    nuonuo_state.workspace_manager.current_workspace_mut().refresh();
                     nuonuo_state.popups.cleanup();
                     // Flush the outgoing buffers caontaining events so the clients get them.
                     let _ = nuonuo_state.display_handle.flush_clients();

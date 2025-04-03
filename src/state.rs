@@ -15,7 +15,7 @@ use smithay::{
             CompositorClientState, CompositorState
         },
         dmabuf::{DmabufGlobal, DmabufHandler, DmabufState, ImportNotifier},
-        output::{OutputHandler, OutputManagerState},
+        output::OutputHandler,
         security_context::SecurityContext,
         selection::{
             data_device::{
@@ -35,7 +35,7 @@ use crate::{
 #[derive(Debug, Default)]
 pub struct ClientState {
     pub compositor_state: CompositorClientState,
-    pub security_context: Option<SecurityContext>,
+    pub _security_context: Option<SecurityContext>,
 }
 
 impl ClientData for ClientState {
@@ -64,7 +64,7 @@ pub struct NuonuoState {
     pub display_handle: DisplayHandle,
 
     // desktop
-    pub space_manager: WorkspaceManager,
+    pub workspace_manager: WorkspaceManager,
     pub output_manager: OutputManager,
 
     // smithay state
@@ -97,7 +97,7 @@ impl NuonuoState {
         // init wayland clients
         let socket_name = Self::init_wayland_listener(&loop_handle);
 
-        let mut space_manager = WorkspaceManager::new();
+        let mut workspace_manager = WorkspaceManager::new();
         let mut output_manager = OutputManager::new(&display_handle);
 
         // init smithay state
@@ -134,9 +134,9 @@ impl NuonuoState {
         );
         output_manager.set_preferred(mode);
 
-        space_manager.add_workspace(output_manager.current_output(), (0, 0), None, true);
+        workspace_manager.add_workspace(output_manager.current_output(), (0, 0), None, true);
         // TODO: delete this test: add space-2 for test workspace switch
-        space_manager.add_workspace(output_manager.current_output(), (0, 0), None, true);
+        workspace_manager.add_workspace(output_manager.current_output(), (0, 0), None, false);
 
         // space_manager.current_space().map_output(&backend_data.output, (0, 0));
 
@@ -155,7 +155,7 @@ impl NuonuoState {
             loop_handle,
             display_handle,
 
-            space_manager,
+            workspace_manager,
             output_manager,
             popups,
 
@@ -219,17 +219,18 @@ impl NuonuoState {
             return;
         };
         let Some(window) = self
-            .space_manager
-            .current_space()
+            .workspace_manager
+            .current_workspace()
+            .space
             .elements()
             .find(|w| w.toplevel().unwrap().wl_surface() == &root)
         else {
             return;
         };
 
-        let output = self.space_manager.current_space().outputs().next().unwrap();
-        let output_geo = self.space_manager.current_space().output_geometry(output).unwrap();
-        let window_geo = self.space_manager.current_space().element_geometry(window).unwrap();
+        let output = self.output_manager.current_output();
+        let output_geo = self.workspace_manager.current_workspace().space.output_geometry(output).unwrap();
+        let window_geo = self.workspace_manager.current_workspace().space.element_geometry(window).unwrap();
 
         // The target geometry for the positioner should be relative to its parent's geometry, so
         // we will compute that here.

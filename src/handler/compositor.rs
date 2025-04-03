@@ -28,16 +28,16 @@ impl CompositorHandler for NuonuoState {
                 root = parent;
             }
             if let Some(window) = self
-                .space_manager
-                .current_space()
+                .workspace_manager
+                .current_workspace()
                 .elements()
                 .find(|w| w.toplevel().unwrap().wl_surface() == &root)
             {
                 window.on_commit();
             }
 
-            xdg_shell::handle_commit(&mut self.popups, &self.space_manager.current_space(), surface);
-            resize_grab::handle_commit(&mut self.space_manager, surface);
+            xdg_shell::handle_commit(&mut self.popups, &self.workspace_manager.current_workspace().space, surface);
+            resize_grab::handle_commit(&mut self.workspace_manager, surface);
         };
     }
 }
