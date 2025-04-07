@@ -14,7 +14,10 @@ use smithay::{
     utils::SERIAL_COUNTER,
 };
 
-use crate::{input::keybindings::{FunctionEnum, KeyAction}, NuonuoState};
+use crate::{
+    NuonuoState,
+    input::keybindings::{FunctionEnum, KeyAction},
+};
 
 pub fn process_input_event(event: InputEvent<WinitInput>, nuonuo_state: &mut NuonuoState) {
     match event {
@@ -22,9 +25,17 @@ pub fn process_input_event(event: InputEvent<WinitInput>, nuonuo_state: &mut Nuo
             let serial = SERIAL_COUNTER.next_serial();
             let time = Event::time_msec(&event);
             let event_state = event.state();
-            let conf_priority_map = nuonuo_state.configs.conf_keybinding_manager.conf_priority_map.clone();
-            let conf_keybindings = nuonuo_state.configs.conf_keybinding_manager.conf_keybindings.clone();
-            
+            let conf_priority_map = nuonuo_state
+                .configs
+                .conf_keybinding_manager
+                .conf_priority_map
+                .clone();
+            let conf_keybindings = nuonuo_state
+                .configs
+                .conf_keybinding_manager
+                .conf_keybindings
+                .clone();
+
             let keyboard = &mut nuonuo_state.seat.get_keyboard().unwrap();
 
             // TODO: inhabit shift+word when other modifiers are actived
@@ -48,12 +59,8 @@ pub fn process_input_event(event: InputEvent<WinitInput>, nuonuo_state: &mut Nuo
                                     .collect()
                             });
 
-                        pressed_keys_name.sort_by_key(|key| {
-                            conf_priority_map
-                                .get(key)
-                                .cloned()
-                                .unwrap_or(3)
-                        });
+                        pressed_keys_name
+                            .sort_by_key(|key| conf_priority_map.get(key).cloned().unwrap_or(3));
 
                         let keys = pressed_keys_name.join("+");
 
@@ -72,13 +79,19 @@ pub fn process_input_event(event: InputEvent<WinitInput>, nuonuo_state: &mut Nuo
                                             let serial = SERIAL_COUNTER.next_serial();
                                             // TODO: set focus to the first window, also move cursor to it
                                             keyboard.set_focus(state, None, serial);
-                                            state.configs.conf_keybinding_manager.switch_workspace1(&mut state.workspace_manager);
-                                        },
+                                            state
+                                                .configs
+                                                .conf_keybinding_manager
+                                                .switch_workspace1(&mut state.workspace_manager);
+                                        }
                                         FunctionEnum::SwitchWorkspace2 => {
                                             let serial = SERIAL_COUNTER.next_serial();
                                             keyboard.set_focus(state, None, serial);
-                                            state.configs.conf_keybinding_manager.switch_workspace2(&mut state.workspace_manager);
-                                        },
+                                            state
+                                                .configs
+                                                .conf_keybinding_manager
+                                                .switch_workspace2(&mut state.workspace_manager);
+                                        }
                                     }
                                 }
                             }
@@ -96,8 +109,7 @@ pub fn process_input_event(event: InputEvent<WinitInput>, nuonuo_state: &mut Nuo
 
         InputEvent::PointerMotionAbsolute { event } => {
             let output = nuonuo_state.output_manager.current_output();
-            // TODO: use output manager to store the output geometry
-            let output_geo = nuonuo_state.workspace_manager.current_workspace().space.output_geometry(output).unwrap();
+            let output_geo = nuonuo_state.workspace_manager.output_geometry(output);
             // because the absolute move, need to plus the output location
             let position = event.position_transformed(output_geo.size) + output_geo.loc.to_f64();
 
@@ -105,27 +117,27 @@ pub fn process_input_event(event: InputEvent<WinitInput>, nuonuo_state: &mut Nuo
             let pointer = nuonuo_state.seat.get_pointer().unwrap();
             let keyboard = nuonuo_state.seat.get_keyboard().unwrap();
 
-            let under = nuonuo_state.workspace_manager
-                .current_workspace()
+            let under = nuonuo_state
+                .workspace_manager
                 .element_under(position)
                 .map(|(w, l)| (w.clone(), l.clone()));
-    
+
             let current_focus = keyboard.current_focus();
-    
+
             if let Some((window, location)) = under {
                 let under_surface = window
                     .surface_under(position - location.to_f64(), WindowSurfaceType::ALL)
                     .map(|(s, _)| s);
-    
+
                 // modify when focus changed
                 if current_focus != under_surface {
-                    nuonuo_state.workspace_manager.current_workspace_mut().raise_element(&window, true);
-    
+                    nuonuo_state.workspace_manager.raise_element(&window, true);
+
                     // modify all window
-                    for win in nuonuo_state.workspace_manager.current_workspace().elements() {
+                    for win in nuonuo_state.workspace_manager.elements() {
                         win.toplevel().unwrap().send_pending_configure();
                     }
-    
+
                     keyboard.set_focus(
                         nuonuo_state,
                         Some(window.toplevel().unwrap().wl_surface().clone()),
@@ -134,23 +146,22 @@ pub fn process_input_event(event: InputEvent<WinitInput>, nuonuo_state: &mut Nuo
                 }
             } else if current_focus.is_some() {
                 // have prev focus, but get none
-                for win in nuonuo_state.workspace_manager.current_workspace().elements() {
+                for win in nuonuo_state.workspace_manager.elements() {
                     win.set_activated(false);
                     win.toplevel().unwrap().send_pending_configure();
                 }
                 keyboard.set_focus(nuonuo_state, None, serial);
             }
 
-            // TODO: 
-            let under_surface = nuonuo_state.workspace_manager
-                .current_workspace()
+            // TODO:
+            let under_surface = nuonuo_state
+                .workspace_manager
                 .element_under(position)
                 .and_then(|(window, location)| {
-                        window
-                            .surface_under(position - location.to_f64(), WindowSurfaceType::ALL)
-                            .map(|(s, p)| (s, (p + location).to_f64()))
-                    },
-                );
+                    window
+                        .surface_under(position - location.to_f64(), WindowSurfaceType::ALL)
+                        .map(|(s, p)| (s, (p + location).to_f64()))
+                });
 
             pointer.motion(
                 nuonuo_state,
@@ -181,28 +192,28 @@ pub fn process_input_event(event: InputEvent<WinitInput>, nuonuo_state: &mut Nuo
 
             if button_state == ButtonState::Pressed && !pointer.is_grabbed() {
                 let position = pointer.current_location();
-        
-                let under = nuonuo_state.workspace_manager
-                    .current_workspace()
+
+                let under = nuonuo_state
+                    .workspace_manager
                     .element_under(position)
                     .map(|(w, l)| (w.clone(), l.clone()));
-        
+
                 let current_focus = keyboard.current_focus();
-        
+
                 if let Some((window, location)) = under {
                     let under_surface = window
                         .surface_under(position - location.to_f64(), WindowSurfaceType::ALL)
                         .map(|(s, _)| s);
-        
+
                     // modify when focus changed
                     if current_focus != under_surface {
-                        nuonuo_state.workspace_manager.current_workspace_mut().raise_element(&window, true);
-        
+                        nuonuo_state.workspace_manager.raise_element(&window, true);
+
                         // modify all window
-                        for win in nuonuo_state.workspace_manager.current_workspace().elements() {
+                        for win in nuonuo_state.workspace_manager.elements() {
                             win.toplevel().unwrap().send_pending_configure();
                         }
-        
+
                         keyboard.set_focus(
                             nuonuo_state,
                             Some(window.toplevel().unwrap().wl_surface().clone()),
@@ -211,7 +222,7 @@ pub fn process_input_event(event: InputEvent<WinitInput>, nuonuo_state: &mut Nuo
                     }
                 } else if current_focus.is_some() {
                     // have prev focus, but click none
-                    for win in nuonuo_state.workspace_manager.current_workspace().elements() {
+                    for win in nuonuo_state.workspace_manager.elements() {
                         win.set_activated(false);
                         win.toplevel().unwrap().send_pending_configure();
                     }
@@ -250,4 +261,3 @@ pub fn process_input_event(event: InputEvent<WinitInput>, nuonuo_state: &mut Nuo
         _ => {}
     }
 }
-

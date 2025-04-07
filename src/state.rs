@@ -1,35 +1,44 @@
 use std::sync::Arc;
 
 use smithay::{
-    backend::{
-        allocator::dmabuf::Dmabuf, renderer::ImportDma
-    }, delegate_data_device, delegate_dmabuf, delegate_output, delegate_seat, delegate_shm, desktop::{
-        find_popup_root_surface, get_popup_toplevel_coords, PopupKind, PopupManager
-    }, input::{Seat, SeatHandler, SeatState}, output::Mode as OutputMode, reexports::{
-        calloop::{generic::Generic, Interest, LoopHandle, Mode, PostAction}, wayland_server::{
-            backend::ClientData, protocol::{wl_buffer, wl_surface::WlSurface}, Display, DisplayHandle, Resource
-        }
-    }, utils::Transform, wayland::{
-        buffer::BufferHandler,
-        compositor::{
-            CompositorClientState, CompositorState
+    backend::{allocator::dmabuf::Dmabuf, renderer::ImportDma},
+    delegate_data_device, delegate_dmabuf, delegate_output, delegate_seat, delegate_shm,
+    desktop::{PopupKind, PopupManager, find_popup_root_surface, get_popup_toplevel_coords},
+    input::{Seat, SeatHandler, SeatState},
+    output::Mode as OutputMode,
+    reexports::{
+        calloop::{Interest, LoopHandle, Mode, PostAction, generic::Generic},
+        wayland_server::{
+            Display, DisplayHandle, Resource,
+            backend::ClientData,
+            protocol::{wl_buffer, wl_surface::WlSurface},
         },
+    },
+    utils::Transform,
+    wayland::{
+        buffer::BufferHandler,
+        compositor::{CompositorClientState, CompositorState},
         dmabuf::{DmabufGlobal, DmabufHandler, DmabufState, ImportNotifier},
         output::OutputHandler,
         security_context::SecurityContext,
         selection::{
+            SelectionHandler,
             data_device::{
-                set_data_device_focus, ClientDndGrabHandler, DataDeviceHandler, DataDeviceState, ServerDndGrabHandler
-            }, SelectionHandler
+                ClientDndGrabHandler, DataDeviceHandler, DataDeviceState, ServerDndGrabHandler,
+                set_data_device_focus,
+            },
         },
         shell::xdg::{PopupSurface, XdgShellState},
         shm::{ShmHandler, ShmState},
         socket::ListeningSocketSource,
-    }
+    },
 };
 
 use crate::{
-    backend::{self, winit::WinitData}, config::Configs, render::cursor::{CursorManager, CursorTextureCache}, space::{output::OutputManager, workspace::WorkspaceManager}
+    backend::{self, winit::WinitData},
+    config::Configs,
+    render::cursor::{CursorManager, CursorTextureCache},
+    space::{output::OutputManager, window::WindowManager, workspace::WorkspaceManager},
 };
 
 #[derive(Debug, Default)]
@@ -64,6 +73,7 @@ pub struct NuonuoState {
     pub display_handle: DisplayHandle,
 
     // desktop
+    pub window_manager: WindowManager,
     pub workspace_manager: WorkspaceManager,
     pub output_manager: OutputManager,
 
@@ -84,10 +94,7 @@ pub struct NuonuoState {
 }
 
 impl NuonuoState {
-    pub fn new(
-        loop_handle: LoopHandle<'static, NuonuoState>,
-    ) -> Self {
-        
+    pub fn new(loop_handle: LoopHandle<'static, NuonuoState>) -> Self {
         let start_time = std::time::Instant::now();
 
         let configs = Configs::new("src/config/keybindings.conf");
@@ -97,6 +104,7 @@ impl NuonuoState {
         // init wayland clients
         let socket_name = Self::init_wayland_listener(&loop_handle);
 
+        let window_manager = WindowManager::new();
         let mut workspace_manager = WorkspaceManager::new();
         let mut output_manager = OutputManager::new(&display_handle);
 
@@ -109,7 +117,7 @@ impl NuonuoState {
         let mut seat_state = SeatState::new();
         let seat_name = String::from("winit");
         let mut seat: Seat<Self> = seat_state.new_wl_seat(&display_handle, seat_name);
-        
+
         // TODO: use config file
         let cursor_manager = CursorManager::new("default", 24);
         let cursor_texture_cache = Default::default();
@@ -127,7 +135,7 @@ impl NuonuoState {
         // Now provided we only have one output
         output_manager.add_output("winit", &display_handle, true);
         output_manager.change_current_state(
-            Some(mode), 
+            Some(mode),
             Some(Transform::Flipped180),
             None,
             Some((0, 0).into()),
@@ -155,10 +163,11 @@ impl NuonuoState {
             loop_handle,
             display_handle,
 
+            window_manager,
             workspace_manager,
             output_manager,
-            popups,
 
+            popups,
             compositor_state,
             data_device_state,
             seat_state,
@@ -173,20 +182,17 @@ impl NuonuoState {
         }
     }
 
-    fn init_display_handle(loop_handle: &LoopHandle<'static, NuonuoState>) -> DisplayHandle{
+    fn init_display_handle(loop_handle: &LoopHandle<'static, NuonuoState>) -> DisplayHandle {
         let display: Display<NuonuoState> = Display::new().unwrap();
         let display_handle = display.handle();
-    
+
         loop_handle
             .insert_source(
                 Generic::new(display, Interest::READ, Mode::Level),
                 |_, display, nuonuo_state| {
                     // Safety: we don't drop the display
                     unsafe {
-                        display
-                            .get_mut()
-                            .dispatch_clients(nuonuo_state)
-                            .unwrap();
+                        display.get_mut().dispatch_clients(nuonuo_state).unwrap();
                     }
                     Ok(PostAction::Continue)
                 },
@@ -220,8 +226,6 @@ impl NuonuoState {
         };
         let Some(window) = self
             .workspace_manager
-            .current_workspace()
-            .space
             .elements()
             .find(|w| w.toplevel().unwrap().wl_surface() == &root)
         else {
@@ -229,8 +233,8 @@ impl NuonuoState {
         };
 
         let output = self.output_manager.current_output();
-        let output_geo = self.workspace_manager.current_workspace().space.output_geometry(output).unwrap();
-        let window_geo = self.workspace_manager.current_workspace().space.element_geometry(window).unwrap();
+        let output_geo = self.workspace_manager.output_geometry(output);
+        let window_geo = self.workspace_manager.element_geometry(window);
 
         // The target geometry for the positioner should be relative to its parent's geometry, so
         // we will compute that here.
@@ -271,7 +275,6 @@ impl NuonuoState {
     //         self.niri.seat.remove_touch();
     //     }
     // }
-
 }
 
 impl SelectionHandler for NuonuoState {

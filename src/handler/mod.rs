@@ -1,2 +1,3 @@
-pub mod xdg_shell;
 pub mod compositor;
+pub mod xdg_shell;
+

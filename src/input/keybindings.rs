@@ -1,9 +1,9 @@
 use std::{collections::HashMap, fs};
 
-use regex::Regex;
 use itertools::Itertools;
+use regex::Regex;
 
-use crate::space::workspace::WorkspaceManager;
+use crate::space::workspace::{WorkspaceID, WorkspaceManager};
 
 // 定义所有的内部可执行函数
 #[derive(Debug, Clone)]
@@ -18,11 +18,10 @@ pub enum KeyAction {
     Internal(FunctionEnum),
 }
 
-
 #[derive(Debug, Clone)]
 pub struct KeybindingsManager {
-  pub conf_keybindings: HashMap<String, KeyAction>,
-  pub conf_priority_map: HashMap<String, i32>,
+    pub conf_keybindings: HashMap<String, KeyAction>,
+    pub conf_priority_map: HashMap<String, i32>,
 }
 
 impl KeybindingsManager {
@@ -47,16 +46,16 @@ impl KeybindingsManager {
             conf_keybindings: keybindings,
             conf_priority_map,
         }
-  }
+    }
 
     fn load_keybindings(path: &str) -> HashMap<String, KeyAction> {
         let content = fs::read_to_string(path).expect("Failed to load keybindings config");
         let mut bindings = HashMap::<String, KeyAction>::new();
-        
+
         let re =
             // bind = Ctrl + t, command, "kitty"
             // bind = Ctrl + 1, exec, "func1"
-            Regex::new(r#"(?m)^\s*bind\s*=\s*([\w+]+),\s*(exec|command),\s*"([^"]*)"\s*$"#)
+            Regex::new(r#"(?m)^\s*bind\s*=\s*([^,]+?),\s*(command|exec),\s*"([^"]+)"(?:\s*#.*)?$"#)
                 .unwrap();
 
         let modifier_map: HashMap<&str, Vec<&str>> = [
@@ -78,9 +77,9 @@ impl KeybindingsManager {
 
         for cap in re.captures_iter(&content) {
             let keybind = &cap[1]; // Ctrl+t / Alt+Enter
-            let action = &cap[2];  // exec / command
+            let action = &cap[2]; // exec / command
             let command = &cap[3]; // kitty / rofi -show drun
-        
+
             let keys: Vec<String> = keybind
                 .split('+')
                 .map(|key| {
@@ -93,7 +92,7 @@ impl KeybindingsManager {
                 .multi_cartesian_product()
                 .map(|combination| combination.join("+"))
                 .collect();
-    
+
             for key in keys {
                 let action_enum = match action {
                     "command" => KeyAction::Command(command.trim().to_string()),
@@ -102,7 +101,10 @@ impl KeybindingsManager {
                             "workspace-1" => FunctionEnum::SwitchWorkspace1,
                             "workspace-2" => FunctionEnum::SwitchWorkspace2,
                             _ => {
-                                tracing::info!("Warning: No registered function for exec '{}'", command);
+                                tracing::info!(
+                                    "Warning: No registered function for exec '{}'",
+                                    command
+                                );
                                 continue;
                             }
                         };
@@ -122,11 +124,11 @@ impl KeybindingsManager {
     }
 
     pub fn switch_workspace1(&self, workspace_manager: &mut WorkspaceManager) {
-        workspace_manager.set_activated(1);
+        workspace_manager.set_activated(WorkspaceID::new(1));
     }
 
     pub fn switch_workspace2(&self, workspace_manager: &mut WorkspaceManager) {
-        workspace_manager.set_activated(2);
+        workspace_manager.set_activated(WorkspaceID::new(2));
     }
-
 }
+

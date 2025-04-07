@@ -20,9 +20,9 @@ impl PointerGrab<NuonuoState> for PointerMoveSurfaceGrab {
 
     // TODO: recover the grab begin status
     fn unset(&mut self, state: &mut NuonuoState) {
-        state.cursor_manager.set_cursor_image(
-            CursorImageStatus::default_named()
-        );
+        state
+            .cursor_manager
+            .set_cursor_image(CursorImageStatus::default_named());
     }
 
     fn frame(
@@ -66,7 +66,7 @@ impl PointerGrab<NuonuoState> for PointerMoveSurfaceGrab {
 
         let delta = event.location - self.start_data.location;
         let new_location = self.initial_window_location.to_f64() + delta;
-        data.workspace_manager.current_workspace_mut()
+        data.workspace_manager
             .map_element(self.window.clone(), new_location.to_i32_round(), true);
     }
 
@@ -164,4 +164,3 @@ impl PointerGrab<NuonuoState> for PointerMoveSurfaceGrab {
         handle.gesture_hold_end(data, event);
     }
 }
-

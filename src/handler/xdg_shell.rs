@@ -2,7 +2,9 @@ use crate::{
     input::{move_grab::PointerMoveSurfaceGrab, resize_grab::ResizeSurfaceGrab},
     state::NuonuoState,
 };
-use smithay::input::pointer::{CursorIcon, CursorImageStatus, GrabStartData as PointerGrabStartData};
+use smithay::input::pointer::{
+    CursorIcon, CursorImageStatus, GrabStartData as PointerGrabStartData,
+};
 use smithay::{
     delegate_xdg_shell,
     desktop::{PopupKind, PopupManager, Space, Window},
@@ -72,8 +74,9 @@ impl XdgShellHandler for NuonuoState {
         // TODO: improve
         let window = Window::new_wayland_window(surface.clone());
         // TODO: activate use config
-        self.workspace_manager.current_workspace_mut().map_tiled_element(window, (0, 0).into(), true);
-        // self.space_manager.map_tiled_element(window, self.output_manager.current_output());
+        self.workspace_manager.map_tiled_element(window.clone(), self.output_manager.current_output(), true);
+        self.window_manager
+            .add_window(window, self.workspace_manager.current_workspace().id());
     }
 
     fn new_popup(&mut self, surface: PopupSurface, _positioner: PositionerState) {
@@ -103,13 +106,9 @@ impl XdgShellHandler for NuonuoState {
         if let Some(start_data) = check_grab(&seat, wl_surface, serial) {
             let pointer = seat.get_pointer().unwrap();
 
-            let window = self
-                .workspace_manager
-                .current_workspace()
-                .find_window(wl_surface)
-                .clone();
+            let window = self.workspace_manager.find_window(wl_surface).clone();
 
-            let initial_window_location = self.workspace_manager.current_workspace().element_location(&window);
+            let initial_window_location = self.workspace_manager.element_location(&window);
             let grab = PointerMoveSurfaceGrab {
                 start_data,
                 window,
@@ -117,9 +116,8 @@ impl XdgShellHandler for NuonuoState {
             };
 
             // TODO: just use the simple icon
-            self.cursor_manager.set_cursor_image(
-                CursorImageStatus::Named(CursorIcon::Move)
-            );
+            self.cursor_manager
+                .set_cursor_image(CursorImageStatus::Named(CursorIcon::Move));
             tracing::info!("change cursor status event.");
 
             pointer.set_grab(self, grab, serial, Focus::Clear);
@@ -138,13 +136,9 @@ impl XdgShellHandler for NuonuoState {
         if let Some(start_data) = check_grab(&seat, wl_surface, serial) {
             let pointer = seat.get_pointer().unwrap();
 
-            let window = self
-                .workspace_manager
-                .current_workspace()
-                .find_window(wl_surface)
-                .clone();
+            let window = self.workspace_manager.find_window(wl_surface).clone();
 
-            let initial_window_location = self.workspace_manager.current_workspace().element_location(&window);
+            let initial_window_location = self.workspace_manager.element_location(&window);
             let initial_window_size = window.geometry().size;
 
             surface.with_pending_state(|state| {
@@ -192,4 +186,3 @@ fn check_grab(
 
     Some(start_data)
 }
-

@@ -1,4 +1,4 @@
-use smithay::desktop::Window;
+use smithay::desktop::{Space, Window};
 
 #[derive(Debug)]
 pub enum LayoutScheme {
@@ -12,28 +12,32 @@ pub struct WorkspaceLayout {
 }
 
 impl Default for WorkspaceLayout {
-  fn default() -> Self {
-        Self { scheme: LayoutScheme::Default }
-  }
+    fn default() -> Self {
+        Self {
+            scheme: LayoutScheme::Default,
+        }
+    }
 }
 
 impl WorkspaceLayout {
-    pub fn set_layout (&mut self, scheme: LayoutScheme) {
+    pub fn set_layout(&mut self, scheme: LayoutScheme) {
         self.scheme = scheme;
     }
 
-    pub fn current_layout (&self) -> &LayoutScheme {
+    pub fn current_layout(&self) -> &LayoutScheme {
         &self.scheme
     }
 
-    pub fn mapped_windows (&self, windows: &mut Vec<Window>) {
+    pub fn mapped_windows(&self, space: &mut Space<Window>) {
         match self.scheme {
             LayoutScheme::Default => {
                 #[cfg(feature = "trace_layout")]
                 tracing::info!("Applying Default Layout");
 
-                // TODO: detect pointer location to add
-                // windows, first horizontal
+                let rate = 2;
+                
+
+
             }
             LayoutScheme::BinaryTree => {
                 #[cfg(feature = "trace_layout")]
@@ -43,5 +47,5 @@ impl WorkspaceLayout {
             }
         }
     }
-
 }
+

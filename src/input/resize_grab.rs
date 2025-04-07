@@ -126,9 +126,9 @@ impl PointerGrab<NuonuoState> for ResizeSurfaceGrab {
     }
 
     fn unset(&mut self, state: &mut NuonuoState) {
-        state.cursor_manager.set_cursor_image(
-            CursorImageStatus::default_named()
-        );
+        state
+            .cursor_manager
+            .set_cursor_image(CursorImageStatus::default_named());
     }
 
     fn motion(
@@ -325,12 +325,11 @@ impl PointerGrab<NuonuoState> for ResizeSurfaceGrab {
 
 pub fn handle_commit(workspace_manager: &mut WorkspaceManager, surface: &WlSurface) -> Option<()> {
     let window = workspace_manager
-        .current_workspace()
         .elements()
         .find(|w| w.toplevel().unwrap().wl_surface() == surface)
         .cloned()?;
 
-    let mut window_loc = workspace_manager.current_workspace().element_location(&window);
+    let mut window_loc = workspace_manager.element_location(&window);
     let geometry = window.geometry();
 
     let new_loc: Point<Option<i32>, Logical> = ResizeSurfaceState::with(surface, |state| {
@@ -361,8 +360,7 @@ pub fn handle_commit(workspace_manager: &mut WorkspaceManager, surface: &WlSurfa
 
     if new_loc.x.is_some() || new_loc.y.is_some() {
         // If TOP or LEFT side of the window got resized, we have to move it
-        workspace_manager.current_workspace_mut().map_element(window, window_loc, false);
+        workspace_manager.map_element(window, window_loc, false);
     }
     Some(())
 }
-

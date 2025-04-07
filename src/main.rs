@@ -7,10 +7,10 @@ mod backend;
 mod config;
 mod handler;
 mod input;
-mod render;
-mod state;
 mod layout;
+mod render;
 mod space;
+mod state;
 
 use smithay::reexports::calloop::EventLoop;
 

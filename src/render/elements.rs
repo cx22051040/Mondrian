@@ -1,12 +1,9 @@
 use smithay::{
-    backend::renderer::
-    {element::
-        {
-            memory::MemoryRenderBufferRenderElement, surface::WaylandSurfaceRenderElement
-        }, 
-        gles::{element::PixelShaderElement, GlesRenderer}
-    }, 
-    render_elements
+    backend::renderer::{
+        element::{memory::MemoryRenderBufferRenderElement, surface::WaylandSurfaceRenderElement},
+        gles::{GlesRenderer, element::PixelShaderElement},
+    },
+    render_elements,
 };
 
 render_elements! {
@@ -16,8 +13,7 @@ render_elements! {
     Border=PixelShaderElement,
 }
 
-impl std::fmt::Debug for CustomRenderElements
-{
+impl std::fmt::Debug for CustomRenderElements {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Surface(arg0) => f.debug_tuple("Surface").field(arg0).finish(),
@@ -27,4 +23,3 @@ impl std::fmt::Debug for CustomRenderElements
         }
     }
 }
-

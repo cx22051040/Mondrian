@@ -36,7 +36,11 @@ impl CompositorHandler for NuonuoState {
                 window.on_commit();
             }
 
-            xdg_shell::handle_commit(&mut self.popups, &self.workspace_manager.current_workspace().space, surface);
+            xdg_shell::handle_commit(
+                &mut self.popups,
+                &self.workspace_manager.current_workspace().space,
+                surface,
+            );
             resize_grab::handle_commit(&mut self.workspace_manager, surface);
         };
     }

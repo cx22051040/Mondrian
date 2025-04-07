@@ -209,19 +209,18 @@ impl CursorManager {
                 });
                 RenderCursor::Surface { hotspot, surface }
             }
-            CursorImageStatus::Named(icon) => {
-                self.get_cursor_with_name(icon, scale)
-                    .map(|cursor| RenderCursor::Named {
-                        icon,
-                        scale,
-                        cursor,
-                    })
-                    .unwrap_or_else(|| RenderCursor::Named {
-                        icon: Default::default(),
-                        scale,
-                        cursor: self.get_default_cursor(scale),
-                    })
-            },
+            CursorImageStatus::Named(icon) => self
+                .get_cursor_with_name(icon, scale)
+                .map(|cursor| RenderCursor::Named {
+                    icon,
+                    scale,
+                    cursor,
+                })
+                .unwrap_or_else(|| RenderCursor::Named {
+                    icon: Default::default(),
+                    scale,
+                    cursor: self.get_default_cursor(scale),
+                }),
         }
     }
 

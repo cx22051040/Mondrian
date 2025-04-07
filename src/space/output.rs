@@ -1,6 +1,9 @@
-use smithay::{output::{Mode, Output, PhysicalProperties, Scale, Subpixel}, 
-reexports::wayland_server::DisplayHandle, 
-utils::{Logical, Point, Transform}, wayland::output::OutputManagerState};
+use smithay::{
+    output::{Mode, Output, PhysicalProperties, Scale, Subpixel},
+    reexports::wayland_server::DisplayHandle,
+    utils::{Logical, Point, Transform},
+    wayland::output::OutputManagerState,
+};
 
 use crate::state::NuonuoState;
 
@@ -29,13 +32,15 @@ impl OutputElement {
         }
     }
 
-    pub fn change_current_state(&mut self, mode: Option<Mode>, transform: Option<Transform>, scale: Option<Scale>, location: Option<Point<i32, Logical>>) {
-        self.output.change_current_state(
-            mode,
-            transform,
-            scale,
-            location,
-        );
+    pub fn change_current_state(
+        &mut self,
+        mode: Option<Mode>,
+        transform: Option<Transform>,
+        scale: Option<Scale>,
+        location: Option<Point<i32, Logical>>,
+    ) {
+        self.output
+            .change_current_state(mode, transform, scale, location);
     }
 
     pub fn set_preferred(&mut self, mode: Mode) {
@@ -54,7 +59,8 @@ pub struct OutputManager {
 
 impl OutputManager {
     pub fn new(display_handle: &DisplayHandle) -> Self {
-        let output_manager_state = OutputManagerState::new_with_xdg_output::<NuonuoState>(&display_handle);
+        let output_manager_state =
+            OutputManagerState::new_with_xdg_output::<NuonuoState>(&display_handle);
 
         Self {
             outputs: Vec::new(),
@@ -63,9 +69,8 @@ impl OutputManager {
     }
 
     pub fn add_output(&mut self, name: &str, display_handle: &DisplayHandle, activate: bool) {
-        self.outputs.push(
-            OutputElement::new(name, display_handle, activate)
-        );
+        self.outputs
+            .push(OutputElement::new(name, display_handle, activate));
     }
 
     pub fn _remove_output() {
@@ -76,11 +81,26 @@ impl OutputManager {
         self.outputs.iter().find(|o| o.activate).unwrap().output()
     }
 
-    pub fn change_current_state(&mut self, mode: Option<Mode>, transform: Option<Transform>, scale: Option<Scale>, location: Option<Point<i32, Logical>>) {
-        self.outputs.iter_mut().find(|o| o.activate).unwrap().change_current_state(mode, transform, scale, location);
+    pub fn change_current_state(
+        &mut self,
+        mode: Option<Mode>,
+        transform: Option<Transform>,
+        scale: Option<Scale>,
+        location: Option<Point<i32, Logical>>,
+    ) {
+        self.outputs
+            .iter_mut()
+            .find(|o| o.activate)
+            .unwrap()
+            .change_current_state(mode, transform, scale, location);
     }
 
     pub fn set_preferred(&mut self, mode: Mode) {
-        self.outputs.iter_mut().find(|o| o.activate).unwrap().set_preferred(mode);
+        self.outputs
+            .iter_mut()
+            .find(|o| o.activate)
+            .unwrap()
+            .set_preferred(mode);
     }
 }
+

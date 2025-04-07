@@ -6,22 +6,16 @@ use smithay::backend::renderer::ImportEgl;
 use smithay::{
     backend::{
         egl::EGLDevice,
-        renderer::{
-            damage::OutputDamageTracker, gles::GlesRenderer, ImportDma
-        },
+        renderer::{ImportDma, damage::OutputDamageTracker, gles::GlesRenderer},
         winit::{self, WinitEvent, WinitGraphicsBackend},
-    }, 
-    desktop::space::render_output, output::Mode, 
-    reexports::{calloop::LoopHandle, wayland_server::DisplayHandle}, 
-    utils::Rectangle, 
-    wayland::dmabuf::{DmabufFeedback, DmabufFeedbackBuilder, DmabufGlobal, DmabufState}
+    },
+    output::Mode,
+    reexports::{calloop::LoopHandle, wayland_server::DisplayHandle},
+    utils::Rectangle,
+    wayland::dmabuf::{DmabufFeedback, DmabufFeedbackBuilder, DmabufGlobal, DmabufState},
 };
 
-use crate::{
-    input::input::process_input_event, render::{
-        border::compile_shaders, elements::CustomRenderElements
-    }, NuonuoState
-};
+use crate::{NuonuoState, input::input::process_input_event, render::border::compile_shaders};
 
 #[derive(Debug)]
 pub struct WinitData {
@@ -77,7 +71,6 @@ pub fn init_winit(
     compile_shaders(backend.renderer());
 
     let backend_data = {
-
         WinitData {
             backend,
             dmabuf_state,
@@ -104,55 +97,32 @@ pub fn init_winit(
                 WinitEvent::Redraw => {
                     let size = nuonuo_state.backend_data.backend.window_size();
                     let damage = Rectangle::from_size(size);
-                    let mut damage_tracker = OutputDamageTracker::from_output(nuonuo_state.output_manager.current_output());
-                    
-                    {
-                        let mut custom_elements: Vec<CustomRenderElements> = vec![];
+                    let mut damage_tracker = OutputDamageTracker::from_output(
+                        nuonuo_state.output_manager.current_output(),
+                    );
 
-                        // add pointer elements
-                        custom_elements.extend(
-                            nuonuo_state.get_cursor_render_elements()
-                        );
+                    nuonuo_state.render_output(&mut damage_tracker);
 
-                        // add window's border
-                        custom_elements.extend(
-                            nuonuo_state.get_border_render_elements()
-                        );
-
-                        let (renderer, mut framebuffer) = nuonuo_state.backend_data.backend.bind().unwrap();
-                        
-                        render_output::<_, CustomRenderElements, _, _>(
-                            nuonuo_state.output_manager.current_output(),
-                            renderer,
-                            &mut framebuffer,
-                            1.0,
-                            0,
-                            [&nuonuo_state.workspace_manager.current_workspace().space],
-                            custom_elements.as_slice(),
-                            &mut damage_tracker,
-                            [0.0, 0.0, 1.0, 1.0],
-                        )
+                    nuonuo_state
+                        .backend_data
+                        .backend
+                        .submit(Some(&[damage]))
                         .unwrap();
-                    }
-
-                    nuonuo_state.backend_data.backend.submit(Some(&[damage])).unwrap();
 
                     // For each of the windows send the frame callbacks to tell them to draw next frame.
-                    nuonuo_state
-                        .workspace_manager
-                        .current_workspace()
-                        .elements()
-                        .for_each(|window: &smithay::desktop::Window| {
+                    nuonuo_state.workspace_manager.elements().for_each(
+                        |window: &smithay::desktop::Window| {
                             window.send_frame(
                                 nuonuo_state.output_manager.current_output(),
                                 nuonuo_state.start_time.elapsed(),
                                 Some(Duration::ZERO),
                                 |_, _| Some(nuonuo_state.output_manager.current_output().clone()),
                             )
-                        });
+                        },
+                    );
 
                     // Refresh space nuonuo_state and handle certain events like enter/leave for outputs/windows
-                    nuonuo_state.workspace_manager.current_workspace_mut().refresh();
+                    nuonuo_state.workspace_manager.refresh();
                     nuonuo_state.popups.cleanup();
                     // Flush the outgoing buffers caontaining events so the clients get them.
                     let _ = nuonuo_state.display_handle.flush_clients();
