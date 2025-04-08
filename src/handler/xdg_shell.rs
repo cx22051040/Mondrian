@@ -115,12 +115,10 @@ impl XdgShellHandler for NuonuoState {
                 initial_window_location,
             };
 
-            // TODO: just use the simple icon
-            self.cursor_manager
-                .set_cursor_image(CursorImageStatus::Named(CursorIcon::Move));
-            tracing::info!("change cursor status event.");
-
             pointer.set_grab(self, grab, serial, Focus::Clear);
+            
+            self.cursor_manager
+                .set_cursor_image(CursorImageStatus::Named(CursorIcon::Grabbing));
         }
     }
 
@@ -158,9 +156,7 @@ impl XdgShellHandler for NuonuoState {
         }
     }
 
-    fn grab(&mut self, _surface: PopupSurface, _seat: wl_seat::WlSeat, _serial: Serial) {
-        // TODO popup grabs
-    }
+    fn grab(&mut self, _surface: PopupSurface, _seat: wl_seat::WlSeat, _serial: Serial) { }
 }
 delegate_xdg_shell!(NuonuoState);
 
@@ -169,6 +165,7 @@ fn check_grab(
     surface: &WlSurface,
     serial: Serial,
 ) -> Option<PointerGrabStartData<NuonuoState>> {
+    // return start_data if grabing
     let pointer = seat.get_pointer()?;
 
     // Check that this surface has a click grab.

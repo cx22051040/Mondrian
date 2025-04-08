@@ -18,7 +18,6 @@ impl PointerGrab<NuonuoState> for PointerMoveSurfaceGrab {
         &self.start_data
     }
 
-    // TODO: recover the grab begin status
     fn unset(&mut self, state: &mut NuonuoState) {
         state
             .cursor_manager

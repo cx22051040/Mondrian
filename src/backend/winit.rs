@@ -15,7 +15,7 @@ use smithay::{
     wayland::dmabuf::{DmabufFeedback, DmabufFeedbackBuilder, DmabufGlobal, DmabufState},
 };
 
-use crate::{NuonuoState, input::input::process_input_event, render::border::compile_shaders};
+use crate::{NuonuoState, input::process_input_event, render::border::compile_shaders};
 
 #[derive(Debug)]
 pub struct WinitData {

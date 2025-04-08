@@ -35,10 +35,7 @@ use smithay::{
 };
 
 use crate::{
-    backend::{self, winit::WinitData},
-    config::Configs,
-    render::cursor::{CursorManager, CursorTextureCache},
-    space::{output::OutputManager, window::WindowManager, workspace::WorkspaceManager},
+    backend::{self, winit::WinitData}, config::Configs, render::cursor::{CursorManager, CursorTextureCache}, space::{output::OutputManager, window::WindowManager, workspace::WorkspaceManager}
 };
 
 #[derive(Debug, Default)]
@@ -69,7 +66,7 @@ pub struct NuonuoState {
 
     pub backend_data: WinitData,
     pub socket_name: String,
-    pub loop_handle: LoopHandle<'static, NuonuoState>,
+    pub loop_handle: LoopHandle<'static, Self>,
     pub display_handle: DisplayHandle,
 
     // desktop
@@ -80,11 +77,11 @@ pub struct NuonuoState {
     // smithay state
     pub compositor_state: CompositorState,
     pub data_device_state: DataDeviceState,
-    pub seat_state: SeatState<NuonuoState>,
+    pub seat_state: SeatState<Self>,
+    pub seat: Seat<Self>,
     pub shm_state: ShmState,
     pub popups: PopupManager,
     pub xdg_shell_state: XdgShellState,
-    pub seat: Seat<Self>,
 
     pub cursor_manager: CursorManager,
     pub cursor_texture_cache: CursorTextureCache,
