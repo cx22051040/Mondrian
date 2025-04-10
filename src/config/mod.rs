@@ -7,7 +7,7 @@ pub struct WorkspaceConfigs {
 
 impl Default for WorkspaceConfigs {
     fn default() -> Self {
-        Self { gap: 5 }
+        Self { gap: 6 }
     }
 }
 

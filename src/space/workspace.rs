@@ -7,7 +7,9 @@ use smithay::{
     utils::{Logical, Point, Rectangle},
 };
 
-use crate::{config::WorkspaceConfigs, layout::workspace::WorkspaceLayout};
+use crate::{config::WorkspaceConfigs, layout::workspace::{LayoutScheme, TiledLayoutTree}};
+
+use super::window::WindowExt;
 
 static NEXT_ID: AtomicUsize = AtomicUsize::new(1);
 
@@ -29,17 +31,19 @@ impl WorkspaceID {
 pub struct Workspace {
     pub id: WorkspaceID,
     pub space: Space<Window>,
-    pub layout: WorkspaceLayout,
+    pub layout: LayoutScheme,
+    pub layout_tree: Option<TiledLayoutTree>,
 }
 
 impl Workspace {
-    pub fn new(output: &Output, location: (i32, i32), layout: WorkspaceLayout) -> Self {
+    pub fn new(output: &Output, location: (i32, i32), layout: LayoutScheme) -> Self {
         let mut space: Space<Window> = Default::default();
         space.map_output(output, location);
         Self {
             id: WorkspaceID::next(),
             space,
             layout,
+            layout_tree: None,
         }
     }
 
@@ -55,54 +59,34 @@ impl Workspace {
         &mut self,
         window: Window,
         output: &Output,
-        gap: i32,
         activate: bool,
     ) {
         self.refresh();
-
-        self.map_element(window, (0, 0).into(), activate);
-
         let output_geo = self.output_geometry(output);
-        let output_width = output_geo.size.w;
-        let output_height = output_geo.size.h;
 
-        let windows = self.elements();
-        let windows_count = self.elements_count() as i32;
-
-        let mut abc: Vec<(Window, Point<i32, Logical>)> = vec![];
-        
-        for (i, window) in windows.enumerate() {
-            let (mut x, mut y) = (gap, gap);
-            let (mut width, mut height) = (output_width - 2*gap, output_height - 2*gap);
-            if windows_count > 1 {
-                width -= gap;
-                width /= 2;
+        match self.layout {
+            LayoutScheme::Default => {
+                if self.elements().count() == 0 {
+                    let (tree, location) = TiledLayoutTree::new(
+                        window.clone(),
+                        output_geo
+                    );
+                    self.layout_tree = Some(tree);
+                    self.map_element(window, location, activate);
+                } else if let Some(layout_tree) = &mut self.layout_tree {
+                    let location = layout_tree.insert_window(window.clone());
+                    self.map_element(window, location, activate);
+                }
+            },
+            LayoutScheme::BinaryTree => {
+                todo!()
             }
-
-            if i > 0 {
-                height /= windows_count-1;
-                x += width+gap;
-                y += height * (i as i32 - 1);
-            }
-
-            if i > 1 {
-                height -= gap;
-                y += gap;
-            }
-
-            window.toplevel().unwrap().with_pending_state(|state|
-                state.size = Some((width, height).into())
-            );
-
-            window.toplevel().unwrap().send_pending_configure();
-            abc.push((window.clone(), Point::from((x, y))));
         }
 
-        for (window, location) in abc {
-            self.map_element(window, location, false);
+        for win in self.elements() {
+            win.toplevel().unwrap().send_pending_configure();
         }
 
-        // self.layout.mapped_windows(&mut self.space);
     }
 
     pub fn raise_element(&mut self, window: &Window, activate: bool) {
@@ -157,7 +141,6 @@ impl Workspace {
 #[derive(Debug)]
 pub struct WorkspaceManager {
     pub workspaces: Vec<Workspace>,
-    pub config: WorkspaceConfigs,
     pub activated_workspace: Option<WorkspaceID>,
 }
 
@@ -165,7 +148,6 @@ impl WorkspaceManager {
     pub fn new() -> Self {
         Self {
             workspaces: vec![],
-            config: WorkspaceConfigs::default(),
             activated_workspace: None,
         }
     }
@@ -175,13 +157,13 @@ impl WorkspaceManager {
         &mut self,
         output: &Output,
         location: (i32, i32),
-        layout: Option<WorkspaceLayout>,
+        layout: Option<LayoutScheme>,
         activate: bool,
     ) {
         let workspace = Workspace::new(
             output,
             location,
-            layout.unwrap_or_else(WorkspaceLayout::default),
+            layout.unwrap_or_else(|| LayoutScheme::Default),
         );
 
         if activate {
@@ -230,8 +212,7 @@ impl WorkspaceManager {
         output: &Output,
         activate: bool,
     ) {
-        let gap = self.config.gap;
-        self.current_workspace_mut().map_tiled_element(window, output, gap, activate);
+        self.current_workspace_mut().map_tiled_element(window, output, activate);
     }
 
     pub fn raise_element(&mut self, window: &Window, activate: bool) {

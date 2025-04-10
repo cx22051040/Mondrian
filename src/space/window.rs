@@ -19,6 +19,26 @@ impl WindowID {
     }
 }
 
+pub trait WindowExt {
+    fn set_window_id(&mut self) -> WindowID;
+    fn get_window_id(&self) -> Option<WindowID>;
+}
+
+impl WindowExt for Window {
+    fn set_window_id(&mut self) -> WindowID {
+        let id = WindowID::next();
+        self.user_data().insert_if_missing(|| id);
+        id
+    }
+
+    fn get_window_id(&self) -> Option<WindowID> {
+        self
+            .user_data()
+            .get::<WindowID>()
+            .and_then(|id| Some(id.clone()))
+    }
+}
+
 pub struct WindowManager {
     pub windows: Vec<Window>,
     pub window_workspace: HashMap<WindowID, WorkspaceID>,
@@ -43,6 +63,12 @@ impl WindowManager {
             .user_data()
             .get::<WindowID>()
             .and_then(|id| Some(id.clone()))
+    }
+
+    pub fn get_window(&self, id: WindowID) -> Option<&Window> {
+        self.windows
+            .iter()
+            .find(|w| w.get_window_id() == Some(id))
     }
 
     pub fn add_window(&mut self, window: Window, workspace_id: WorkspaceID) {

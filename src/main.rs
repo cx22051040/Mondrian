@@ -42,9 +42,7 @@ fn main() {
         (Some("-c") | Some("--command"), Some(command)) => {
             std::process::Command::new(command).spawn().ok();
         }
-        _ => {
-            std::process::Command::new("weston-terminal").spawn().ok();
-        }
+        _ => { }
     }
 
     tracing::info!("Initialization completed, starting the main loop.");

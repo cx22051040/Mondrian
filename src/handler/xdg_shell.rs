@@ -74,9 +74,9 @@ impl XdgShellHandler for NuonuoState {
         // TODO: improve
         let window = Window::new_wayland_window(surface.clone());
         // TODO: activate use config
-        self.workspace_manager.map_tiled_element(window.clone(), self.output_manager.current_output(), true);
         self.window_manager
-            .add_window(window, self.workspace_manager.current_workspace().id());
+            .add_window(window.clone(), self.workspace_manager.current_workspace().id());
+        self.workspace_manager.map_tiled_element(window, self.output_manager.current_output(), true);
     }
 
     fn new_popup(&mut self, surface: PopupSurface, _positioner: PositionerState) {
