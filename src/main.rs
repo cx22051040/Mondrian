@@ -5,7 +5,7 @@ extern crate tracing;
 
 mod backend;
 mod config;
-mod handler;
+mod protocol;
 mod input;
 mod layout;
 mod render;

@@ -1,44 +1,36 @@
-use std::sync::Arc;
+use std::{collections::{HashMap, HashSet}, sync::Arc};
 
 use smithay::{
-    backend::{allocator::dmabuf::Dmabuf, renderer::ImportDma},
-    delegate_data_device, delegate_dmabuf, delegate_output, delegate_seat, delegate_shm,
-    desktop::{PopupKind, PopupManager, find_popup_root_surface, get_popup_toplevel_coords},
-    input::{Seat, SeatHandler, SeatState},
-    output::Mode as OutputMode,
-    reexports::{
-        calloop::{Interest, LoopHandle, Mode, PostAction, generic::Generic},
+    backend::{allocator::dmabuf::Dmabuf, renderer::ImportDma}, 
+        delegate_data_device, delegate_dmabuf, delegate_output, delegate_seat, delegate_shm, 
+        desktop::{find_popup_root_surface, get_popup_toplevel_coords, PopupKind, PopupManager}, input::{Seat, SeatHandler, SeatState}, output::Mode as OutputMode, reexports::{
+        calloop::{generic::Generic, Interest, LoopHandle, Mode, PostAction},
         wayland_server::{
-            Display, DisplayHandle, Resource,
-            backend::ClientData,
-            protocol::{wl_buffer, wl_surface::WlSurface},
+            backend::ClientData, protocol::{wl_buffer, wl_surface::WlSurface}, Display, DisplayHandle, Resource
         },
-    },
-    utils::Transform,
-    wayland::{
+    }, utils::Transform, wayland::{
         buffer::BufferHandler,
         compositor::{CompositorClientState, CompositorState},
         dmabuf::{DmabufGlobal, DmabufHandler, DmabufState, ImportNotifier},
         output::OutputHandler,
         security_context::SecurityContext,
         selection::{
-            SelectionHandler,
             data_device::{
-                ClientDndGrabHandler, DataDeviceHandler, DataDeviceState, ServerDndGrabHandler,
-                set_data_device_focus,
-            },
+                set_data_device_focus, ClientDndGrabHandler, DataDeviceHandler, DataDeviceState, ServerDndGrabHandler
+            }, SelectionHandler
         },
-        shell::xdg::{PopupSurface, XdgShellState},
+        shell::{wlr_layer::{LayerSurface, WlrLayerShellState}, xdg::{PopupSurface, XdgShellState}},
         shm::{ShmHandler, ShmState},
         socket::ListeningSocketSource,
-    },
+    }
 };
+
 
 use crate::{
     backend::{self, winit::WinitData}, config::Configs, render::cursor::{CursorManager, CursorTextureCache}, space::{output::OutputManager, window::WindowManager, workspace::WorkspaceManager}
 };
 
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct ClientState {
     pub compositor_state: CompositorClientState,
     pub _security_context: Option<SecurityContext>,
@@ -82,6 +74,9 @@ pub struct NuonuoState {
     pub shm_state: ShmState,
     pub popups: PopupManager,
     pub xdg_shell_state: XdgShellState,
+    pub layer_shell_state: WlrLayerShellState,
+    pub mapped_layer_surfaces: HashSet<WlSurface>,
+    pub unmapped_layer_surfaces: HashSet<WlSurface>,
 
     pub cursor_manager: CursorManager,
     pub cursor_texture_cache: CursorTextureCache,
@@ -114,6 +109,10 @@ impl NuonuoState {
         let mut seat_state = SeatState::new();
         let seat_name = String::from("winit");
         let mut seat: Seat<Self> = seat_state.new_wl_seat(&display_handle, seat_name);
+        let layer_shell_state = WlrLayerShellState::new::<Self>(&display_handle);
+        let unmapped_layer_surfaces = HashSet::new();
+        let mapped_layer_surfaces = HashSet::new();
+
 
         // TODO: use config file
         let cursor_manager = CursorManager::new("default", 24);
@@ -171,6 +170,9 @@ impl NuonuoState {
             shm_state,
             xdg_shell_state,
             seat,
+            layer_shell_state,
+            mapped_layer_surfaces,
+            unmapped_layer_surfaces,
 
             cursor_manager,
             cursor_texture_cache,
@@ -352,3 +354,4 @@ impl DmabufHandler for NuonuoState {
     }
 }
 delegate_dmabuf!(NuonuoState);
+

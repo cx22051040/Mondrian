@@ -9,7 +9,7 @@ use smithay::{
 
 use crate::state::{ClientState, NuonuoState};
 
-use crate::{handler::xdg_shell, input::resize_grab};
+use crate::{protocol::xdg_shell, input::resize_grab};
 
 impl CompositorHandler for NuonuoState {
     fn compositor_state(&mut self) -> &mut CompositorState {

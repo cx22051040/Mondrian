@@ -53,6 +53,7 @@ impl NuonuoState {
         // custom_elements.extend(
         //     self.get_windows_render_elements()
         // );
+        custom_elements.extend(self.get_layer_surface_render_elements());
         custom_elements
     }
 
@@ -186,6 +187,29 @@ impl NuonuoState {
             }
         }
 
+        elements
+    }
+
+    pub fn get_layer_surface_render_elements(&mut self) -> Vec<CustomRenderElements> {
+        let mut elements: Vec<CustomRenderElements> = vec![];
+
+        let output_scale = self.output_manager.current_output().current_scale();
+        let output_scale = Scale::from(output_scale.fractional_scale());
+
+        let _ = self.mapped_layer_surfaces
+            .iter()
+            .map(|layer_surface|{
+                elements.extend(
+                    render_elements_from_surface_tree(
+                        self.backend_data.backend.renderer(),
+                        &layer_surface,
+                        (0, 0),
+                        output_scale,
+                        1.0,
+                        Kind::Unspecified,
+                    )
+                )             
+            });
         elements
     }
 }

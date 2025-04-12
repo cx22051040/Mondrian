@@ -17,6 +17,8 @@ xcursor = "0.3.8"
 
 [dependencies.smithay]
 version = "^0.5"
+default-features = false
+features = ["wayland_frontend", "desktop"]
 git = "https://github.com/Smithay/smithay.git"
 
 [features]
