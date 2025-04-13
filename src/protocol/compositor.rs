@@ -27,6 +27,11 @@ impl CompositorHandler for NuonuoState {
             while let Some(parent) = get_parent(&root) {
                 root = parent;
             }
+
+            if self.layer_shell_handle_commit(&root) {
+                return
+            }
+
             if let Some(window) = self
                 .workspace_manager
                 .current_workspace()

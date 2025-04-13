@@ -2,9 +2,9 @@ use crate::{
     input::{move_grab::PointerMoveSurfaceGrab, resize_grab::ResizeSurfaceGrab},
     state::NuonuoState,
 };
-use smithay::input::pointer::{
+use smithay::{desktop::{find_popup_root_surface, get_popup_toplevel_coords}, input::pointer::{
     CursorIcon, CursorImageStatus, GrabStartData as PointerGrabStartData,
-};
+}};
 use smithay::{
     delegate_xdg_shell,
     desktop::{PopupKind, PopupManager, Space, Window},
@@ -182,4 +182,33 @@ fn check_grab(
     }
 
     Some(start_data)
+}
+
+impl NuonuoState {
+    pub fn unconstrain_popup(&self, popup: &PopupSurface) {
+        let Ok(root) = find_popup_root_surface(&PopupKind::Xdg(popup.clone())) else {
+            return;
+        };
+        let Some(window) = self
+            .workspace_manager
+            .elements()
+            .find(|w| w.toplevel().unwrap().wl_surface() == &root)
+        else {
+            return;
+        };
+
+        let output = self.output_manager.current_output();
+        let output_geo = self.workspace_manager.output_geometry(output);
+        let window_geo = self.workspace_manager.element_geometry(window);
+
+        // The target geometry for the positioner should be relative to its parent's geometry, so
+        // we will compute that here.
+        let mut target = output_geo;
+        target.loc -= get_popup_toplevel_coords(&PopupKind::Xdg(popup.clone()));
+        target.loc -= window_geo.loc;
+
+        popup.with_pending_state(|state| {
+            state.geometry = state.positioner.get_unconstrained_geometry(target);
+        });
+    }
 }

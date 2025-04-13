@@ -1,9 +1,9 @@
-use std::{collections::{HashMap, HashSet}, sync::Arc};
+use std::sync::Arc;
 
 use smithay::{
     backend::{allocator::dmabuf::Dmabuf, renderer::ImportDma}, 
         delegate_data_device, delegate_dmabuf, delegate_output, delegate_seat, delegate_shm, 
-        desktop::{find_popup_root_surface, get_popup_toplevel_coords, PopupKind, PopupManager}, input::{Seat, SeatHandler, SeatState}, output::Mode as OutputMode, reexports::{
+        desktop::PopupManager, input::{Seat, SeatHandler, SeatState}, output::Mode as OutputMode, reexports::{
         calloop::{generic::Generic, Interest, LoopHandle, Mode, PostAction},
         wayland_server::{
             backend::ClientData, protocol::{wl_buffer, wl_surface::WlSurface}, Display, DisplayHandle, Resource
@@ -19,7 +19,7 @@ use smithay::{
                 set_data_device_focus, ClientDndGrabHandler, DataDeviceHandler, DataDeviceState, ServerDndGrabHandler
             }, SelectionHandler
         },
-        shell::{wlr_layer::{LayerSurface, WlrLayerShellState}, xdg::{PopupSurface, XdgShellState}},
+        shell::{wlr_layer::WlrLayerShellState, xdg::XdgShellState},
         shm::{ShmHandler, ShmState},
         socket::ListeningSocketSource,
     }
@@ -75,9 +75,6 @@ pub struct NuonuoState {
     pub popups: PopupManager,
     pub xdg_shell_state: XdgShellState,
     pub layer_shell_state: WlrLayerShellState,
-    pub mapped_layer_surfaces: HashSet<WlSurface>,
-    pub unmapped_layer_surfaces: HashSet<WlSurface>,
-
     pub cursor_manager: CursorManager,
     pub cursor_texture_cache: CursorTextureCache,
 
@@ -110,9 +107,6 @@ impl NuonuoState {
         let seat_name = String::from("winit");
         let mut seat: Seat<Self> = seat_state.new_wl_seat(&display_handle, seat_name);
         let layer_shell_state = WlrLayerShellState::new::<Self>(&display_handle);
-        let unmapped_layer_surfaces = HashSet::new();
-        let mapped_layer_surfaces = HashSet::new();
-
 
         // TODO: use config file
         let cursor_manager = CursorManager::new("default", 24);
@@ -171,8 +165,6 @@ impl NuonuoState {
             xdg_shell_state,
             seat,
             layer_shell_state,
-            mapped_layer_surfaces,
-            unmapped_layer_surfaces,
 
             cursor_manager,
             cursor_texture_cache,
@@ -217,33 +209,6 @@ impl NuonuoState {
         tracing::info!(name = socket_name, "Listening on wayland socket.");
 
         socket_name
-    }
-
-    pub fn unconstrain_popup(&self, popup: &PopupSurface) {
-        let Ok(root) = find_popup_root_surface(&PopupKind::Xdg(popup.clone())) else {
-            return;
-        };
-        let Some(window) = self
-            .workspace_manager
-            .elements()
-            .find(|w| w.toplevel().unwrap().wl_surface() == &root)
-        else {
-            return;
-        };
-
-        let output = self.output_manager.current_output();
-        let output_geo = self.workspace_manager.output_geometry(output);
-        let window_geo = self.workspace_manager.element_geometry(window);
-
-        // The target geometry for the positioner should be relative to its parent's geometry, so
-        // we will compute that here.
-        let mut target = output_geo;
-        target.loc -= get_popup_toplevel_coords(&PopupKind::Xdg(popup.clone()));
-        target.loc -= window_geo.loc;
-
-        popup.with_pending_state(|state| {
-            state.geometry = state.positioner.get_unconstrained_geometry(target);
-        });
     }
 
     // TODO: add device event

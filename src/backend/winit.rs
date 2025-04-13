@@ -15,7 +15,7 @@ use smithay::{
     wayland::dmabuf::{DmabufFeedback, DmabufFeedbackBuilder, DmabufGlobal, DmabufState},
 };
 
-use crate::{NuonuoState, input::process_input_event, render::border::compile_shaders};
+use crate::{NuonuoState, render::border::compile_shaders};
 
 #[derive(Debug)]
 pub struct WinitData {
@@ -92,7 +92,7 @@ pub fn init_winit(
                     );
                 }
                 WinitEvent::Input(event) => {
-                    process_input_event(event, nuonuo_state);
+                    nuonuo_state.process_input_event(event);
                 }
                 WinitEvent::Redraw => {
                     let size = nuonuo_state.backend_data.backend.window_size();
