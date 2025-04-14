@@ -59,14 +59,35 @@ impl Workspace {
         &mut self,
         window: Window,
         output: &Output,
+        focused_surface: Option<WlSurface>,
         activate: bool,
     ) {
         self.refresh();
         let output_geo = self.output_geometry(output);
-
+        
         match self.layout {
             LayoutScheme::Default => {
-                if self.elements().count() == 0 {
+                if self.layout_tree.is_none() {
+                    let (tree, location, ) = TiledLayoutTree::new(
+                        window.clone(),
+                        output_geo
+                    );
+                    self.layout_tree = Some(tree);
+                    self.map_element(window, location, activate);
+                } else if let Some(layout_tree) = &mut self.layout_tree {
+
+                    let focused_window = focused_surface.and_then(|surface| {
+                        self.space.elements().find(|window| {
+                            *window.toplevel().unwrap().wl_surface() == surface
+                        })
+                    });
+
+                    let location = layout_tree.insert_default(window.clone(), focused_window).expect("error while interting window");
+                    self.map_element(window, location, activate);
+                }
+            },
+            LayoutScheme::BinaryTree => {
+                if self.layout_tree.is_none()  {
                     let (tree, location) = TiledLayoutTree::new(
                         window.clone(),
                         output_geo
@@ -74,12 +95,9 @@ impl Workspace {
                     self.layout_tree = Some(tree);
                     self.map_element(window, location, activate);
                 } else if let Some(layout_tree) = &mut self.layout_tree {
-                    let location = layout_tree.insert_window(window.clone());
+                    let location = layout_tree.insert_binary_tree(window.clone());
                     self.map_element(window, location, activate);
                 }
-            },
-            LayoutScheme::BinaryTree => {
-                todo!()
             }
         }
 
@@ -210,9 +228,10 @@ impl WorkspaceManager {
         &mut self,
         window: Window,
         output: &Output,
+        focused_surface: Option<WlSurface>,
         activate: bool,
     ) {
-        self.current_workspace_mut().map_tiled_element(window, output, activate);
+        self.current_workspace_mut().map_tiled_element(window, output, focused_surface, activate);
     }
 
     pub fn raise_element(&mut self, window: &Window, activate: bool) {

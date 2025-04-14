@@ -9,7 +9,6 @@ use crate::state::NuonuoState;
 
 pub struct OutputElement {
     pub output: Output,
-    pub name: String,
     pub activate: bool,
 }
 
@@ -27,7 +26,6 @@ impl OutputElement {
         let _ = output.create_global::<NuonuoState>(display_handle);
         Self {
             output,
-            name: name.to_string(),
             activate,
         }
     }

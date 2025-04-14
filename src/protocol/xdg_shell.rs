@@ -76,7 +76,9 @@ impl XdgShellHandler for NuonuoState {
         // TODO: activate use config
         self.window_manager
             .add_window(window.clone(), self.workspace_manager.current_workspace().id());
-        self.workspace_manager.map_tiled_element(window, self.output_manager.current_output(), true);
+
+        let focused_surface = self.seat.get_keyboard().unwrap().current_focus();
+        self.workspace_manager.map_tiled_element(window, self.output_manager.current_output(), focused_surface, true);
     }
 
     fn new_popup(&mut self, surface: PopupSurface, _positioner: PositionerState) {
