@@ -1,12 +1,10 @@
 use std::sync::Arc;
 
 use smithay::{
-    backend::{allocator::dmabuf::Dmabuf, renderer::ImportDma}, 
-        delegate_data_device, delegate_dmabuf, delegate_output, delegate_seat, delegate_shm, 
-        desktop::PopupManager, input::{Seat, SeatHandler, SeatState}, output::Mode as OutputMode, reexports::{
+    backend::{allocator::dmabuf::Dmabuf, renderer::ImportDma}, delegate_data_device, delegate_dmabuf, delegate_output, delegate_seat, delegate_shm, delegate_viewporter, desktop::PopupManager, input::{Seat, SeatHandler, SeatState}, output::Mode as OutputMode, reexports::{
         calloop::{generic::Generic, Interest, LoopHandle, Mode, PostAction},
         wayland_server::{
-            backend::ClientData, protocol::{wl_buffer, wl_surface::WlSurface}, Display, DisplayHandle, Resource
+            backend::ClientData, protocol::{wl_buffer, wl_shm, wl_surface::WlSurface}, Display, DisplayHandle, Resource
         },
     }, utils::Transform, wayland::{
         buffer::BufferHandler,
@@ -21,7 +19,7 @@ use smithay::{
         },
         shell::{wlr_layer::WlrLayerShellState, xdg::XdgShellState},
         shm::{ShmHandler, ShmState},
-        socket::ListeningSocketSource,
+        socket::ListeningSocketSource, viewporter::ViewporterState,
     }
 };
 
@@ -77,6 +75,7 @@ pub struct NuonuoState {
     pub layer_shell_state: WlrLayerShellState,
     pub cursor_manager: CursorManager,
     pub cursor_texture_cache: CursorTextureCache,
+    pub viewporter_state: ViewporterState,
 
     // configs
     pub configs: Configs,
@@ -100,13 +99,17 @@ impl NuonuoState {
         // init smithay state
         let compositor_state = CompositorState::new::<Self>(&display_handle);
         let data_device_state = DataDeviceState::new::<Self>(&display_handle);
-        let shm_state = ShmState::new::<Self>(&display_handle, vec![]);
+        let shm_state = ShmState::new::<Self>(&display_handle, vec![    
+            wl_shm::Format::Argb8888,
+            wl_shm::Format::Xrgb8888,
+        ]);
         let xdg_shell_state = XdgShellState::new::<Self>(&display_handle);
         let popups = PopupManager::default();
         let mut seat_state = SeatState::new();
         let seat_name = String::from("winit");
         let mut seat: Seat<Self> = seat_state.new_wl_seat(&display_handle, seat_name);
         let layer_shell_state = WlrLayerShellState::new::<Self>(&display_handle);
+        let viewporter_state = ViewporterState::new::<Self>(&display_handle);
 
         // TODO: use config file
         let cursor_manager = CursorManager::new("default", 24);
@@ -165,6 +168,7 @@ impl NuonuoState {
             xdg_shell_state,
             seat,
             layer_shell_state,
+            viewporter_state,
 
             cursor_manager,
             cursor_texture_cache,
@@ -320,3 +324,4 @@ impl DmabufHandler for NuonuoState {
 }
 delegate_dmabuf!(NuonuoState);
 
+delegate_viewporter!(NuonuoState);
