@@ -8,6 +8,7 @@ anyhow = "1.0.97"
 bitflags = "2.9.0"
 itertools = "0.14.0"
 regex = "1.11.1"
+slotmap = "1.0.7"
 tokio = "1.44.1"
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
@@ -22,7 +23,7 @@ features = ["wayland_frontend", "desktop"]
 git = "https://github.com/Smithay/smithay.git"
 
 [features]
-default = ["winit"]
+default = ["winit", "trace_layout"]
 egl = ["smithay/use_system_lib", "smithay/backend_egl"]
 winit = ["smithay/backend_winit", "smithay/backend_drm"]
 trace_input = []

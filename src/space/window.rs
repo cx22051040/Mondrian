@@ -1,9 +1,8 @@
 use std::{
-    collections::HashMap,
-    sync::atomic::{AtomicUsize, Ordering},
+    cell::RefCell, collections::HashMap, sync::atomic::{AtomicUsize, Ordering}
 };
 
-use smithay::desktop::Window;
+use smithay::{desktop::Window, reexports::wayland_server::protocol::wl_surface::WlSurface, utils::{Logical, Rectangle}};
 
 use super::workspace::WorkspaceID;
 
@@ -11,6 +10,11 @@ static NEXT_WINDOW_ID: AtomicUsize = AtomicUsize::new(1);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct WindowID(usize);
+
+pub struct WindowExtElements {
+    id: WindowID,
+    rec: Rectangle<i32, Logical>,
+}
 
 impl WindowID {
     #[inline]
@@ -20,22 +24,40 @@ impl WindowID {
 }
 
 pub trait WindowExt {
-    fn set_window_id(&mut self) -> WindowID;
-    fn get_window_id(&self) -> Option<WindowID>;
+    fn set_id(&self) -> WindowID;
+    fn get_id(&self) -> Option<WindowID>;
+    fn set_rec(&self, new_rec: Rectangle<i32, Logical>);
+    fn get_rec(&self) -> Option<Rectangle<i32, Logical>>;
 }
 
 impl WindowExt for Window {
-    fn set_window_id(&mut self) -> WindowID {
+    fn set_id(&self) -> WindowID {
         let id = WindowID::next();
-        self.user_data().insert_if_missing(|| id);
+        self.user_data().insert_if_missing(|| RefCell::new(WindowExtElements {id, rec: Rectangle::default()}));
         id
     }
 
-    fn get_window_id(&self) -> Option<WindowID> {
+    fn get_id(&self) -> Option<WindowID> {
         self
             .user_data()
-            .get::<WindowID>()
-            .and_then(|id| Some(id.clone()))
+            .get::<RefCell<WindowExtElements>>()
+            .and_then(|e| Some(e.borrow().id.clone()))
+    }
+
+    fn set_rec(&self, new_rec: Rectangle<i32, Logical>) {
+        if let Some(e) = self
+            .user_data()
+            .get::<RefCell<WindowExtElements>>() 
+        {
+            e.borrow_mut().rec = new_rec;
+        }
+    }
+
+    fn get_rec(&self) -> Option<Rectangle<i32, Logical>> {
+        self.
+            user_data()
+            .get::<RefCell<WindowExtElements>>()
+            .and_then(|e| Some(e.borrow().rec.clone()))
     }
 }
 
@@ -53,22 +75,17 @@ impl WindowManager {
     }
 
     pub fn set_window_id(&mut self, window: &Window) -> WindowID {
-        let id = WindowID::next();
-        window.user_data().insert_if_missing(|| id);
-        id
+        window.set_id()
     }
 
     pub fn get_window_id(&self, window: &Window) -> Option<WindowID> {
-        window
-            .user_data()
-            .get::<WindowID>()
-            .and_then(|id| Some(id.clone()))
+        window.get_id()
     }
 
-    pub fn get_window(&self, id: WindowID) -> Option<&Window> {
+    pub fn get_window(&self, surface: &WlSurface) -> Option<&Window> {
         self.windows
             .iter()
-            .find(|w| w.get_window_id() == Some(id))
+            .find(|w| w.toplevel().unwrap().wl_surface() == surface)
     }
 
     pub fn add_window(&mut self, window: Window, workspace_id: WorkspaceID) {
@@ -77,8 +94,19 @@ impl WindowManager {
         self.window_workspace.insert(id, workspace_id);
     }
 
-    pub fn _remove_window(&mut self) {
-        todo!()
+    pub fn remove_window(&mut self, surface: &WlSurface) -> Option<Window> {
+        let window = self.get_window(surface).unwrap().clone();
+    
+        if let Some(window_id) = self.get_window_id(&window) {
+            self.window_workspace.remove(&window_id);
+        }
+
+        if let Some(pos) = self.windows.iter().position(|w| w == &window) {
+            return Some(self.windows.remove(pos));
+        }
+
+        None
     }
+    
 }
 

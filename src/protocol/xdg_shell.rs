@@ -71,9 +71,7 @@ impl XdgShellHandler for NuonuoState {
     }
 
     fn new_toplevel(&mut self, surface: ToplevelSurface) {
-        // TODO: improve
         let window = Window::new_wayland_window(surface.clone());
-        // TODO: activate use config
         self.window_manager
             .add_window(window.clone(), self.workspace_manager.current_workspace().id());
 
@@ -99,6 +97,12 @@ impl XdgShellHandler for NuonuoState {
         });
         self.unconstrain_popup(&surface);
         surface.send_repositioned(token);
+    }
+
+    fn toplevel_destroyed(&mut self, surface: ToplevelSurface) {
+        let wl_surface = surface.wl_surface();
+        self.window_manager.remove_window(wl_surface);
+        self.workspace_manager.remove_window(wl_surface);
     }
 
     fn move_request(&mut self, surface: ToplevelSurface, seat: wl_seat::WlSeat, serial: Serial) {

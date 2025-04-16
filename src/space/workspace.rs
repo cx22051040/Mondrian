@@ -7,11 +7,12 @@ use smithay::{
     utils::{Logical, Point, Rectangle},
 };
 
-use crate::{config::WorkspaceConfigs, layout::workspace::{LayoutScheme, TiledLayoutTree}};
+use crate::layout::tiled_tree::{LayoutScheme, TiledTree};
 
 use super::window::WindowExt;
 
 static NEXT_ID: AtomicUsize = AtomicUsize::new(1);
+const GAP: i32 = 12;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct WorkspaceID(usize);
@@ -32,7 +33,7 @@ pub struct Workspace {
     pub id: WorkspaceID,
     pub space: Space<Window>,
     pub layout: LayoutScheme,
-    pub layout_tree: Option<TiledLayoutTree>,
+    pub layout_tree: Option<TiledTree>,
 }
 
 impl Workspace {
@@ -64,47 +65,73 @@ impl Workspace {
     ) {
         self.refresh();
         let output_geo = self.output_geometry(output);
-        
+
+        if self.layout_tree.is_none() {
+            window.toplevel().unwrap().with_pending_state(|state| {
+                state.size = Some(output_geo.size - (GAP*2, GAP*2).into())
+            });
+            window.toplevel().unwrap().send_pending_configure();
+            window.set_rec(Rectangle::new((GAP, GAP).into(), (output_geo.size - (GAP*2, GAP*2).into()).into()));
+            self.layout_tree = Some(TiledTree::new(window.clone()));
+            self.map_element(window, (GAP, GAP).into(), true);
+            return;
+        }
+
+        let focus = focused_surface.and_then(|surface| {
+            self.elements().find(|win| *win.toplevel().unwrap().wl_surface() == surface)
+        })
+        .unwrap()
+        .clone();
+
         match self.layout {
             LayoutScheme::Default => {
-                if self.layout_tree.is_none() {
-                    let (tree, location, ) = TiledLayoutTree::new(
-                        window.clone(),
-                        output_geo
-                    );
-                    self.layout_tree = Some(tree);
-                    self.map_element(window, location, activate);
-                } else if let Some(layout_tree) = &mut self.layout_tree {
+                if let Some(layout_tree) = &mut self.layout_tree {
+                    layout_tree.insert(&focus, window.clone());
 
-                    let focused_window = focused_surface.and_then(|surface| {
-                        self.space.elements().find(|window| {
-                            *window.toplevel().unwrap().wl_surface() == surface
-                        })
-                    });
-
-                    let location = layout_tree.insert_default(window.clone(), focused_window).expect("error while interting window");
-                    self.map_element(window, location, activate);
+                    #[cfg(feature="trace_layout")]
+                    layout_tree.print_tree();
+                    let loc = window.get_rec().unwrap().loc;
+                    self.map_element(window, loc, true);
                 }
             },
             LayoutScheme::BinaryTree => {
-                if self.layout_tree.is_none()  {
-                    let (tree, location) = TiledLayoutTree::new(
-                        window.clone(),
-                        output_geo
-                    );
-                    self.layout_tree = Some(tree);
-                    self.map_element(window, location, activate);
-                } else if let Some(layout_tree) = &mut self.layout_tree {
-                    let location = layout_tree.insert_binary_tree(window.clone());
-                    self.map_element(window, location, activate);
-                }
+                todo!()
             }
         }
 
         for win in self.elements() {
+            let rec = win.get_rec().unwrap();
+            win.toplevel().unwrap().with_pending_state(|state| {
+                state.size = Some(rec.size)
+            });
             win.toplevel().unwrap().send_pending_configure();
         }
+    }
 
+    pub fn unmap_tiled_element(&mut self, window: Window) {
+        if let Some(layout_tree) = &mut self.layout_tree {
+            layout_tree.remove(&window);
+
+            if layout_tree.is_empty() {
+                self.layout_tree = None;
+            } else {
+                #[cfg(feature="trace_layout")]
+                layout_tree.print_tree();
+            }
+
+            let e: Vec<_> = self.elements().cloned().collect();
+
+            for win in e {
+                let rec = win.get_rec().unwrap();
+                win.toplevel().unwrap().with_pending_state(|state| {
+                    state.size = Some(rec.size)
+                });
+                win.toplevel().unwrap().send_pending_configure();
+                self.map_element(win, rec.loc, true);
+            }
+        } else {
+            panic!("empty layout tree!");
+        }
     }
 
     pub fn raise_element(&mut self, window: &Window, activate: bool) {
@@ -151,8 +178,16 @@ impl Workspace {
         }
     }
     
-    pub fn _remove(&mut self) {
-        todo!()
+    pub fn remove_window(&mut self, surface: &WlSurface){
+
+        let window = self.elements().find(|win| {
+            win.toplevel().unwrap().wl_surface() == surface
+        })
+        .unwrap()
+        .clone();
+
+        self.space.unmap_elem(&window);
+        self.unmap_tiled_element(window);
     }
 }
 
@@ -277,4 +312,9 @@ impl WorkspaceManager {
     pub fn _workspaces_counts(&self) -> usize {
         self.workspaces.iter().count()
     }
+ 
+    pub fn remove_window(&mut self, surface: &WlSurface) {
+        self.current_workspace_mut().remove_window(surface);
+    }
+
 }
