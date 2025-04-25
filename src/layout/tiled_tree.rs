@@ -1,8 +1,8 @@
-use slotmap::{new_key_type, Key, SlotMap};
+use slotmap::{new_key_type, SlotMap};
 use smithay::{desktop::Window, utils::{Logical, Rectangle}};
 
 use crate::space::window::WindowExt;
-
+use super::LayoutHandle;
 
 const RATE: f32 = 2.0;
 const GAP: i32 = 12;
@@ -137,7 +137,7 @@ impl TiledTree {
     }
 
     fn modify(&mut self, node_id: NodeId, rec: Rectangle<i32, Logical>) {
-        // modify the child tree with new rec or direction
+        // modify the child tree with new rec with direction
         match &mut self.nodes[node_id] {
             NodeData::Leaf { window } => {
                 window.set_rec(rec);

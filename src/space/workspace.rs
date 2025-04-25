@@ -7,9 +7,8 @@ use smithay::{
     utils::{Logical, Point, Rectangle},
 };
 
-use crate::layout::tiled_tree::{LayoutScheme, TiledTree};
+use crate::layout::{tiled_tree::{LayoutScheme, TiledTree}, LayoutHandle};
 
-use super::window::WindowExt;
 
 static NEXT_ID: AtomicUsize = AtomicUsize::new(1);
 const GAP: i32 = 12;
