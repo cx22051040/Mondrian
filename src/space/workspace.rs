@@ -15,9 +15,9 @@ static NEXT_ID: AtomicUsize = AtomicUsize::new(1);
 const GAP: i32 = 12;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct WorkspaceID(usize);
+pub struct WorkspaceId(usize);
 
-impl WorkspaceID {
+impl WorkspaceId {
     // only for test
     pub fn new (id: usize) -> Self {
         Self(id)
@@ -30,7 +30,7 @@ impl WorkspaceID {
 
 #[derive(Debug)]
 pub struct Workspace {
-    pub id: WorkspaceID,
+    pub id: WorkspaceId,
     pub space: Space<Window>,
     pub layout: LayoutScheme,
     pub layout_tree: Option<TiledTree>,
@@ -41,14 +41,14 @@ impl Workspace {
         let mut space: Space<Window> = Default::default();
         space.map_output(output, location);
         Self {
-            id: WorkspaceID::next(),
+            id: WorkspaceId::next(),
             space,
             layout,
             layout_tree: None,
         }
     }
 
-    pub fn id(&self) -> WorkspaceID {
+    pub fn id(&self) -> WorkspaceId {
         self.id
     }
 
@@ -86,7 +86,7 @@ impl Workspace {
         match self.layout {
             LayoutScheme::Default => {
                 if let Some(layout_tree) = &mut self.layout_tree {
-                    layout_tree.insert(&focus, window.clone());
+                    layout_tree.insert_window(&focus, window.clone());
 
                     #[cfg(feature="trace_layout")]
                     layout_tree.print_tree();
@@ -127,7 +127,7 @@ impl Workspace {
                     state.size = Some(rec.size)
                 });
                 win.toplevel().unwrap().send_pending_configure();
-                self.map_element(win, rec.loc, true);
+                self.map_element(win, rec.loc, false);
             }
         } else {
             panic!("empty layout tree!");
@@ -189,12 +189,41 @@ impl Workspace {
         self.space.unmap_elem(&window);
         self.unmap_tiled_element(window);
     }
+
+    pub fn invert_window(&mut self, focused_surface: Option<WlSurface>) {
+        if self.layout_tree.is_none() || focused_surface.is_none() {
+            return;
+        }
+        let focus = focused_surface.and_then(|surface| {
+            self.elements().find(|win| *win.toplevel().unwrap().wl_surface() == surface)
+        })
+        .unwrap()
+        .clone();
+
+        if let Some(layout_tree) = &mut self.layout_tree {
+            layout_tree.invert_window(&focus);
+
+            #[cfg(feature="trace_layout")]
+            layout_tree.print_tree();
+
+            let e: Vec<_> = self.elements().cloned().collect();
+
+            for win in e {
+                let rec = win.get_rec().unwrap();
+                win.toplevel().unwrap().with_pending_state(|state| {
+                    state.size = Some(rec.size)
+                });
+                win.toplevel().unwrap().send_pending_configure();
+                self.map_element(win, rec.loc, false);
+            }
+        }
+    }
 }
 
 #[derive(Debug)]
 pub struct WorkspaceManager {
     pub workspaces: Vec<Workspace>,
-    pub activated_workspace: Option<WorkspaceID>,
+    pub activated_workspace: Option<WorkspaceId>,
 }
 
 impl WorkspaceManager {
@@ -226,7 +255,7 @@ impl WorkspaceManager {
         self.workspaces.push(workspace);
     }
 
-    pub fn set_activated(&mut self, workspace_id: WorkspaceID) {
+    pub fn set_activated(&mut self, workspace_id: WorkspaceId) {
         if let Some(id) = self.activated_workspace {
             if id != workspace_id {
                 self.current_workspace_mut().deactivate();
@@ -315,6 +344,10 @@ impl WorkspaceManager {
  
     pub fn remove_window(&mut self, surface: &WlSurface) {
         self.current_workspace_mut().remove_window(surface);
+    }
+
+    pub fn invert_window(&mut self, focused_surface: Option<WlSurface>) {
+        self.current_workspace_mut().invert_window(focused_surface);
     }
 
 }

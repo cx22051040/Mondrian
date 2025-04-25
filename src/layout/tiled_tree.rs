@@ -62,7 +62,7 @@ impl TiledTree {
             })
     }
 
-    pub fn insert(&mut self, target: &Window, new_window: Window) -> bool {
+    pub fn insert_window(&mut self, target: &Window, new_window: Window) -> bool {
         if let Some(target_id) = self.find_node(target) {
             // resize
             let rec = target.get_rec().unwrap();
@@ -122,7 +122,7 @@ impl TiledTree {
                             left, 
                             right,
                         };
-                        self.modify(parent_id, &rec);
+                        self.modify(parent_id, rec);
                     }
                 }
 
@@ -136,10 +136,11 @@ impl TiledTree {
         }
     }
 
-    fn modify(&mut self, node_id: NodeId, rec: &Rectangle<i32, Logical>) {
+    fn modify(&mut self, node_id: NodeId, rec: Rectangle<i32, Logical>) {
+        // modify the child tree with new rec or direction
         match &mut self.nodes[node_id] {
             NodeData::Leaf { window } => {
-                window.set_rec(*rec);
+                window.set_rec(rec);
             },
             NodeData::Split { left, right, direction, rec: current_rec } => {
                 let (l_rec, r_rec) = recover_new_rec(rec, direction);
@@ -149,8 +150,8 @@ impl TiledTree {
                 let left_id = *left;
                 let right_id = *right;
 
-                self.modify(left_id, &l_rec);
-                self.modify(right_id, &r_rec);
+                self.modify(left_id, l_rec);
+                self.modify(right_id, r_rec);
             }
         }
     }
@@ -168,6 +169,19 @@ impl TiledTree {
             }
             _ => None,
         })
+    }
+
+    pub fn invert_window(&mut self, target: &Window){
+        let target_id = self.find_node(target).unwrap();
+        let (parent_id, _) = self.find_parent_and_sibling(target_id).unwrap();
+        match &mut self.nodes[parent_id] {
+            NodeData::Split { direction, rec , .. } => {
+                *direction = invert_direction(direction);
+                let rec = *rec;
+                self.modify(parent_id, rec);
+            },
+            NodeData::Leaf { .. } => { }
+        }
     }
 
     #[cfg(feature="trace_layout")]
@@ -210,9 +224,9 @@ fn get_new_rec(rec: &Rectangle<i32, Logical>) -> (Direction, Rectangle<i32, Logi
     }
 }
 
-fn recover_new_rec(rec: &Rectangle<i32, Logical>, direction: &Direction) -> (Rectangle<i32, Logical>, Rectangle<i32, Logical>) {
-    let mut l_rec = *rec;
-    let mut r_rec = *rec;
+fn recover_new_rec(rec: Rectangle<i32, Logical>, direction: &Direction) -> (Rectangle<i32, Logical>, Rectangle<i32, Logical>) {
+    let mut l_rec = rec;
+    let mut r_rec = rec;
 
     let gap = (GAP as f32 * 0.5) as i32;
 
@@ -231,5 +245,12 @@ fn recover_new_rec(rec: &Rectangle<i32, Logical>, direction: &Direction) -> (Rec
             r_rec.loc.y += half + GAP;
             (l_rec, r_rec)
         }
+    }
+}
+
+fn invert_direction(direction: &Direction) -> Direction {
+    match direction {
+        Direction::Horizontal => Direction::Vertical,
+        Direction::Vertical => Direction::Horizontal,
     }
 }

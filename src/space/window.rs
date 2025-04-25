@@ -4,7 +4,7 @@ use std::{
 
 use smithay::{desktop::Window, reexports::wayland_server::protocol::wl_surface::WlSurface, utils::{Logical, Rectangle}};
 
-use super::workspace::WorkspaceID;
+use super::workspace::WorkspaceId;
 
 static NEXT_WINDOW_ID: AtomicUsize = AtomicUsize::new(1);
 
@@ -63,7 +63,7 @@ impl WindowExt for Window {
 
 pub struct WindowManager {
     pub windows: Vec<Window>,
-    pub window_workspace: HashMap<WindowID, WorkspaceID>,
+    pub window_workspace: HashMap<WindowID, WorkspaceId>,
 }
 
 impl WindowManager {
@@ -88,7 +88,7 @@ impl WindowManager {
             .find(|w| w.toplevel().unwrap().wl_surface() == surface)
     }
 
-    pub fn add_window(&mut self, window: Window, workspace_id: WorkspaceID) {
+    pub fn add_window(&mut self, window: Window, workspace_id: WorkspaceId) {
         let id = self.set_window_id(&window);
         self.windows.push(window);
         self.window_workspace.insert(id, workspace_id);

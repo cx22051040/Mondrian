@@ -2,14 +2,16 @@ use std::{collections::HashMap, fs};
 
 use itertools::Itertools;
 use regex::Regex;
+use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 
-use crate::space::workspace::{WorkspaceID, WorkspaceManager};
+use crate::space::workspace::{WorkspaceId, WorkspaceManager};
 
 // 定义所有的内部可执行函数
 #[derive(Debug, Clone)]
 pub enum FunctionEnum {
     SwitchWorkspace1,
     SwitchWorkspace2,
+    InvertWindow,
 }
 
 #[derive(Debug, Clone)]
@@ -100,6 +102,7 @@ impl KeybindingsManager {
                         let internal_action = match command.trim() {
                             "workspace-1" => FunctionEnum::SwitchWorkspace1,
                             "workspace-2" => FunctionEnum::SwitchWorkspace2,
+                            "invert" => FunctionEnum::InvertWindow,
                             _ => {
                                 tracing::info!(
                                     "Warning: No registered function for exec '{}'",
@@ -123,12 +126,5 @@ impl KeybindingsManager {
         bindings
     }
 
-    pub fn switch_workspace1(&self, workspace_manager: &mut WorkspaceManager) {
-        workspace_manager.set_activated(WorkspaceID::new(1));
-    }
-
-    pub fn switch_workspace2(&self, workspace_manager: &mut WorkspaceManager) {
-        workspace_manager.set_activated(WorkspaceID::new(2));
-    }
 }
 

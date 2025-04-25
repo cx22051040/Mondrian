@@ -16,8 +16,7 @@ use smithay::{
     };
 
     use crate::{
-    NuonuoState,
-    input::keybindings::{FunctionEnum, KeyAction},
+    input::keybindings::{FunctionEnum, KeyAction}, space::workspace::WorkspaceId, NuonuoState
 };
 
 impl NuonuoState {
@@ -289,21 +288,27 @@ impl NuonuoState {
                 KeyAction::Internal(func) => {
                     match func {
                         FunctionEnum::SwitchWorkspace1 => {
-                            // let serial = SERIAL_COUNTER.next_serial();
-                            // TODO: set focus to the first window, also move cursor to it
-                            // keyboard.set_focus(self, None, serial);
+                            let serial = SERIAL_COUNTER.next_serial();
+                            let keyboard = self.seat.get_keyboard().unwrap();
+                            // TODO: move cursor to first window and set focus or none
+                            keyboard.set_focus(self, None, serial);
                             self
-                                .configs
-                                .conf_keybinding_manager
-                                .switch_workspace1(&mut self.workspace_manager);
+                                .workspace_manager
+                                .set_activated(WorkspaceId::new(1));
                         }
                         FunctionEnum::SwitchWorkspace2 => {
-                            // let serial = SERIAL_COUNTER.next_serial();
-                            // keyboard.set_focus(self, None, serial);
+                            let serial = SERIAL_COUNTER.next_serial();
+                            let keyboard = self.seat.get_keyboard().unwrap();
+                            keyboard.set_focus(self, None, serial);
                             self
-                                .configs
-                                .conf_keybinding_manager
-                                .switch_workspace2(&mut self.workspace_manager);
+                                .workspace_manager
+                                .set_activated(WorkspaceId::new(2));
+                        },
+                        FunctionEnum::InvertWindow => {
+                            let focused_surface = self.seat.get_keyboard().unwrap().current_focus();
+                            self
+                                .workspace_manager
+                                .invert_window(focused_surface);
                         }
                     }
                 }
