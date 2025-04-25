@@ -6,12 +6,12 @@ use smithay::backend::renderer::ImportEgl;
 use smithay::{
     backend::{
         egl::EGLDevice,
-        renderer::{ImportDma, damage::OutputDamageTracker, gles::GlesRenderer},
+        renderer::{damage::OutputDamageTracker, gles::GlesRenderer, ImportDma},
         winit::{self, WinitEvent, WinitGraphicsBackend},
     },
     output::Mode,
     reexports::{calloop::LoopHandle, wayland_server::DisplayHandle},
-    utils::Rectangle,
+    utils::{Rectangle, Scale},
     wayland::dmabuf::{DmabufFeedback, DmabufFeedbackBuilder, DmabufGlobal, DmabufState},
 };
 
@@ -90,6 +90,10 @@ pub fn init_winit(
                         None,
                         None,
                     );
+                    // TODO: Handle scale change
+                    let scale = nuonuo_state.output_manager.current_output().current_scale();
+                    let scale = Scale::from(scale.integer_scale());
+                    nuonuo_state.workspace_manager.modify_windows(Rectangle::from_size(size.to_logical(scale)));
                 }
                 WinitEvent::Input(event) => {
                     nuonuo_state.process_input_event(event);

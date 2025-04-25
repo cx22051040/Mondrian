@@ -124,6 +124,7 @@ pub struct TiledTree {
 - `root`：指向当前布局树的根节点，如果树为空，则为 `None`。
 
 以下是创建树与一些必要的工具函数：
+
 ```rust
 impl TiledTree {
     pub fn new(window: Window) -> Self {
@@ -171,6 +172,7 @@ impl TiledTree {
 #### 插入窗口
 
 窗口插入遵循当前布局策略，分为以下三个步骤：
+
 - 定位插入节点：根据布局规则选取目标叶子节点。默认策略为插入到当前聚焦窗口所在的叶子节点，其他策略如“平衡二叉树最短边优先”可选择几何最合适的位置。
 - 计算分裂区域：读取目标节点 `rec`，根据用户设置（或自动判断长宽比）决定水平或垂直分裂方式，计算新窗口的布局信息。
 - 更新树结构：使用 `SlotMap` 插入一个新的 `Split` 节点，其左子节点指向原叶子节点，右子节点为新窗口节点。原节点被替换为该 `Split`，完成结构更新。
@@ -210,6 +212,7 @@ impl TiledTree {
 ```
 
 #### 删除窗口
+
 窗口删除操作包含以下三个核心步骤：
 
 - 查找关联节点：通过辅助函数 `find_parent_and_sibling` 定位目标窗口的父节点及其兄弟节点。
@@ -235,7 +238,7 @@ impl TiledTree {
         })
     }
 
-    fn modify(&mut self, node_id: NodeId, rec: Rectangle<i32, Logical>) {
+    pub fn modify(&mut self, node_id: NodeId, rec: Rectangle<i32, Logical>) {
         // modify the child tree with new rec with direction
         match &mut self.nodes[node_id] {
             NodeData::Leaf { window } => {
@@ -243,7 +246,7 @@ impl TiledTree {
             },
             NodeData::Split { left, right, direction, rec: current_rec } => {
                 let (l_rec, r_rec) = recover_new_rec(rec, direction);
-                
+
                 *current_rec = rec.clone();
 
                 let left_id = *left;
@@ -312,6 +315,7 @@ impl TiledTree {
 倒置操作主要将 `Split` 类型节点的 `direction` 参数倒置，会导致 `rec` 的变化，因此还需要更新所有子节点信息。
 
 主要分为以下两步：
+
 - 定位：找到需要倒置的窗口的一小段树。
 - 倒置：倒置 `direction` 并且使用 `modify` 递归更新兄弟节点。
 
@@ -340,8 +344,6 @@ impl TiledTree {
 }
 ```
 
-
-
 ### 自动布局算法
 
 本项目支持多种窗口布局策略，通过不同算法控制窗口在树结构中的插入与删除行为，满足不同用户在操作习惯与空间分配上的需求。以下为当前支持的两种核心布局策略：
@@ -355,7 +357,7 @@ impl TiledTree {
 
 该策略逻辑直观，适合以任务上下文为导向的窗口使用场景。
 
-####  平衡二叉树插入（Balanced Mode）
+#### 平衡二叉树插入（Balanced Mode）
 
 此策略试图保持布局树的平衡性，使窗口分布更均匀，避免单边过度嵌套导致的窗口压缩问题：
 

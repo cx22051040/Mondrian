@@ -5,23 +5,28 @@
 在 Linux 操作系统中，图形显示系统由多个层级组成，从底层的内核显卡驱动到用户态的图形协议，再到最终的 GUI 应用。整个图形栈主要包括以下几部分：
 
 - **内核层（Kernel Space）**：
+  
   - `DRM（Direct Rendering Manager）`：管理 GPU 资源与帧缓冲控制。
   - `KMS（Kernel Mode Setting）`：用于设置显示模式，如分辨率、刷新率等。
   - `GBM（Generic Buffer Management）`：用于创建与管理图形缓冲区。
 
 - **中间层**：
+  
   - `Mesa`：用户态 OpenGL/Vulkan 实现，提供图形驱动接口。
   - `EGL`：抽象图形上下文与窗口系统之间的接口，衔接 OpenGL 与窗口系统（如 Wayland）。
-  
+
 - **用户层协议（User Space Protocol）**：
+  
   - `X11`：传统的图形协议，拥有复杂的客户端-服务器模型。
   - `Wayland`：现代协议，注重简洁、高效、低延迟。
 
 - **图形服务器（Display Server）**：
+  
   - `Xorg`：X11 协议的标准实现。
   - `Wayland Compositor`：Wayland 协议的实现方，集成合成器、窗口管理器、输入系统。
 
 - **应用层**：
+  
   - GUI 应用程序通过协议与服务器通信，实现窗口创建、绘图与事件交互。
 
 <div align = center>
@@ -59,16 +64,19 @@ X11 协议支持网络透明性，即 X Client 和 X Server 可以运行在不�
 Wayland 是设计用于替代 X11 的现代图形协议，由 [wayland.freedesktop.org](https://wayland.freedesktop.org) 开发，强调 **简洁、安全、高性能**。其基本架构如下：
 
 - **Compositor（合成器）即 Display Server**：
+  
   - 直接管理窗口、图像合成与缓冲交换。
   - 处理输入事件，并直接分发到正确的客户端。
   - 实现窗口管理逻辑（如平铺、浮动等）。
 
 - **Client 应用程序**：
+  
   - 负责自行渲染窗口内容（通过 GPU 渲染或 CPU 绘图）。
   - 使用 `wl_surface` 等原语将渲染结果提交给 Compositor。
   - 与 Compositor 通过共享内存或 DMA Buffer 实现高效图像交换。
 
 - **协议交互机制**：
+  
   - 基于 Unix Domain Socket 通信，使用 `wl_display` 进行连接。
   - 使用对象-事件模型（Object/Interface），类似面向对象远程调用。
   - 无需往返确认，大部分请求为异步执行，提高响应效率。
@@ -107,4 +115,3 @@ Wayland 协议采用模块化设计，核心协议只定义基础对象（如 `w
 - 减少了冗余图层绘制流程。
 - 更容易实现视觉效果（圆角、阴影、动画）。
 - 支持真正的无撕裂与高刷新率渲染。
-

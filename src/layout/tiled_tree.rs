@@ -136,7 +136,7 @@ impl TiledTree {
         }
     }
 
-    fn modify(&mut self, node_id: NodeId, rec: Rectangle<i32, Logical>) {
+    pub fn modify(&mut self, node_id: NodeId, rec: Rectangle<i32, Logical>) {
         // modify the child tree with new rec with direction
         match &mut self.nodes[node_id] {
             NodeData::Leaf { window } => {
@@ -182,6 +182,10 @@ impl TiledTree {
             },
             NodeData::Leaf { .. } => { }
         }
+    }
+
+    pub fn get_root(&self) -> Option<NodeId> {
+        self.root
     }
 
     #[cfg(feature="trace_layout")]

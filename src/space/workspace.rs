@@ -97,14 +97,7 @@ impl Workspace {
                 todo!()
             }
         }
-
-        for win in self.elements() {
-            let rec = win.get_rec().unwrap();
-            win.toplevel().unwrap().with_pending_state(|state| {
-                state.size = Some(rec.size)
-            });
-            win.toplevel().unwrap().send_pending_configure();
-        }
+        self.send_pending_configure();
     }
 
     pub fn unmap_tiled_element(&mut self, window: Window) {
@@ -116,17 +109,6 @@ impl Workspace {
             } else {
                 #[cfg(feature="trace_layout")]
                 layout_tree.print_tree();
-            }
-
-            let e: Vec<_> = self.elements().cloned().collect();
-
-            for win in e {
-                let rec = win.get_rec().unwrap();
-                win.toplevel().unwrap().with_pending_state(|state| {
-                    state.size = Some(rec.size)
-                });
-                win.toplevel().unwrap().send_pending_configure();
-                self.map_element(win, rec.loc, false);
             }
         } else {
             panic!("empty layout tree!");
@@ -187,6 +169,8 @@ impl Workspace {
 
         self.space.unmap_elem(&window);
         self.unmap_tiled_element(window);
+
+        self.send_pending_configure();
     }
 
     pub fn invert_window(&mut self, focused_surface: Option<WlSurface>) {
@@ -205,16 +189,28 @@ impl Workspace {
             #[cfg(feature="trace_layout")]
             layout_tree.print_tree();
 
-            let e: Vec<_> = self.elements().cloned().collect();
+            self.send_pending_configure();
+        }
+    }
 
-            for win in e {
-                let rec = win.get_rec().unwrap();
-                win.toplevel().unwrap().with_pending_state(|state| {
-                    state.size = Some(rec.size)
-                });
-                win.toplevel().unwrap().send_pending_configure();
-                self.map_element(win, rec.loc, false);
-            }
+    pub fn modify_windows(&mut self, rec: Rectangle<i32, Logical>) {
+        if let Some(layout_tree) = &mut self.layout_tree {
+            let root_id = layout_tree.get_root().unwrap();
+            layout_tree.modify(root_id, Rectangle::new((GAP, GAP).into(), (rec.size - (GAP*2, GAP*2).into()).into()));
+        }
+        self.send_pending_configure();
+    }
+
+    pub fn send_pending_configure(&mut self) {
+        let e: Vec<_> = self.elements().cloned().collect();
+
+        for win in e {
+            let rec = win.get_rec().unwrap();
+            win.toplevel().unwrap().with_pending_state(|state| {
+                state.size = Some(rec.size)
+            });
+            win.toplevel().unwrap().send_pending_configure();
+            self.map_element(win, rec.loc, false);
         }
     }
 }
@@ -347,6 +343,10 @@ impl WorkspaceManager {
 
     pub fn invert_window(&mut self, focused_surface: Option<WlSurface>) {
         self.current_workspace_mut().invert_window(focused_surface);
+    }
+
+    pub fn modify_windows(&mut self, rec: Rectangle<i32, Logical>) {
+        self.current_workspace_mut().modify_windows(rec);
     }
 
 }

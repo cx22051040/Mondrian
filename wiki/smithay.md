@@ -51,18 +51,20 @@ event_loop
 
 事件循环可以绑定多个事件源，常见类别如下：
 
-| 类型 | 来源 | 示例事件 |
-|------|------|----------|
-| 输入设备 | libinput | PointerMotion、KeyboardKey 等 |
-| 图形输出 | DRM/KMS, Winit | 热插拔、显示尺寸改变 |
-| Wayland 客户端 | WaylandSocket | 请求窗口创建、buffer attach |
-| 定时器 | calloop Timer | 动画帧调度、超时 |
-| 自定义通道 | calloop Channel | 后台任务返回、信号触发 |
+| 类型          | 来源              | 示例事件                        |
+| ----------- | --------------- | --------------------------- |
+| 输入设备        | libinput        | PointerMotion、KeyboardKey 等 |
+| 图形输出        | DRM/KMS, Winit  | 热插拔、显示尺寸改变                  |
+| Wayland 客户端 | WaylandSocket   | 请求窗口创建、buffer attach        |
+| 定时器         | calloop Timer   | 动画帧调度、超时                    |
+| 自定义通道       | calloop Channel | 后台任务返回、信号触发                 |
 
 在 `insert_source` 中绑定的回调闭包具有以下签名：
+
 ```rust
 FnMut(E, &mut Metadata, &mut State)
 ```
+
 - `E`: 来自事件源的事件本体，类型依赖于事件源。
 - `Metadata`: 事件元信息（通常是 `calloop::generic::GenericMetadata`），包含事件触发时的底层 I/O 状态，例如可读/可写标志。大多数情况下你可以忽略该参数，除非你要做更底层的 I/O 操作。
 - `State`: 传入的全局状态对象，是你自定义的全局状态结构，也就是一开始定义的类型 `EventLoop<'_, State>` 中的 `State`。
@@ -159,6 +161,7 @@ TODO
 在 `Wayland` 协议体系中，`xdg-shell` 是一项核心协议，扩展了基础的 `wl_surface` 对象，使其能够在桌面环境下扮演窗口的角色。它是现代 `Wayland` 桌面应用窗口管理的标准，涵盖了顶层窗口、弹出窗口、窗口状态控制等一系列行为。
 
 `xdg-shell` 协议主要围绕以下对象展开：
+
 - `xdg_wm_base`：客户端首先通过 `wl_registry` 获取 `xdg_wm_base` 接口。
 - `xdg_surface`：通过 `xdg_wm_base.get_xdg_surface(wl_surface)`，客户端将一个基础的 `wl_surface` 与 `xdg_surface` 关联起来。
 - `xdg_toplevel`：通过 `xdg_surface.get_toplevel()`，该 `surface` 被赋予了「顶层窗口」的角色。
@@ -301,7 +304,7 @@ delegate_seat(State);
 
 在没有图形服务器支持的**裸机环境**下，我们通常使用 `TTY` 作为图形输出后端，并结合 `libinput` 获取来自 `/dev/input` 的事件。此时输入处理方式较为底层，需要我们显式构造事件源：
 
-``` rust
+```rust
 let libinput_context = Libinput::new_with_udev(...);
 let input_backend = LibinputInputBackend::new(libinput_context, seat, ...);
 ```
@@ -337,4 +340,4 @@ event_loop
 
 - [https://github.com/Smithay/smithay](https://github.com/Smithay/smithay)
 - [https://crates.io/crates/smithay](https://crates.io/crates/smithay)
-- [https://docs.rs/smithay/latest/smithay/](https://docs.rs/smithay/latest/smithay/)
+- [smithay - Rust](https://docs.rs/smithay/latest/smithay/)
