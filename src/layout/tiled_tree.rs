@@ -29,6 +29,7 @@ pub enum NodeData {
     Split {
         direction: Direction,
         rec: Rectangle<i32, Logical>,
+        offset: (i32, i32),
         left: NodeId,
         right: NodeId,
     }
@@ -81,6 +82,7 @@ impl TiledTree {
             self.nodes[target_id] = NodeData::Split {
                 direction,
                 rec,
+                offset: (0, 0),
                 left: old_leaf,
                 right: new_leaf,
             };
@@ -119,6 +121,7 @@ impl TiledTree {
                         self.nodes[parent_id] = NodeData::Split { 
                             direction, 
                             rec, // from parent
+                            offset: (0, 0),
                             left, 
                             right,
                         };
@@ -142,8 +145,8 @@ impl TiledTree {
             NodeData::Leaf { window } => {
                 window.set_rec(rec);
             },
-            NodeData::Split { left, right, direction, rec: current_rec } => {
-                let (l_rec, r_rec) = recover_new_rec(rec, direction);
+            NodeData::Split { left, right, direction, rec: current_rec, offset } => {
+                let (l_rec, r_rec) = recover_new_rec(rec, direction, offset.clone());
                 
                 *current_rec = rec.clone();
 
@@ -173,6 +176,9 @@ impl TiledTree {
 
     pub fn invert_window(&mut self, target: &Window){
         let target_id = self.find_node(target).unwrap();
+        if self.get_root() == Some(target_id) {
+            return;
+        }
         let (parent_id, _) = self.find_parent_and_sibling(target_id).unwrap();
         match &mut self.nodes[parent_id] {
             NodeData::Split { direction, rec , .. } => {
@@ -186,6 +192,23 @@ impl TiledTree {
 
     pub fn get_root(&self) -> Option<NodeId> {
         self.root
+    }
+
+    pub fn resize(&mut self, target: &Window, offset: (i32, i32)) {
+        let target_id = self.find_node(target).unwrap();
+        if self.get_root() == Some(target_id) {
+            return;
+        }
+        let (parent_id, _) = self.find_parent_and_sibling(target_id).unwrap();
+        match &mut self.nodes[parent_id] {
+            NodeData::Split { offset: current_offset, rec, .. } => {
+                current_offset.0 += offset.0;
+                current_offset.1 += offset.1;
+                let rec = *rec;
+                self.modify(parent_id, rec);
+            },
+            NodeData::Leaf { .. } => { }
+        }
     }
 
     #[cfg(feature="trace_layout")]
@@ -228,7 +251,7 @@ fn get_new_rec(rec: &Rectangle<i32, Logical>) -> (Direction, Rectangle<i32, Logi
     }
 }
 
-fn recover_new_rec(rec: Rectangle<i32, Logical>, direction: &Direction) -> (Rectangle<i32, Logical>, Rectangle<i32, Logical>) {
+fn recover_new_rec(rec: Rectangle<i32, Logical>, direction: &Direction, offset: (i32, i32)) -> (Rectangle<i32, Logical>, Rectangle<i32, Logical>) {
     let mut l_rec = rec;
     let mut r_rec = rec;
 
@@ -240,6 +263,13 @@ fn recover_new_rec(rec: Rectangle<i32, Logical>, direction: &Direction) -> (Rect
             l_rec.size.w = half;
             r_rec.size.w = half;
             r_rec.loc.x += half + GAP;
+
+            // adjust the offset
+            l_rec.size.w += offset.0;
+            r_rec.size.w -= offset.0;
+
+            r_rec.loc.x += offset.0;
+
             (l_rec, r_rec)
         },
         Direction::Vertical => {
@@ -247,6 +277,13 @@ fn recover_new_rec(rec: Rectangle<i32, Logical>, direction: &Direction) -> (Rect
             l_rec.size.h = half;
             r_rec.size.h = half;
             r_rec.loc.y += half + GAP;
+
+            // adjust the offset
+            l_rec.size.h += offset.1;
+            r_rec.size.h -= offset.1;
+
+            r_rec.loc.y += offset.1;
+
             (l_rec, r_rec)
         }
     }

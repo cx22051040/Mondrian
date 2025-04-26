@@ -12,7 +12,7 @@ use smithay::{
     }, desktop::{layer_map_for_output, WindowSurfaceType}, input::{
         keyboard::{xkb::keysym_get_name, FilterResult},
         pointer::{ButtonEvent, MotionEvent},
-    }, reexports::wayland_server::protocol::wl_surface::WlSurface, utils::{Logical, Point, SERIAL_COUNTER}, wayland::shell::wlr_layer::Layer as WlrLayer
+    }, reexports::wayland_server::protocol::wl_surface::WlSurface, utils::{Logical, Point, SERIAL_COUNTER}, wayland::{compositor::get_parent, shell::wlr_layer::Layer as WlrLayer}
     };
 
     use crate::{
@@ -137,13 +137,13 @@ impl NuonuoState {
                 // TODO
             }
     
-            InputEvent::DeviceAdded { device } => {
+            InputEvent::DeviceAdded { .. } => {
                 // TODO
                 #[cfg(feature = "trace_input")]
                 tracing::info!("DeviceAdded Event, device: {:?} ", device);
             }
     
-            InputEvent::DeviceRemoved { device } => {
+            InputEvent::DeviceRemoved { .. } => {
                 // TODO
                 #[cfg(feature = "trace_input")]
                 tracing::info!("DeviceRemoved Event, device: {:?} ", device);
@@ -188,9 +188,14 @@ impl NuonuoState {
             // unfocus all window
             self.modify_all_windows_state(false);
 
+            let mut root = surface.clone();
+            while let Some(parent) = get_parent(&root) {
+                root = parent;
+            }
+
             keyboard.set_focus(
                 self,
-                Some(surface.clone()),
+                Some(root),
                 serial,
             );
 
@@ -238,10 +243,10 @@ impl NuonuoState {
                 .surface_under(position - location.to_f64(), WindowSurfaceType::ALL)
                 .map(|(s, _)| s);
 
-            self.workspace_manager.raise_element(&window, true);
-
             // unfocus all window
             self.modify_all_windows_state(false);
+
+            self.workspace_manager.raise_element(&window, true);
 
             keyboard.set_focus(
                 self,
@@ -291,6 +296,7 @@ impl NuonuoState {
                             let serial = SERIAL_COUNTER.next_serial();
                             let keyboard = self.seat.get_keyboard().unwrap();
                             // TODO: move cursor to first window and set focus or none
+                            self.modify_all_windows_state(false);
                             keyboard.set_focus(self, None, serial);
                             self
                                 .workspace_manager
@@ -299,6 +305,7 @@ impl NuonuoState {
                         FunctionEnum::SwitchWorkspace2 => {
                             let serial = SERIAL_COUNTER.next_serial();
                             let keyboard = self.seat.get_keyboard().unwrap();
+                            self.modify_all_windows_state(false);
                             keyboard.set_focus(self, None, serial);
                             self
                                 .workspace_manager

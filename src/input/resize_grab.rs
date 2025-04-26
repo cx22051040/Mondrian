@@ -93,7 +93,7 @@ pub struct ResizeSurfaceGrab {
     window: Window,
     edges: ResizeEdge,
     initial_rect: Rectangle<i32, Logical>,
-    last_window_size: Size<i32, Logical>,
+    last_position: Point<f64, Logical>,
 }
 
 impl ResizeSurfaceGrab {
@@ -110,12 +110,14 @@ impl ResizeSurfaceGrab {
             };
         });
 
+        let last_position = start_data.location;
+
         Self {
             start_data,
             window,
             edges,
             initial_rect,
-            last_window_size: initial_rect.size,
+            last_position,
         }
     }
 }
@@ -143,49 +145,53 @@ impl PointerGrab<NuonuoState> for ResizeSurfaceGrab {
     ) {
         handle.motion(data, None, event);
 
-        let mut delta = event.location - self.start_data.location;
+        let delta = event.location - self.last_position;
+        let focused_surface = data.seat.get_keyboard().unwrap().current_focus();
+        data.workspace_manager.resize(focused_surface, (delta.x as i32, delta.y as i32));
 
-        let mut new_window_width = self.initial_rect.size.w;
-        let mut new_window_height = self.initial_rect.size.h;
+        self.last_position = event.location;
 
-        if self.edges.intersects(ResizeEdge::LEFT | ResizeEdge::RIGHT) {
-            if self.edges.intersects(ResizeEdge::LEFT) {
-                delta.x = -delta.x
-            }
-            new_window_width = (self.initial_rect.size.w as f64 + delta.x) as i32;
-        }
-        if self.edges.intersects(ResizeEdge::TOP | ResizeEdge::BOTTOM) {
-            if self.edges.intersects(ResizeEdge::TOP) {
-                delta.y = -delta.y;
-            }
-            new_window_height = (self.initial_rect.size.h as f64 + delta.y) as i32;
-        }
+        // let mut new_window_width = self.initial_rect.size.w;
+        // let mut new_window_height = self.initial_rect.size.h;
 
-        let (min_size, max_size) =
-            compositor::with_states(self.window.toplevel().unwrap().wl_surface(), |states| {
-                let mut guard = states.cached_state.get::<SurfaceCachedState>();
-                let data = guard.current();
-                (data.min_size, data.max_size)
-            });
+        // if self.edges.intersects(ResizeEdge::LEFT | ResizeEdge::RIGHT) {
+        //     // if self.edges.intersects(ResizeEdge::LEFT) {
+        //     //     delta.x = -delta.x
+        //     // }
+        //     new_window_width = (self.initial_rect.size.w as f64 + delta.x) as i32;
+        // }
+        // if self.edges.intersects(ResizeEdge::TOP | ResizeEdge::BOTTOM) {
+        //     // if self.edges.intersects(ResizeEdge::TOP) {
+        //     //     delta.y = -delta.y;
+        //     // }
+        //     new_window_height = (self.initial_rect.size.h as f64 + delta.y) as i32;
+        // }
 
-        let min_width = min_size.w.max(1);
-        let min_height = min_size.h.max(1);
+        // let (min_size, max_size) =
+        //     compositor::with_states(self.window.toplevel().unwrap().wl_surface(), |states| {
+        //         let mut guard = states.cached_state.get::<SurfaceCachedState>();
+        //         let data = guard.current();
+        //         (data.min_size, data.max_size)
+        //     });
 
-        let max_width = (max_size.w == 0).then(i32::max_value).unwrap_or(max_size.w);
-        let max_height = (max_size.h == 0).then(i32::max_value).unwrap_or(max_size.h);
+        // let min_width = min_size.w.max(1);
+        // let min_height = min_size.h.max(1);
 
-        self.last_window_size = Size::from((
-            new_window_width.max(min_width).min(max_width),
-            new_window_height.max(min_height).min(max_height),
-        ));
+        // let max_width = (max_size.w == 0).then(i32::max_value).unwrap_or(max_size.w);
+        // let max_height = (max_size.h == 0).then(i32::max_value).unwrap_or(max_size.h);
 
-        let xdg = self.window.toplevel().unwrap();
-        xdg.with_pending_state(|state| {
-            state.states.set(xdg_toplevel::State::Resizing);
-            state.size = Some(self.last_window_size);
-        });
+        // self.last_window_size = Size::from((
+        //     new_window_width.max(min_width).min(max_width),
+        //     new_window_height.max(min_height).min(max_height),
+        // ));
 
-        xdg.send_pending_configure();
+        // let xdg = self.window.toplevel().unwrap();
+        // xdg.with_pending_state(|state| {
+        //     state.states.set(xdg_toplevel::State::Resizing);
+        //     state.size = Some(self.last_window_size);
+        // });
+
+        // xdg.send_pending_configure();
     }
 
     fn relative_motion(
@@ -217,12 +223,12 @@ impl PointerGrab<NuonuoState> for ResizeSurfaceGrab {
             handle.unset_grab(self, data, event.serial, event.time, true);
 
             let xdg = self.window.toplevel().unwrap();
-            xdg.with_pending_state(|state| {
-                state.states.unset(xdg_toplevel::State::Resizing);
-                state.size = Some(self.last_window_size);
-            });
+            // xdg.with_pending_state(|state| {
+            //     state.states.unset(xdg_toplevel::State::Resizing);
+            //     state.size = Some(self.last_window_size);
+            // });
 
-            xdg.send_pending_configure();
+            // xdg.send_pending_configure();
 
             ResizeSurfaceState::with(xdg.wl_surface(), |state| {
                 *state = ResizeSurfaceState::WaitingForLastCommit {

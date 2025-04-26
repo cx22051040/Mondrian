@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use smithay::{
     desktop::{Space, Window},
     output::Output,
-    reexports::wayland_server::protocol::wl_surface::WlSurface,
+    reexports::{wayland_protocols::xdg::shell::server::xdg_toplevel, wayland_server::protocol::wl_surface::WlSurface},
     utils::{Logical, Point, Rectangle},
 };
 
@@ -200,10 +200,53 @@ impl Workspace {
         }
         self.send_pending_configure();
     }
+    
+    pub fn resize(&mut self, focused_surface: Option<WlSurface>, offset: (i32, i32)) {
+        if self.layout_tree.is_none() || focused_surface.is_none() {
+            return;
+        }
+        
+        self.send_resize_configure();
 
+        let focus = focused_surface.and_then(|surface| {
+            self.elements().find(|win| *win.toplevel().unwrap().wl_surface() == surface)
+        })
+        .unwrap()
+        .clone();
+
+        if let Some(layout_tree) = &mut self.layout_tree {
+            layout_tree.resize(&focus, offset);
+        }
+
+        self.send_unresize_configure();
+    }
+
+    pub fn send_resize_configure(&mut self) {
+        for win in self.elements() {
+            win.toplevel().unwrap().with_pending_state(|state| {
+                state.states.set(xdg_toplevel::State::Resizing)
+            });
+            win.toplevel().unwrap().send_pending_configure();
+        }
+    }
+
+    pub fn send_unresize_configure(&mut self) {
+        let e: Vec<_> = self.elements().cloned().collect();
+        
+        for win in e {
+            let rec = win.get_rec().unwrap();
+            win.toplevel().unwrap().with_pending_state(|state| {
+                state.states.unset(xdg_toplevel::State::Resizing);
+                state.size = Some(rec.size)
+            });
+            win.toplevel().unwrap().send_pending_configure();
+            self.map_element(win, rec.loc, false);
+        }
+    }
+    
     pub fn send_pending_configure(&mut self) {
         let e: Vec<_> = self.elements().cloned().collect();
-
+        
         for win in e {
             let rec = win.get_rec().unwrap();
             win.toplevel().unwrap().with_pending_state(|state| {
@@ -213,6 +256,7 @@ impl Workspace {
             self.map_element(win, rec.loc, false);
         }
     }
+
 }
 
 #[derive(Debug)]
@@ -347,6 +391,10 @@ impl WorkspaceManager {
 
     pub fn modify_windows(&mut self, rec: Rectangle<i32, Logical>) {
         self.current_workspace_mut().modify_windows(rec);
+    }
+
+    pub fn resize(&mut self, focused_surface: Option<WlSurface>, offset: (i32, i32)) {
+        self.current_workspace_mut().resize(focused_surface, offset);
     }
 
 }

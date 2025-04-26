@@ -47,6 +47,7 @@ pub enum NodeData {
     Split {
         direction: Direction,
         rec: Rectangle<i32, Logical>,
+        offset: (i32, i32),
         left: NodeId,
         right: NodeId,
     }
@@ -58,6 +59,7 @@ pub enum NodeData {
   - 分裂方向：水平（Horizontal）或垂直（Vertical）
   - 窗口的起点位置与总大小。
   - 子节点的索引（左子节点与右子节点）
+  - offset：内部分裂的偏差值（用于手动更新窗口大小）
 
 - **叶子节点**：表示一个具体窗口的存在，只存储窗口 ID（或 Surface ID），不再包含其他布局信息。
 
@@ -200,6 +202,7 @@ impl TiledTree {
             self.nodes[target_id] = NodeData::Split {
                 direction,
                 rec,
+                offset: (0, 0),
                 left: old_leaf,
                 right: new_leaf,
             };
@@ -207,6 +210,29 @@ impl TiledTree {
         } else {
             false
         }
+    }
+}
+
+// 辅助函数
+fn get_new_rec(rec: &Rectangle<i32, Logical>) -> (Direction, Rectangle<i32, Logical>, Rectangle<i32, Logical>) {
+
+    let mut l_rec = *rec;
+    let mut r_rec = *rec;
+
+    let gap = (GAP as f32 * 0.5) as i32;
+    
+    if rec.size.h as f32 / rec.size.w as f32 > RATE {
+        let half = rec.size.h / 2 - gap;
+        l_rec.size.h = half;
+        r_rec.size.h = half;
+        r_rec.loc.y += half + GAP;
+        (Direction::Vertical, l_rec, r_rec)
+    } else {
+        let half = rec.size.w / 2 - gap;
+        l_rec.size.w = half;
+        r_rec.size.w = half;
+        r_rec.loc.x += half + GAP;
+        (Direction::Horizontal, l_rec, r_rec)
     }
 }
 ```
@@ -244,9 +270,9 @@ impl TiledTree {
             NodeData::Leaf { window } => {
                 window.set_rec(rec);
             },
-            NodeData::Split { left, right, direction, rec: current_rec } => {
-                let (l_rec, r_rec) = recover_new_rec(rec, direction);
-
+            NodeData::Split { left, right, direction, rec: current_rec, offset } => {
+                let (l_rec, r_rec) = recover_new_rec(rec, direction, offset.clone());
+                
                 *current_rec = rec.clone();
 
                 let left_id = *left;
@@ -287,6 +313,7 @@ impl TiledTree {
                         self.nodes[parent_id] = NodeData::Split { 
                             direction, 
                             rec, // from parent
+                            offset: (0, 0),
                             left, 
                             right,
                         };
@@ -306,9 +333,103 @@ impl TiledTree {
 }
 ```
 
+
+
+```rust
+// 辅助函数
+fn recover_new_rec(rec: Rectangle<i32, Logical>, direction: &Direction, offset: (i32, i32)) -> (Rectangle<i32, Logical>, Rectangle<i32, Logical>) {
+    let mut l_rec = rec;
+    let mut r_rec = rec;
+
+    let gap = (GAP as f32 * 0.5) as i32;
+
+    match direction {
+        Direction::Horizontal => {
+            let half = rec.size.w / 2 - gap;
+            l_rec.size.w = half;
+            r_rec.size.w = half;
+            r_rec.loc.x += half + GAP;
+
+            // adjust the offset
+            l_rec.size.w += offset.0;
+            r_rec.size.w -= offset.0;
+
+            r_rec.loc.x += offset.0;
+
+            (l_rec, r_rec)
+        },
+        Direction::Vertical => {
+            let half = rec.size.h / 2 - gap;
+            l_rec.size.h = half;
+            r_rec.size.h = half;
+            r_rec.loc.y += half + GAP;
+
+            // adjust the offset
+            l_rec.size.h += offset.1;
+            r_rec.size.h -= offset.1;
+
+            r_rec.loc.y += offset.1;
+
+            (l_rec, r_rec)
+        }
+    }
+}
+```
+
+
+
 #### 移动窗口
 
 #### 更改大小
+
+更改窗口大小只需要判断当前窗口的父节点允许变化的方向，使用 `Smithay` 自动获取鼠标移动距离，修改 `offset` 属性即可。
+
+```rust
+// tiled_tree.rs
+impl TiledTree {
+    pub fn resize(&mut self, target: &Window, offset: (i32, i32)) {
+        let target_id = self.find_node(target).unwrap();
+        if self.get_root() == Some(target_id) {
+            return;
+        }
+        let (parent_id, _) = self.find_parent_and_sibling(target_id).unwrap();
+        match &mut self.nodes[parent_id] {
+            NodeData::Split { offset: current_offset, rec, .. } => {
+                current_offset.0 += offset.0;
+                current_offset.1 += offset.1;
+                let rec = *rec;
+                self.modify(parent_id, rec);
+            },
+            NodeData::Leaf { .. } => { }
+        }
+    }
+}
+
+// resize_grab.rs
+impl PointerGrab<NuonuoState> for ResizeSurfaceGrab {
+    fn motion(
+        &mut self,
+        data: &mut NuonuoState,
+        handle: &mut smithay::input::pointer::PointerInnerHandle<'_, NuonuoState>,
+        _focus: Option<(
+            <NuonuoState as smithay::input::SeatHandler>::PointerFocus,
+            smithay::utils::Point<f64, Logical>,
+        )>,
+        event: &smithay::input::pointer::MotionEvent,
+    ) {
+        handle.motion(data, None, event);
+
+        let delta = event.location - self.last_position;
+        let focused_surface = data.seat.get_keyboard().unwrap().current_focus();
+        data.workspace_manager.resize(focused_surface, (delta.x as i32, delta.y as i32));
+
+        self.last_position = event.location;
+    }
+}
+
+```
+
+
 
 #### 倒置窗口
 

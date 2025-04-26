@@ -164,6 +164,7 @@ impl NuonuoState {
 
         let focus_surface = self.seat.get_keyboard().unwrap().current_focus();
         if let Some(surface) = focus_surface {
+            
             let focused_window = self
                 .workspace_manager
                 .current_workspace()
