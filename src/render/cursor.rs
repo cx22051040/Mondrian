@@ -56,7 +56,7 @@ impl XCursor {
         &self.images
     }
 
-    pub fn is_animated_cursor(&self) -> bool {
+    pub fn _is_animated_cursor(&self) -> bool {
         self.images.len() > 1
     }
 
@@ -91,7 +91,7 @@ impl CursorManager {
         }
     }
 
-    pub fn reload(&mut self, theme: &str, size: u8) {
+    pub fn _reload(&mut self, theme: &str, size: u8) {
         Self::ensure_env(theme, size);
         self.theme = CursorTheme::load(theme);
         self.size = size;
@@ -224,18 +224,18 @@ impl CursorManager {
         }
     }
 
-    pub fn is_current_cursor_animated(&self, scale: i32) -> bool {
+    pub fn _is_current_cursor_animated(&self, scale: i32) -> bool {
         match &self.current_cursor {
             CursorImageStatus::Hidden => false,
             CursorImageStatus::Surface(_) => false,
             CursorImageStatus::Named(icon) => self
                 .get_cursor_with_name(*icon, scale)
                 .unwrap_or_else(|| self.get_default_cursor(scale))
-                .is_animated_cursor(),
+                ._is_animated_cursor(),
         }
     }
 
-    pub fn cursor_image(&self, _scale: i32) -> &CursorImageStatus {
+    pub fn _cursor_image(&self, _scale: i32) -> &CursorImageStatus {
         &self.current_cursor
     }
 
@@ -266,7 +266,7 @@ pub struct CursorTextureCache {
 }
 
 impl CursorTextureCache {
-    pub fn clear(&mut self) {
+    pub fn _clear(&mut self) {
         self.cache.get_mut().clear();
     }
 

@@ -3,13 +3,11 @@ pub mod move_grab;
 pub mod resize_grab;
 
 use smithay::{
-    backend::{
+    backend::
         input::{
-            AbsolutePositionEvent, ButtonState, Event, InputEvent, KeyState, KeyboardKeyEvent,
-            PointerButtonEvent,
+            AbsolutePositionEvent, ButtonState, Event, InputBackend, InputEvent, KeyState, KeyboardKeyEvent, PointerButtonEvent
         },
-        winit::WinitInput,
-    }, desktop::{layer_map_for_output, WindowSurfaceType}, input::{
+    desktop::{layer_map_for_output, WindowSurfaceType}, input::{
         keyboard::{xkb::keysym_get_name, FilterResult},
         pointer::{ButtonEvent, MotionEvent},
     }, reexports::wayland_server::protocol::wl_surface::WlSurface, utils::{Logical, Point, SERIAL_COUNTER}, wayland::{compositor::get_parent, shell::wlr_layer::Layer as WlrLayer}
@@ -20,7 +18,7 @@ use smithay::{
 };
 
 impl NuonuoState {
-    pub fn process_input_event(&mut self, event: InputEvent<WinitInput>) {
+    pub fn process_input_event<I: InputBackend>(&mut self, event: InputEvent<I>) {
         match event {
             // TODO: tidy this
             InputEvent::Keyboard { event, .. } => {

@@ -1,7 +1,7 @@
 use smithay::{
     output::{Mode, Output, PhysicalProperties, Scale, Subpixel},
     reexports::wayland_server::DisplayHandle,
-    utils::{Logical, Point, Transform},
+    utils::{Logical, Point, Raw, Size, Transform},
     wayland::output::OutputManagerState,
 };
 
@@ -13,21 +13,26 @@ pub struct OutputElement {
 }
 
 impl OutputElement {
-    pub fn new(name: &str, display_handle: &DisplayHandle, activate: bool) -> Self {
+    pub fn new(name: String, size: Size<i32, Raw>, subpixel: Subpixel, make: String, model: String, activate: bool, display_handle: &DisplayHandle) -> Self {
         let output = Output::new(
-            name.to_string(),
+            name,
             PhysicalProperties {
-                size: (0, 0).into(),
-                subpixel: Subpixel::Unknown,
-                make: "Smithay".into(),
-                model: "Winit".into(),
-            },
+                size,
+                subpixel,
+                make,
+                model,
+            }
         );
         let _ = output.create_global::<NuonuoState>(display_handle);
+
         Self {
             output,
             activate,
         }
+    }
+
+    pub fn set_preferred(&mut self, mode: Mode) {
+        self.output.set_preferred(mode);
     }
 
     pub fn change_current_state(
@@ -41,10 +46,6 @@ impl OutputElement {
             .change_current_state(mode, transform, scale, location);
     }
 
-    pub fn set_preferred(&mut self, mode: Mode) {
-        self.output.set_preferred(mode);
-    }
-
     pub fn output(&self) -> &Output {
         &self.output
     }
@@ -53,6 +54,7 @@ impl OutputElement {
 pub struct OutputManager {
     pub outputs: Vec<OutputElement>,
     pub output_manager_state: OutputManagerState,
+    pub display_handle: DisplayHandle,
 }
 
 impl OutputManager {
@@ -63,16 +65,26 @@ impl OutputManager {
         Self {
             outputs: Vec::new(),
             output_manager_state,
+            display_handle: display_handle.clone(),
         }
     }
 
-    pub fn add_output(&mut self, name: &str, display_handle: &DisplayHandle, activate: bool) {
-        self.outputs
-            .push(OutputElement::new(name, display_handle, activate));
+    pub fn add_output(&mut self, name: String, size: Size<i32, Raw>, subpixel: Subpixel, make: String, model: String, activate: bool) {
+        self
+            .outputs
+            .push(OutputElement::new(name, size, subpixel, make, model, activate, &self.display_handle));
     }
 
     pub fn _remove_output() {
         todo!()
+    }
+
+    pub fn set_preferred(&mut self, mode: Mode) {
+        self.outputs
+            .iter_mut()
+            .find(|o| o.activate)
+            .unwrap()
+            .set_preferred(mode);
     }
 
     pub fn current_output(&self) -> &Output {
@@ -91,14 +103,6 @@ impl OutputManager {
             .find(|o| o.activate)
             .unwrap()
             .change_current_state(mode, transform, scale, location);
-    }
-
-    pub fn set_preferred(&mut self, mode: Mode) {
-        self.outputs
-            .iter_mut()
-            .find(|o| o.activate)
-            .unwrap()
-            .set_preferred(mode);
     }
 }
 

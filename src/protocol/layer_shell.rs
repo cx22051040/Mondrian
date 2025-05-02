@@ -1,7 +1,7 @@
 use smithay::{
     delegate_layer_shell, 
     desktop::{
-        find_popup_root_surface, layer_map_for_output, LayerSurface, PopupKind, WindowSurfaceType
+        layer_map_for_output, LayerSurface, WindowSurfaceType
     }, 
     output::Output, 
     reexports::wayland_server::protocol::wl_surface::WlSurface, 

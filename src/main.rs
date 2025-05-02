@@ -30,12 +30,12 @@ fn main() {
     let mut event_loop: EventLoop<'_, NuonuoState> = EventLoop::try_new().unwrap();
     let loop_handle = event_loop.handle();
 
-    let mut nuonuo_state = NuonuoState::new(loop_handle);
+    let mut nuonuo_state = NuonuoState::new(loop_handle).expect("cannot make global state");
 
     let mut args = std::env::args().skip(1);
     let flag = args.next();
     let arg = args.next();
-
+    
     unsafe { std::env::set_var("WAYLAND_DISPLAY", &nuonuo_state.socket_name) };
 
     match (flag.as_deref(), arg) {

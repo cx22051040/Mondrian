@@ -1,12 +1,15 @@
 use std::sync::Arc;
 
+use anyhow::Context;
 use smithay::{
-    backend::{allocator::dmabuf::Dmabuf, renderer::ImportDma}, delegate_data_device, delegate_dmabuf, delegate_output, delegate_seat, delegate_shm, delegate_viewporter, desktop::PopupManager, input::{Seat, SeatHandler, SeatState}, output::Mode as OutputMode, reexports::{
+    backend::{allocator::dmabuf::Dmabuf, renderer::ImportDma}, 
+    delegate_data_device, delegate_dmabuf, delegate_output, delegate_seat, delegate_shm, delegate_viewporter, 
+    desktop::PopupManager, input::{Seat, SeatHandler, SeatState}, reexports::{
         calloop::{generic::Generic, Interest, LoopHandle, Mode, PostAction},
         wayland_server::{
             backend::ClientData, protocol::{wl_buffer, wl_shm, wl_surface::WlSurface}, Display, DisplayHandle, Resource
         },
-    }, utils::Transform, wayland::{
+    }, wayland::{
         buffer::BufferHandler,
         compositor::{CompositorClientState, CompositorState},
         dmabuf::{DmabufGlobal, DmabufHandler, DmabufState, ImportNotifier},
@@ -23,9 +26,12 @@ use smithay::{
     }
 };
 
+#[cfg(feature = "tty")]
+use crate::backend::tty::Tty;
 
 use crate::{
-    backend::{self, winit::WinitData}, config::Configs, render::cursor::{CursorManager, CursorTextureCache}, space::{output::OutputManager, window::WindowManager, workspace::WorkspaceManager}
+    backend::{winit::Winit, Backend
+    }, config::Configs, render::cursor::{CursorManager, CursorTextureCache}, space::{output::OutputManager, window::WindowManager, workspace::WorkspaceManager}
 };
 
 #[derive(Default)]
@@ -54,7 +60,7 @@ impl ClientData for ClientState {
 pub struct NuonuoState {
     pub start_time: std::time::Instant,
 
-    pub backend_data: WinitData,
+    pub backend: Backend,
     pub socket_name: String,
     pub loop_handle: LoopHandle<'static, Self>,
     pub display_handle: DisplayHandle,
@@ -76,13 +82,14 @@ pub struct NuonuoState {
     pub cursor_manager: CursorManager,
     pub cursor_texture_cache: CursorTextureCache,
     pub viewporter_state: ViewporterState,
+    pub dmabuf_state: DmabufState,
 
     // configs
     pub configs: Configs,
 }
 
 impl NuonuoState {
-    pub fn new(loop_handle: LoopHandle<'static, NuonuoState>) -> Self {
+    pub fn new(loop_handle: LoopHandle<'static, NuonuoState>) -> anyhow::Result<Self> {
         let start_time = std::time::Instant::now();
 
         let configs = Configs::new("src/config/keybindings.conf");
@@ -110,30 +117,23 @@ impl NuonuoState {
         let mut seat: Seat<Self> = seat_state.new_wl_seat(&display_handle, seat_name);
         let layer_shell_state = WlrLayerShellState::new::<Self>(&display_handle);
         let viewporter_state = ViewporterState::new::<Self>(&display_handle);
+        let dmabuf_state = DmabufState::new();
 
         // TODO: use config file
         let cursor_manager = CursorManager::new("default", 24);
         let cursor_texture_cache = Default::default();
 
-        #[cfg(feature = "winit")]
-        let backend_data = backend::winit::init_winit(&loop_handle, &display_handle);
+        #[cfg(feature = "tty")]
+        let tty = Tty::new(&loop_handle).context("cannot make tty backend")?;
+        #[cfg(feature = "tty")]
+        let mut backend = Backend::Tty(tty);
 
-        let size = backend_data.backend.window_size();
-        let mode = OutputMode {
-            size,
-            refresh: 60_000,
-        };
+        // #[cfg(feature = "winit")]
+        // let winit = Winit::new(&loop_handle, &display_handle)?;
+        // #[cfg(feature = "winit")]
+        // let mut backend = Backend::Winit(winit);
 
-        // TODO: manage more output, get the output physical name as output name
-        // Now provided we only have one output
-        output_manager.add_output("winit", &display_handle, true);
-        output_manager.change_current_state(
-            Some(mode),
-            Some(Transform::Flipped180),
-            None,
-            Some((0, 0).into()),
-        );
-        output_manager.set_preferred(mode);
+        backend.init(&mut output_manager, &loop_handle);
 
         workspace_manager.add_workspace(output_manager.current_output(), (0, 0), None, true);
         // TODO: delete this test: add space-2 for test workspace switch
@@ -149,9 +149,9 @@ impl NuonuoState {
         // Here we assume that there is always pointer plugged in
         seat.add_pointer();
 
-        NuonuoState {
+        Ok(NuonuoState {
             start_time,
-            backend_data,
+            backend,
             socket_name,
             loop_handle,
             display_handle,
@@ -169,16 +169,17 @@ impl NuonuoState {
             seat,
             layer_shell_state,
             viewporter_state,
+            dmabuf_state,
 
             cursor_manager,
             cursor_texture_cache,
 
             configs,
-        }
+        })
     }
 
-    fn init_display_handle(loop_handle: &LoopHandle<'static, NuonuoState>) -> DisplayHandle {
-        let display: Display<NuonuoState> = Display::new().unwrap();
+    fn init_display_handle(loop_handle: &LoopHandle<'static, Self>) -> DisplayHandle {
+        let display: Display<Self> = Display::new().unwrap();
         let display_handle = display.handle();
 
         loop_handle
@@ -197,7 +198,7 @@ impl NuonuoState {
         display_handle
     }
 
-    fn init_wayland_listener(loop_handle: &LoopHandle<'static, NuonuoState>) -> String {
+    fn init_wayland_listener(loop_handle: &LoopHandle<'static, Self>) -> String {
         let source = ListeningSocketSource::new_auto().unwrap();
         let socket_name = source.socket_name().to_string_lossy().into_owned();
 
@@ -300,7 +301,7 @@ delegate_shm!(NuonuoState);
 
 impl DmabufHandler for NuonuoState {
     fn dmabuf_state(&mut self) -> &mut DmabufState {
-        &mut self.backend_data.dmabuf_state.0
+        &mut self.dmabuf_state
     }
 
     fn dmabuf_imported(
@@ -310,7 +311,8 @@ impl DmabufHandler for NuonuoState {
         notifier: ImportNotifier,
     ) {
         if self
-            .backend_data
+            .backend
+            .winit()
             .backend
             .renderer()
             .import_dmabuf(&dmabuf, None)

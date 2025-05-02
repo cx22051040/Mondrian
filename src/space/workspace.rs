@@ -72,7 +72,7 @@ impl Workspace {
             window.toplevel().unwrap().send_pending_configure();
             window.set_rec(Rectangle::new((GAP, GAP).into(), (output_geo.size - (GAP*2, GAP*2).into()).into()));
             self.layout_tree = Some(TiledTree::new(window.clone()));
-            self.map_element(window, (GAP, GAP).into(), true);
+            self.map_element(window, (GAP, GAP).into(), activate);
             return;
         }
 
@@ -90,7 +90,7 @@ impl Workspace {
                     #[cfg(feature="trace_layout")]
                     layout_tree.print_tree();
                     let loc = window.get_rec().unwrap().loc;
-                    self.map_element(window, loc, true);
+                    self.map_element(window, loc, activate);
                 }
             },
             LayoutScheme::BinaryTree => {
@@ -140,10 +140,6 @@ impl Workspace {
 
     pub fn elements(&self) -> impl DoubleEndedIterator<Item = &Window> + ExactSizeIterator {
         self.space.elements()
-    }
-
-    pub fn elements_count(&self) -> usize {
-        self.space.elements().count()
     }
 
     // TODO: move this to outputmanager

@@ -9,6 +9,7 @@ bitflags = "2.9.0"
 itertools = "0.14.0"
 regex = "1.11.1"
 slotmap = "1.0.7"
+smithay-drm-extras = { version = "0.1.0", optional = true}
 tokio = "1.44.1"
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
@@ -23,9 +24,23 @@ features = ["wayland_frontend", "desktop"]
 git = "https://github.com/Smithay/smithay.git"
 
 [features]
-default = ["winit", "trace_layout"]
+default = ["winit", "tty", "trace_layout"]
 egl = ["smithay/use_system_lib", "smithay/backend_egl"]
 winit = ["smithay/backend_winit", "smithay/backend_drm"]
 trace_input = []
 trace_layout = []
 xwayland = []
+tty = [
+    "smithay-drm-extras",
+    "smithay/use_system_lib",
+    "smithay/backend_libinput",
+    "smithay/backend_udev",
+    "smithay/backend_drm",
+    "smithay/backend_gbm",
+    "smithay/backend_vulkan",
+    "smithay/backend_egl",
+    "smithay/backend_session",
+    "smithay/backend_session_libseat",
+    "smithay/renderer_gl",
+    "smithay/renderer_multi",
+]

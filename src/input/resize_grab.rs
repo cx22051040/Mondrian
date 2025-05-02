@@ -7,8 +7,8 @@ use smithay::{
         wayland_protocols::xdg::shell::server::xdg_toplevel,
         wayland_server::protocol::wl_surface::WlSurface,
     },
-    utils::{Logical, Point, Rectangle, Size},
-    wayland::{compositor, shell::xdg::SurfaceCachedState},
+    utils::{Logical, Point, Rectangle},
+    wayland::compositor,
 };
 
 use crate::{space::workspace::WorkspaceManager, state::NuonuoState};
