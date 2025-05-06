@@ -2,14 +2,12 @@ use std::sync::Arc;
 
 use anyhow::Context;
 use smithay::{
-    backend::{allocator::dmabuf::Dmabuf, renderer::ImportDma}, 
-    delegate_data_device, delegate_dmabuf, delegate_output, delegate_seat, delegate_shm, delegate_viewporter, 
-    desktop::PopupManager, input::{Seat, SeatHandler, SeatState}, reexports::{
+    backend::allocator::dmabuf::Dmabuf, delegate_data_device, delegate_dmabuf, delegate_output, delegate_seat, delegate_shm, delegate_viewporter, desktop::PopupManager, input::{Seat, SeatHandler, SeatState}, reexports::{
         calloop::{generic::Generic, Interest, LoopHandle, Mode, PostAction},
         wayland_server::{
             backend::ClientData, protocol::{wl_buffer, wl_shm, wl_surface::WlSurface}, Display, DisplayHandle, Resource
         },
-    }, wayland::{
+    }, utils::{Clock, Monotonic}, wayland::{
         buffer::BufferHandler,
         compositor::{CompositorClientState, CompositorState},
         dmabuf::{DmabufGlobal, DmabufHandler, DmabufState, ImportNotifier},
@@ -30,8 +28,7 @@ use smithay::{
 use crate::backend::tty::Tty;
 
 use crate::{
-    backend::{winit::Winit, Backend
-    }, config::Configs, render::cursor::{CursorManager, CursorTextureCache}, space::{output::OutputManager, window::WindowManager, workspace::WorkspaceManager}
+    backend::Backend, config::Configs, render::cursor::{CursorManager, CursorTextureCache}, space::{output::OutputManager, window::WindowManager, workspace::WorkspaceManager}
 };
 
 #[derive(Default)]
@@ -86,11 +83,13 @@ pub struct NuonuoState {
 
     // configs
     pub configs: Configs,
+    pub clock: Clock<Monotonic>,
 }
 
 impl NuonuoState {
     pub fn new(loop_handle: LoopHandle<'static, NuonuoState>) -> anyhow::Result<Self> {
         let start_time = std::time::Instant::now();
+        let clock = Clock::new();
 
         let configs = Configs::new("src/config/keybindings.conf");
 
@@ -112,9 +111,6 @@ impl NuonuoState {
         ]);
         let xdg_shell_state = XdgShellState::new::<Self>(&display_handle);
         let popups = PopupManager::default();
-        let mut seat_state = SeatState::new();
-        let seat_name = String::from("winit");
-        let mut seat: Seat<Self> = seat_state.new_wl_seat(&display_handle, seat_name);
         let layer_shell_state = WlrLayerShellState::new::<Self>(&display_handle);
         let viewporter_state = ViewporterState::new::<Self>(&display_handle);
         let dmabuf_state = DmabufState::new();
@@ -128,6 +124,10 @@ impl NuonuoState {
         #[cfg(feature = "tty")]
         let mut backend = Backend::Tty(tty);
 
+        let mut seat_state = SeatState::new();
+        let seat_name = backend.seat_name();
+        info!("seat_name: {:?}", seat_name);
+        let mut seat: Seat<Self> = seat_state.new_wl_seat(&display_handle, seat_name);
         // #[cfg(feature = "winit")]
         // let winit = Winit::new(&loop_handle, &display_handle)?;
         // #[cfg(feature = "winit")]
@@ -175,6 +175,7 @@ impl NuonuoState {
             cursor_texture_cache,
 
             configs,
+            clock,
         })
     }
 
@@ -310,18 +311,8 @@ impl DmabufHandler for NuonuoState {
         dmabuf: Dmabuf,
         notifier: ImportNotifier,
     ) {
-        if self
-            .backend
-            .winit()
-            .backend
-            .renderer()
-            .import_dmabuf(&dmabuf, None)
-            .is_ok()
-        {
-            let _ = notifier.successful::<NuonuoState>();
-        } else {
-            notifier.failed();
-        }
+        info!("dmabuf_imported");
+        todo!()
     }
 }
 delegate_dmabuf!(NuonuoState);

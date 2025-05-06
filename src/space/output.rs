@@ -7,6 +7,7 @@ use smithay::{
 
 use crate::state::NuonuoState;
 
+#[derive(Debug)]
 pub struct OutputElement {
     pub output: Output,
     pub activate: bool,
@@ -51,6 +52,7 @@ impl OutputElement {
     }
 }
 
+#[derive(Debug)]
 pub struct OutputManager {
     pub outputs: Vec<OutputElement>,
     pub output_manager_state: OutputManagerState,

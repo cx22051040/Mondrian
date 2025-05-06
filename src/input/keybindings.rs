@@ -9,6 +9,7 @@ pub enum FunctionEnum {
     SwitchWorkspace1,
     SwitchWorkspace2,
     InvertWindow,
+    Quit,
 }
 
 #[derive(Debug, Clone)]
@@ -100,6 +101,7 @@ impl KeybindingsManager {
                             "workspace-1" => FunctionEnum::SwitchWorkspace1,
                             "workspace-2" => FunctionEnum::SwitchWorkspace2,
                             "invert" => FunctionEnum::InvertWindow,
+                            "quit" => FunctionEnum::Quit,
                             _ => {
                                 tracing::info!(
                                     "Warning: No registered function for exec '{}'",

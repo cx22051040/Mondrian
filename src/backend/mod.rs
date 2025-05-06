@@ -2,7 +2,7 @@ pub mod winit;
 #[cfg(feature = "tty")]
 pub mod tty;
 
-use smithay::{backend::renderer::{ImportAll, ImportMem, Renderer}, output::Output, reexports::calloop::LoopHandle};
+use smithay::{backend::{allocator::dmabuf::Dmabuf, renderer::{ImportAll, ImportDma as _, ImportMem, Renderer}}, output::Output, reexports::calloop::LoopHandle, wayland::{dmabuf::{DmabufState, ImportNotifier}, shm::ShmState}};
 #[cfg(feature = "tty")]
 use tty::Tty;
 use winit::Winit;
@@ -38,6 +38,16 @@ impl Backend {
             v.init(output_manager);
         } else if let Self::Tty(v) = self {
             v.init(output_manager, loop_handle);
+        } else {
+            panic!("backend is not Winit");
+        }
+    }
+
+    pub fn seat_name(&self) -> String {
+        if let Self::Winit(_) = self {
+            String::from("winit")
+        } else if let Self::Tty(v) = self {
+            v.seat_name.clone()
         } else {
             panic!("backend is not Winit");
         }

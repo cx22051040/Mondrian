@@ -8,7 +8,7 @@ use smithay::{
         renderer::gles::GlesRenderer,
         winit::{self, WinitEvent, WinitGraphicsBackend},
     },
-    output::{Mode as OutputMode, Output, PhysicalProperties, Subpixel},
+    output::{Mode as OutputMode, Subpixel},
     reexports::{calloop::LoopHandle, wayland_server::DisplayHandle},
     utils::{Rectangle, Scale, Transform},
 };
@@ -62,7 +62,14 @@ impl Winit {
                         let size = state.backend.winit().backend.window_size();
                         let damage = Rectangle::from_size(size);
 
-                        state.backend.winit().render_output(state.output_manager.current_output(), state.workspace_manager.current_workspace(), vec![]);
+                        state
+                            .backend
+                            .winit()
+                            .render_output(
+                                state.output_manager.current_output(), 
+                                state.workspace_manager.current_workspace(), 
+                                vec![]
+                            );
     
                         state
                             .backend

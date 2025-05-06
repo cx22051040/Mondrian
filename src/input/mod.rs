@@ -314,6 +314,10 @@ impl NuonuoState {
                             self
                                 .workspace_manager
                                 .invert_window(focused_surface);
+                        },
+                        FunctionEnum::Quit => {
+                            tracing::info!("Quit");
+                            std::process::exit(0);
                         }
                     }
                 }

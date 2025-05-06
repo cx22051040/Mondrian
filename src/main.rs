@@ -14,18 +14,30 @@ mod state;
 
 use smithay::reexports::calloop::EventLoop;
 
-use tracing_subscriber;
+use tracing_subscriber::{self, layer::SubscriberExt, FmtSubscriber};
+use tracing_appender::rolling::{RollingFileAppender, Rotation};
 
 use state::NuonuoState;
 
 pub const OUTPUT_NAME: &str = "winit";
 
 fn main() {
-    if let Ok(env_filter) = tracing_subscriber::EnvFilter::try_from_default_env() {
-        tracing_subscriber::fmt().with_env_filter(env_filter).init();
-    } else {
-        tracing_subscriber::fmt().init();
-    }
+
+    let file_appender = RollingFileAppender::new(Rotation::DAILY, "logs", "app-");
+
+    let fmt_layer = tracing_subscriber::fmt::Layer::new()
+        .with_writer(file_appender)
+        .with_ansi(false)
+        .with_level(true);
+
+    let subscriber = FmtSubscriber::builder()
+        .with_max_level(tracing::Level::INFO)  // 不限制日志级别，记录所有日志级别
+        .finish()
+        .with(fmt_layer);
+    
+    // 设置全局默认日志记录器
+    tracing::subscriber::set_global_default(subscriber).expect("Failed to set global subscriber");
+
 
     let mut event_loop: EventLoop<'_, NuonuoState> = EventLoop::try_new().unwrap();
     let loop_handle = event_loop.handle();
