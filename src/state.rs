@@ -1,11 +1,13 @@
-use std::sync::Arc;
-
 use anyhow::Context;
 use smithay::{
-    backend::allocator::dmabuf::Dmabuf, delegate_data_device, delegate_dmabuf, delegate_output, delegate_seat, delegate_shm, delegate_viewporter, desktop::PopupManager, input::{Seat, SeatHandler, SeatState}, reexports::{
-        calloop::{generic::Generic, Interest, LoopHandle, Mode, PostAction},
+    backend::allocator::dmabuf::Dmabuf, 
+    delegate_data_device, delegate_dmabuf, delegate_output, delegate_seat, delegate_shm, delegate_viewporter, 
+    desktop::PopupManager, 
+    input::{Seat, SeatHandler, SeatState}, 
+    reexports::{
+        calloop::LoopHandle,
         wayland_server::{
-            backend::ClientData, protocol::{wl_buffer, wl_shm, wl_surface::WlSurface}, Display, DisplayHandle, Resource
+            backend::ClientData, protocol::{wl_buffer, wl_shm, wl_surface::WlSurface}, DisplayHandle, Resource
         },
     }, utils::{Clock, Monotonic}, wayland::{
         buffer::BufferHandler,
@@ -20,7 +22,7 @@ use smithay::{
         },
         shell::{wlr_layer::WlrLayerShellState, xdg::XdgShellState},
         shm::{ShmHandler, ShmState},
-        socket::ListeningSocketSource, viewporter::ViewporterState,
+        viewporter::ViewporterState,
     }
 };
 
@@ -28,7 +30,7 @@ use smithay::{
 use crate::backend::tty::Tty;
 
 use crate::{
-    backend::Backend, config::Configs, render::cursor::{CursorManager, CursorTextureCache}, space::{output::OutputManager, window::WindowManager, workspace::WorkspaceManager}
+    backend::{winit::Winit, Backend}, config::Configs, manager::{input::InputManager, output::OutputManager, window::WindowManager, workspace::WorkspaceManager}, render::cursor::{CursorManager, CursorTextureCache}
 };
 
 #[derive(Default)]
@@ -54,223 +56,154 @@ impl ClientData for ClientState {
     }
 }
 
-pub struct NuonuoState {
-    pub start_time: std::time::Instant,
-
+pub struct GlobalData{
     pub backend: Backend,
-    pub socket_name: String,
-    pub loop_handle: LoopHandle<'static, Self>,
+    pub state: State,
+
+    // manager
+    pub output_manager: OutputManager,
+    pub workspace_manager: WorkspaceManager,
+    pub window_manager: WindowManager,
+    pub cursor_manager: CursorManager, //cursor_texture_cache: CursorTextureCache = Default::default()
+    pub input_manager: InputManager,
+    pub popups: PopupManager,
+
+    // handles
+    pub loop_handle: LoopHandle<'static, GlobalData>,
     pub display_handle: DisplayHandle,
 
-    // desktop
-    pub window_manager: WindowManager,
-    pub workspace_manager: WorkspaceManager,
-    pub output_manager: OutputManager,
-
-    // smithay state
-    pub compositor_state: CompositorState,
-    pub data_device_state: DataDeviceState,
-    pub seat_state: SeatState<Self>,
-    pub seat: Seat<Self>,
-    pub shm_state: ShmState,
-    pub popups: PopupManager,
-    pub xdg_shell_state: XdgShellState,
-    pub layer_shell_state: WlrLayerShellState,
-    pub cursor_manager: CursorManager,
-    pub cursor_texture_cache: CursorTextureCache,
-    pub viewporter_state: ViewporterState,
-    pub dmabuf_state: DmabufState,
-
-    // configs
+    // config
     pub configs: Configs,
+
+    // global data
+    pub start_time: std::time::Instant,
     pub clock: Clock<Monotonic>,
+
 }
 
-impl NuonuoState {
-    pub fn new(loop_handle: LoopHandle<'static, NuonuoState>) -> anyhow::Result<Self> {
+impl GlobalData {
+    pub fn new(loop_handle: LoopHandle<'static, GlobalData>, display_handle: DisplayHandle) -> Self {
+
+        // judge the backend type, create base config
+        let has_display = std::env::var_os("WAYLAND_DISPLAY").is_some()
+            || std::env::var_os("WAYLAND_SOCKET").is_some()
+            || std::env::var_os("DISPLAY").is_some();
+    
+        let mut backend = if has_display {
+            let winit = Winit::new(&loop_handle, &display_handle).unwrap();
+            Backend::Winit(winit)
+        } else {
+            let tty = Tty::new(&loop_handle).context("error get tty backend").unwrap();
+            Backend::Tty(tty)
+        };
+
+        // initial global state
+        let nuonuo_state = State::new(&display_handle).expect("cannot make global state");
+
+        // initial managers
+        let mut output_manager = OutputManager::new();
+        let mut workspace_manager = WorkspaceManager::new();
+        let window_manager = WindowManager::new();
+        let cursor_manager = CursorManager::new("default", 24);
+        let input_manager = InputManager::new(backend.seat_name(), &display_handle);
+        let popups = PopupManager::default();
+
+        // initial backend
+        backend.init(&mut output_manager, &loop_handle);
+
+        // TODO: tidy
+        workspace_manager.add_workspace(output_manager.current_output(), (0, 0), None, true);
+        workspace_manager.add_workspace(output_manager.current_output(), (0, 0), None, false);
+        
+        // load configs
+        let configs = Configs::new("src/config/keybindings.conf");
+
         let start_time = std::time::Instant::now();
         let clock = Clock::new();
 
-        let configs = Configs::new("src/config/keybindings.conf");
-
-        let display_handle: DisplayHandle = Self::init_display_handle(&loop_handle);
-
-        // init wayland clients
-        let socket_name = Self::init_wayland_listener(&loop_handle);
-
-        let window_manager = WindowManager::new();
-        let mut workspace_manager = WorkspaceManager::new();
-        let mut output_manager = OutputManager::new(&display_handle);
-
-        // init smithay state
-        let compositor_state = CompositorState::new::<Self>(&display_handle);
-        let data_device_state = DataDeviceState::new::<Self>(&display_handle);
-        let shm_state = ShmState::new::<Self>(&display_handle, vec![    
-            wl_shm::Format::Argb8888,
-            wl_shm::Format::Xrgb8888,
-        ]);
-        let xdg_shell_state = XdgShellState::new::<Self>(&display_handle);
-        let popups = PopupManager::default();
-        let layer_shell_state = WlrLayerShellState::new::<Self>(&display_handle);
-        let viewporter_state = ViewporterState::new::<Self>(&display_handle);
-        let dmabuf_state = DmabufState::new();
-
-        // TODO: use config file
-        let cursor_manager = CursorManager::new("default", 24);
-        let cursor_texture_cache = Default::default();
-
-        #[cfg(feature = "tty")]
-        let tty = Tty::new(&loop_handle).context("cannot make tty backend")?;
-        #[cfg(feature = "tty")]
-        let mut backend = Backend::Tty(tty);
-
-        let mut seat_state = SeatState::new();
-        let seat_name = backend.seat_name();
-        info!("seat_name: {:?}", seat_name);
-        let mut seat: Seat<Self> = seat_state.new_wl_seat(&display_handle, seat_name);
-        // #[cfg(feature = "winit")]
-        // let winit = Winit::new(&loop_handle, &display_handle)?;
-        // #[cfg(feature = "winit")]
-        // let mut backend = Backend::Winit(winit);
-
-        backend.init(&mut output_manager, &loop_handle);
-
-        workspace_manager.add_workspace(output_manager.current_output(), (0, 0), None, true);
-        // TODO: delete this test: add space-2 for test workspace switch
-        workspace_manager.add_workspace(output_manager.current_output(), (0, 0), None, false);
-
-        // space_manager.current_space().map_output(&backend_data.output, (0, 0));
-
-        // Notify clients that we have a keyboard, for the sake of the example we assume that keyboard is always present.
-        // You may want to track keyboard hot-plug in real compositor.
-        seat.add_keyboard(Default::default(), 200, 25).unwrap();
-
-        // Notify clients that we have a pointer (mouse)
-        // Here we assume that there is always pointer plugged in
-        seat.add_pointer();
-
-        Ok(NuonuoState {
-            start_time,
+        Self {
             backend,
-            socket_name,
+            state: nuonuo_state,
+
+            output_manager,
+            workspace_manager,
+            window_manager,
+            cursor_manager,
+            input_manager,
+            popups,
+
             loop_handle,
             display_handle,
 
-            window_manager,
-            workspace_manager,
-            output_manager,
+            configs,
 
-            popups,
+            start_time,
+            clock,
+        }
+    }
+}
+
+pub struct State {
+    // smithay state
+    pub compositor_state: CompositorState,
+    pub data_device_state: DataDeviceState,
+    pub shm_state: ShmState,
+    pub xdg_shell_state: XdgShellState,
+    pub layer_shell_state: WlrLayerShellState,
+    pub viewporter_state: ViewporterState,
+    pub dmabuf_state: DmabufState,
+}
+
+impl State {
+    pub fn new(display_handle: &DisplayHandle) -> anyhow::Result<Self> {
+        // init smithay state
+        let compositor_state = CompositorState::new::<GlobalData>(display_handle);
+        let data_device_state = DataDeviceState::new::<GlobalData>(display_handle);
+        let shm_state = ShmState::new::<GlobalData>(display_handle, vec![    
+            wl_shm::Format::Argb8888,
+            wl_shm::Format::Xrgb8888,
+        ]);
+        let xdg_shell_state = XdgShellState::new::<GlobalData>(display_handle);
+        let layer_shell_state = WlrLayerShellState::new::<GlobalData>(display_handle);
+        let viewporter_state = ViewporterState::new::<GlobalData>(display_handle);
+        let dmabuf_state = DmabufState::new();
+
+        Ok(State {
             compositor_state,
             data_device_state,
-            seat_state,
             shm_state,
             xdg_shell_state,
-            seat,
             layer_shell_state,
             viewporter_state,
             dmabuf_state,
-
-            cursor_manager,
-            cursor_texture_cache,
-
-            configs,
-            clock,
         })
     }
-
-    fn init_display_handle(loop_handle: &LoopHandle<'static, Self>) -> DisplayHandle {
-        let display: Display<Self> = Display::new().unwrap();
-        let display_handle = display.handle();
-
-        loop_handle
-            .insert_source(
-                Generic::new(display, Interest::READ, Mode::Level),
-                |_, display, nuonuo_state| {
-                    // Safety: we don't drop the display
-                    unsafe {
-                        display.get_mut().dispatch_clients(nuonuo_state).unwrap();
-                    }
-                    Ok(PostAction::Continue)
-                },
-            )
-            .expect("Failed to init wayland server source");
-
-        display_handle
-    }
-
-    fn init_wayland_listener(loop_handle: &LoopHandle<'static, Self>) -> String {
-        let source = ListeningSocketSource::new_auto().unwrap();
-        let socket_name = source.socket_name().to_string_lossy().into_owned();
-
-        loop_handle
-            .insert_source(source, move |client_stream, _, nuonuo_state| {
-                nuonuo_state
-                    .display_handle
-                    .insert_client(client_stream, Arc::new(ClientState::default()))
-                    .unwrap();
-            })
-            .expect("Failed to init wayland socket source.");
-
-        tracing::info!(name = socket_name, "Listening on wayland socket.");
-
-        socket_name
-    }
-
-    // TODO: add device event
-    // fn on_device_added(&mut self, device: impl Device) {
-    //     if device.has_capability(DeviceCapability::TabletTool) {
-    //         let tablet_seat = self.seat.tablet_seat();
-    //         let desc = TabletDescriptor::from(&device);
-    //         tablet_seat.add_tablet::<Self>(&self.display_handle, &desc);
-    //     }
-    //     if device.has_capability(DeviceCapability::Touch) && self.niri.seat.get_touch().is_none() {
-    //         self.seat.add_touch();
-    //     }
-    // }
-
-    // fn on_device_removed(&mut self, device: impl Device) {
-    //     if device.has_capability(DeviceCapability::TabletTool) {
-    //         let tablet_seat = self.seat.tablet_seat();
-
-    //         let desc = TabletDescriptor::from(&device);
-    //         tablet_seat.remove_tablet(&desc);
-
-    //         // If there are no tablets in seat we can remove all tools
-    //         if tablet_seat.count_tablets() == 0 {
-    //             tablet_seat.clear_tools();
-    //         }
-    //     }
-    //     if device.has_capability(DeviceCapability::Touch) && self.touch.is_empty() {
-    //         self.niri.seat.remove_touch();
-    //     }
-    // }
 }
 
-impl SelectionHandler for NuonuoState {
+impl SelectionHandler for GlobalData {
     type SelectionUserData = ();
 }
 
-impl ClientDndGrabHandler for NuonuoState {}
-impl ServerDndGrabHandler for NuonuoState {}
+impl ClientDndGrabHandler for GlobalData {}
+impl ServerDndGrabHandler for GlobalData {}
 
-impl DataDeviceHandler for NuonuoState {
+impl DataDeviceHandler for GlobalData {
     fn data_device_state(&self) -> &DataDeviceState {
-        &self.data_device_state
+        &self.state.data_device_state
     }
 }
-delegate_data_device!(NuonuoState);
+delegate_data_device!(GlobalData);
 
-impl OutputHandler for NuonuoState {}
-delegate_output!(NuonuoState);
+impl OutputHandler for GlobalData {}
+delegate_output!(GlobalData);
 
-impl SeatHandler for NuonuoState {
+impl SeatHandler for GlobalData {
     type KeyboardFocus = WlSurface;
     type PointerFocus = WlSurface;
     type TouchFocus = WlSurface;
 
-    fn seat_state(&mut self) -> &mut SeatState<NuonuoState> {
-        &mut self.seat_state
+    fn seat_state(&mut self) -> &mut SeatState<GlobalData> {
+        &mut self.input_manager.seat_state
     }
 
     fn cursor_image(
@@ -287,34 +220,34 @@ impl SeatHandler for NuonuoState {
         set_data_device_focus(display_handle, seat, client);
     }
 }
-delegate_seat!(NuonuoState);
+delegate_seat!(GlobalData);
 
-impl BufferHandler for NuonuoState {
+impl BufferHandler for GlobalData {
     fn buffer_destroyed(&mut self, _buffer: &wl_buffer::WlBuffer) {}
 }
 
-impl ShmHandler for NuonuoState {
+impl ShmHandler for GlobalData {
     fn shm_state(&self) -> &ShmState {
-        &self.shm_state
+        &self.state.shm_state
     }
 }
-delegate_shm!(NuonuoState);
+delegate_shm!(GlobalData);
 
-impl DmabufHandler for NuonuoState {
+impl DmabufHandler for GlobalData {
     fn dmabuf_state(&mut self) -> &mut DmabufState {
-        &mut self.dmabuf_state
+        &mut self.state.dmabuf_state
     }
 
     fn dmabuf_imported(
         &mut self,
         _global: &DmabufGlobal,
-        dmabuf: Dmabuf,
-        notifier: ImportNotifier,
+        _dmabuf: Dmabuf,
+        _notifier: ImportNotifier,
     ) {
         info!("dmabuf_imported");
         todo!()
     }
 }
-delegate_dmabuf!(NuonuoState);
+delegate_dmabuf!(GlobalData);
 
-delegate_viewporter!(NuonuoState);
+delegate_viewporter!(GlobalData);

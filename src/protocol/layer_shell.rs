@@ -13,11 +13,11 @@ use smithay::{
     }
 };
 
-use crate::state::NuonuoState;
+use crate::state::GlobalData;
 
-impl WlrLayerShellHandler for NuonuoState{
+impl WlrLayerShellHandler for GlobalData{
     fn shell_state(&mut self) -> &mut WlrLayerShellState {
-        &mut self.layer_shell_state
+        &mut self.state.layer_shell_state
     }
 
     fn new_layer_surface(
@@ -59,9 +59,9 @@ impl WlrLayerShellHandler for NuonuoState{
         self.unconstrain_popup(&popup);
     }
 }
-delegate_layer_shell!(NuonuoState);
+delegate_layer_shell!(GlobalData);
 
-impl NuonuoState {
+impl GlobalData {
     pub fn layer_shell_handle_commit(&mut self, surface: &WlSurface) -> bool {
 
         let output = self
@@ -95,8 +95,5 @@ impl NuonuoState {
         }
 
         false
-
-        
-
     }
 }

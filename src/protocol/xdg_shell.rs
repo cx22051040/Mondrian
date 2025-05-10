@@ -1,6 +1,6 @@
 use crate::{
     input::{move_grab::PointerMoveSurfaceGrab, resize_grab::ResizeSurfaceGrab},
-    state::NuonuoState,
+    state::GlobalData,
 };
 use smithay::{desktop::{find_popup_root_surface, get_popup_toplevel_coords}, input::pointer::{
     CursorIcon, CursorImageStatus, GrabStartData as PointerGrabStartData,
@@ -65,9 +65,9 @@ pub fn handle_commit(popups: &mut PopupManager, space: &Space<Window>, surface: 
     }
 }
 
-impl XdgShellHandler for NuonuoState {
+impl XdgShellHandler for GlobalData {
     fn xdg_shell_state(&mut self) -> &mut XdgShellState {
-        &mut self.xdg_shell_state
+        &mut self.state.xdg_shell_state
     }
 
     fn new_toplevel(&mut self, surface: ToplevelSurface) {
@@ -75,8 +75,8 @@ impl XdgShellHandler for NuonuoState {
         self.window_manager
             .add_window(window.clone(), self.workspace_manager.current_workspace().id());
 
-        let focused_surface = self.seat.get_keyboard().unwrap().current_focus();
-        self.workspace_manager.map_tiled_element(window, self.output_manager.current_output(), focused_surface, true);
+        let focus = self.get_focus();
+        self.workspace_manager.map_tiled_element(window, self.output_manager.current_output(), focus, true);
     }
 
     fn new_popup(&mut self, surface: PopupSurface, _positioner: PositionerState) {
@@ -106,7 +106,7 @@ impl XdgShellHandler for NuonuoState {
     }
 
     fn move_request(&mut self, surface: ToplevelSurface, seat: wl_seat::WlSeat, serial: Serial) {
-        let seat: Seat<NuonuoState> = Seat::from_resource(&seat).unwrap();
+        let seat: Seat<GlobalData> = Seat::from_resource(&seat).unwrap();
         let wl_surface: &WlSurface = surface.wl_surface();
 
         if let Some(start_data) = check_grab(&seat, wl_surface, serial) {
@@ -164,13 +164,13 @@ impl XdgShellHandler for NuonuoState {
 
     fn grab(&mut self, _surface: PopupSurface, _seat: wl_seat::WlSeat, _serial: Serial) { }
 }
-delegate_xdg_shell!(NuonuoState);
+delegate_xdg_shell!(GlobalData);
 
 fn check_grab(
-    seat: &Seat<NuonuoState>,
+    seat: &Seat<GlobalData>,
     surface: &WlSurface,
     serial: Serial,
-) -> Option<PointerGrabStartData<NuonuoState>> {
+) -> Option<PointerGrabStartData<GlobalData>> {
     // return start_data if grabing
     let pointer = seat.get_pointer()?;
 
@@ -190,7 +190,7 @@ fn check_grab(
     Some(start_data)
 }
 
-impl NuonuoState {
+impl GlobalData {
     pub fn unconstrain_popup(&self, popup: &PopupSurface) {
         let Ok(root) = find_popup_root_surface(&PopupKind::Xdg(popup.clone())) else {
             return;

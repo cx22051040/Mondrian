@@ -33,6 +33,7 @@ pub struct Workspace {
     pub space: Space<Window>,
     pub layout: LayoutScheme,
     pub layout_tree: Option<TiledTree>,
+    pub focus: Option<Window>,
 }
 
 impl Workspace {
@@ -44,6 +45,7 @@ impl Workspace {
             space,
             layout,
             layout_tree: None,
+            focus: None,
         }
     }
 
@@ -253,6 +255,20 @@ impl Workspace {
         }
     }
 
+    pub fn set_focus(&mut self, surface: WlSurface) {
+        let focus_window = self
+            .elements()
+            .find(|w| *w.toplevel().unwrap().wl_surface() == surface);
+
+        if let Some(window) = focus_window {
+            self.focus = Some(window.clone())
+        }
+    }
+
+    pub fn get_focus(&self) -> &Option<Window> {
+        &self.focus
+    }
+
 }
 
 #[derive(Debug)]
@@ -391,6 +407,10 @@ impl WorkspaceManager {
 
     pub fn resize(&mut self, focused_surface: Option<WlSurface>, offset: (i32, i32)) {
         self.current_workspace_mut().resize(focused_surface, offset);
+    }
+
+    pub fn set_focus(&mut self, surface: WlSurface) {
+        self.current_workspace_mut().set_focus(surface);
     }
 
 }

@@ -25,7 +25,7 @@ features = ["wayland_frontend", "desktop"]
 git = "https://github.com/Smithay/smithay.git"
 
 [features]
-default = ["winit", "tty", "trace_layout"]
+default = ["winit", "tty", "egl", "trace_layout"]
 egl = ["smithay/use_system_lib", "smithay/backend_egl"]
 winit = ["smithay/backend_winit", "smithay/backend_drm"]
 trace_input = []

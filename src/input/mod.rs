@@ -8,19 +8,17 @@ use smithay::{
             AbsolutePositionEvent, ButtonState, Event, InputBackend, InputEvent, KeyState, KeyboardKeyEvent, PointerButtonEvent
         },
     desktop::{layer_map_for_output, WindowSurfaceType}, input::{
-        keyboard::{xkb::keysym_get_name, FilterResult},
-        pointer::{ButtonEvent, MotionEvent},
+        keyboard::{xkb::keysym_get_name, FilterResult}, pointer::{ButtonEvent, MotionEvent},
     }, reexports::wayland_server::protocol::wl_surface::WlSurface, utils::{Logical, Point, SERIAL_COUNTER}, wayland::{compositor::get_parent, shell::wlr_layer::Layer as WlrLayer}
     };
 
     use crate::{
-    input::keybindings::{FunctionEnum, KeyAction}, space::workspace::WorkspaceId, NuonuoState
+    input::keybindings::{FunctionEnum, KeyAction}, manager::workspace::WorkspaceId, state::GlobalData
 };
 
-impl NuonuoState {
+impl GlobalData {
     pub fn process_input_event<I: InputBackend>(&mut self, event: InputEvent<I>) {
         match event {
-            // TODO: tidy this
             InputEvent::Keyboard { event, .. } => {
                 let serial = SERIAL_COUNTER.next_serial();
                 let time = Event::time_msec(&event);
@@ -31,10 +29,14 @@ impl NuonuoState {
                     .conf_priority_map
                     .clone();
 
-    
-                let keyboard = &mut self.seat.get_keyboard().unwrap();
-    
-                // TODO: inhabit shift+word when other modifiers are actived
+                let keyboard = self.input_manager.get_keyboard();
+                let keyboard = match keyboard {
+                    Some(k) => k,
+                    None => {
+                        error!("get keyboard error");
+                        return
+                    }
+                };
     
                 keyboard.input::<(), _>(
                     self,
@@ -80,13 +82,30 @@ impl NuonuoState {
                 
                 let output = self.output_manager.current_output();
                 let output_geo = self.workspace_manager.output_geometry(output);
+
                 // because the absolute move, need to plus the output location
                 let position = event.position_transformed(output_geo.size) + output_geo.loc.to_f64();
     
-                let pointer = self.seat.get_pointer().unwrap();
+                let pointer = self.input_manager.get_pointer();
+                let pointer = match pointer {
+                    Some(k) => k,
+                    None => {
+                        error!("get pointer error");
+                        return
+                    }
+                };
 
+
+    
                 let under = self.surface_under(position);
     
+                // set focus
+                if let Some((surface, _)) = under.clone() {
+                    self.set_focus(surface);
+                } else {
+                    self.modify_all_windows_state(false);
+                }
+
                 pointer.motion(
                     self,
                     under,
@@ -100,8 +119,16 @@ impl NuonuoState {
             }
     
             InputEvent::PointerButton { event, .. } => {
-                let pointer = self.seat.get_pointer().unwrap();
-    
+
+                let pointer = self.input_manager.get_pointer();
+                let pointer = match pointer {
+                    Some(k) => k,
+                    None => {
+                        error!("get pointer error");
+                        return
+                    }
+                };
+
                 let serial = SERIAL_COUNTER.next_serial();
     
                 let button = event.button_code();
@@ -151,9 +178,7 @@ impl NuonuoState {
     }
     
     pub fn surface_under (&mut self, position: Point<f64, Logical>) -> Option<(WlSurface, Point<f64, Logical>)> {
-    
-        let serial = SERIAL_COUNTER.next_serial();    
-        let keyboard = self.seat.get_keyboard().unwrap();
+        // get the surface under giving position,
         let output = self.output_manager.current_output().clone();
         let output_geo = self.workspace_manager.output_geometry(&output);
         let layer_map = layer_map_for_output(&output);
@@ -183,32 +208,24 @@ impl NuonuoState {
                     .map(|(s, p)| (s, (p + location).to_f64()))
             })
         {
-            // unfocus all window
-            self.modify_all_windows_state(false);
-
-            let mut root = surface.clone();
-            while let Some(parent) = get_parent(&root) {
-                root = parent;
-            }
-
-            keyboard.set_focus(
-                self,
-                Some(root),
-                serial,
-            );
-
             Some((surface, location))
         } else {            
-            self.modify_all_windows_state(false);
-
             None
         }
     }
 
     pub fn action_pointer_button(&mut self, position: Point<f64, Logical>) {
 
-        let serial = SERIAL_COUNTER.next_serial();    
-        let keyboard = self.seat.get_keyboard().unwrap();
+        let serial = SERIAL_COUNTER.next_serial();
+
+        let keyboard = self.input_manager.get_keyboard();
+        let keyboard = match keyboard {
+            Some(k) => k,
+            None => {
+                error!("get keyboard error");
+                return
+            }
+        };
 
         let output = self.output_manager.current_output().clone();
         let output_geo = self.workspace_manager.output_geometry(&output);
@@ -292,9 +309,18 @@ impl NuonuoState {
                     match func {
                         FunctionEnum::SwitchWorkspace1 => {
                             let serial = SERIAL_COUNTER.next_serial();
-                            let keyboard = self.seat.get_keyboard().unwrap();
                             // TODO: move cursor to first window and set focus or none
                             self.modify_all_windows_state(false);
+
+                            let keyboard = self.input_manager.get_keyboard();
+                            let keyboard = match keyboard {
+                                Some(k) => k,
+                                None => {
+                                    error!("get keyboard error");
+                                    return
+                                }
+                            };
+                    
                             keyboard.set_focus(self, None, serial);
                             self
                                 .workspace_manager
@@ -302,15 +328,24 @@ impl NuonuoState {
                         }
                         FunctionEnum::SwitchWorkspace2 => {
                             let serial = SERIAL_COUNTER.next_serial();
-                            let keyboard = self.seat.get_keyboard().unwrap();
                             self.modify_all_windows_state(false);
+
+                            let keyboard = self.input_manager.get_keyboard();
+                            let keyboard = match keyboard {
+                                Some(k) => k,
+                                None => {
+                                    error!("get keyboard error");
+                                    return
+                                }
+                            };
+                    
                             keyboard.set_focus(self, None, serial);
                             self
                                 .workspace_manager
                                 .set_activated(WorkspaceId::new(2));
                         },
                         FunctionEnum::InvertWindow => {
-                            let focused_surface = self.seat.get_keyboard().unwrap().current_focus();
+                            let focused_surface = self.get_focus();
                             self
                                 .workspace_manager
                                 .invert_window(focused_surface);
@@ -331,4 +366,48 @@ impl NuonuoState {
             win.toplevel().unwrap().send_pending_configure();
         }
     }
+
+    pub fn set_focus(&mut self, surface: WlSurface) {
+        // set giving surface's root surface as focus
+        let serial = SERIAL_COUNTER.next_serial();
+
+        let keyboard = self.input_manager.get_keyboard();
+        let keyboard = match keyboard {
+            Some(k) => k,
+            None => {
+                error!("get keyboard error");
+                return
+            }
+        };
+
+        let mut root = surface.clone();
+        while let Some(parent) = get_parent(&root) {
+            root = parent;
+        }
+
+        // unfocus all window
+        self.modify_all_windows_state(false);
+
+        keyboard.set_focus(
+            self,
+            Some(root),
+            serial,
+        );
+
+        self.workspace_manager.set_focus(surface);
+    }
+
+    pub fn get_focus(&self) -> Option<WlSurface> {
+        let keyboard = self.input_manager.get_keyboard();
+        let keyboard = match keyboard {
+            Some(k) => k,
+            None => {
+                error!("get keyboard error");
+                return None
+            }
+        };
+
+        keyboard.current_focus()
+    }
+
 }

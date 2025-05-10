@@ -9,20 +9,84 @@ mod protocol;
 mod input;
 mod layout;
 mod render;
-mod space;
 mod state;
+mod manager;
 
-use smithay::reexports::calloop::EventLoop;
+
+use std::sync::Arc;
+
+use smithay::{reexports::{calloop::{generic::Generic, EventLoop, Interest, Mode, PostAction}, wayland_server::Display}, wayland::socket::ListeningSocketSource};
 
 use tracing_subscriber::{self, layer::SubscriberExt, FmtSubscriber};
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
 
-use state::NuonuoState;
+use state::{ClientState, GlobalData};
 
 pub const OUTPUT_NAME: &str = "winit";
 
 fn main() {
+    init_trace();
 
+    let mut event_loop: EventLoop<'_, GlobalData> = EventLoop::try_new().unwrap();
+    let display: Display<GlobalData> = Display::new().unwrap();
+
+    let loop_handle = event_loop.handle();
+    let display_handle = display.handle();
+
+    loop_handle
+        .insert_source(
+            Generic::new(display, Interest::READ, Mode::Level),
+            |_, display, data| {
+                // Safety: we don't drop the display
+                unsafe {
+                    display.get_mut().dispatch_clients(data).unwrap();
+                }
+                Ok(PostAction::Continue)
+            },
+        )
+        .expect("Failed to init wayland server source");
+
+    // initial listening socket source
+    let source = ListeningSocketSource::new_auto().unwrap();
+    let socket_name = source.socket_name().to_string_lossy().into_owned();
+
+    loop_handle
+        .insert_source(source, move |client_stream, _, data| {
+            data
+                .display_handle
+                .insert_client(client_stream, Arc::new(ClientState::default()))
+                .unwrap();
+        })
+        .expect("Failed to init wayland socket source.");
+
+    tracing::info!(name = socket_name, "Listening on wayland socket.");
+
+    // initial the main data
+    let mut global_data = GlobalData::new(loop_handle, display_handle);
+
+    let mut args = std::env::args().skip(1);
+    let flag = args.next();
+    let arg = args.next();
+    
+    unsafe { std::env::set_var("WAYLAND_DISPLAY", &socket_name) };
+
+    match (flag.as_deref(), arg) {
+        (Some("-c") | Some("--command"), Some(command)) => {
+            std::process::Command::new(command).spawn().ok();
+        }
+        _ => { }
+    }
+
+    tracing::info!("Initialization completed, starting the main loop.");
+
+    event_loop
+        .run(None, &mut global_data, move |_| {
+            // Nuonuo is running
+        })
+        .unwrap();
+}
+
+fn init_trace() {
     let file_appender = RollingFileAppender::new(Rotation::DAILY, "logs", "app-");
 
     let fmt_layer = tracing_subscriber::fmt::Layer::new()
@@ -37,31 +101,4 @@ fn main() {
     
     // 设置全局默认日志记录器
     tracing::subscriber::set_global_default(subscriber).expect("Failed to set global subscriber");
-
-
-    let mut event_loop: EventLoop<'_, NuonuoState> = EventLoop::try_new().unwrap();
-    let loop_handle = event_loop.handle();
-
-    let mut nuonuo_state = NuonuoState::new(loop_handle).expect("cannot make global state");
-
-    let mut args = std::env::args().skip(1);
-    let flag = args.next();
-    let arg = args.next();
-    
-    unsafe { std::env::set_var("WAYLAND_DISPLAY", &nuonuo_state.socket_name) };
-
-    match (flag.as_deref(), arg) {
-        (Some("-c") | Some("--command"), Some(command)) => {
-            std::process::Command::new(command).spawn().ok();
-        }
-        _ => { }
-    }
-
-    tracing::info!("Initialization completed, starting the main loop.");
-
-    event_loop
-        .run(None, &mut nuonuo_state, move |_| {
-            // Nuonuo is running
-        })
-        .unwrap();
 }

@@ -1,7 +1,7 @@
 use slotmap::{new_key_type, SlotMap};
 use smithay::{desktop::Window, utils::{Logical, Rectangle}};
 
-use crate::space::window::WindowExt;
+use crate::manager::window::WindowExt;
 use super::LayoutHandle;
 
 const RATE: f32 = 2.0;

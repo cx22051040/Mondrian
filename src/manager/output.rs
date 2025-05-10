@@ -1,11 +1,11 @@
 use smithay::{
     output::{Mode, Output, PhysicalProperties, Scale, Subpixel},
-    reexports::wayland_server::DisplayHandle,
+    reexports::{wayland_server::{Display, DisplayHandle}},
     utils::{Logical, Point, Raw, Size, Transform},
     wayland::output::OutputManagerState,
 };
 
-use crate::state::NuonuoState;
+use crate::state::GlobalData;
 
 #[derive(Debug)]
 pub struct OutputElement {
@@ -24,7 +24,7 @@ impl OutputElement {
                 model,
             }
         );
-        let _ = output.create_global::<NuonuoState>(display_handle);
+        let _ = output.create_global::<GlobalData>(display_handle);
 
         Self {
             output,
@@ -52,29 +52,31 @@ impl OutputElement {
     }
 }
 
-#[derive(Debug)]
 pub struct OutputManager {
     pub outputs: Vec<OutputElement>,
     pub output_manager_state: OutputManagerState,
-    pub display_handle: DisplayHandle,
+    pub display: Display<GlobalData>,
 }
 
 impl OutputManager {
-    pub fn new(display_handle: &DisplayHandle) -> Self {
-        let output_manager_state =
-            OutputManagerState::new_with_xdg_output::<NuonuoState>(&display_handle);
+    pub fn new() -> Self {
+
+        let display: Display<GlobalData> = Display::new().unwrap();
+        let display_handle = display.handle();
+
+        let output_manager_state = OutputManagerState::new_with_xdg_output::<GlobalData>(&display_handle);
 
         Self {
             outputs: Vec::new(),
             output_manager_state,
-            display_handle: display_handle.clone(),
+            display,
         }
     }
 
     pub fn add_output(&mut self, name: String, size: Size<i32, Raw>, subpixel: Subpixel, make: String, model: String, activate: bool) {
         self
             .outputs
-            .push(OutputElement::new(name, size, subpixel, make, model, activate, &self.display_handle));
+            .push(OutputElement::new(name, size, subpixel, make, model, activate, &self.get_display_handle()));
     }
 
     pub fn _remove_output() {
@@ -105,6 +107,10 @@ impl OutputManager {
             .find(|o| o.activate)
             .unwrap()
             .change_current_state(mode, transform, scale, location);
+    }
+
+    pub fn get_display_handle(&self) -> DisplayHandle {
+        self.display.handle()
     }
 }
 

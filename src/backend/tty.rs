@@ -1,4 +1,5 @@
 use anyhow::Context;
+use smithay::backend::renderer::element::RenderElement;
 use smithay::reexports::drm::Device;
 use smithay::{
     backend::drm::output::DrmOutputManager,
@@ -66,10 +67,12 @@ use std::{
     time::Duration,
 };
 
+use crate::render::elements::OutputRenderElements;
+use crate::state::GlobalData;
 use crate::{
     render::elements::CustomRenderElements,
-    space::{output::OutputManager, workspace::WorkspaceManager},
-    state::NuonuoState,
+    manager::{output::OutputManager, workspace::WorkspaceManager},
+    state::State,
 };
 
 // we cannot simply pick the first supported format of the intersection of *all* formats, because:
@@ -131,7 +134,7 @@ pub struct OutputDevice {
 }
 
 impl Tty {
-    pub fn new(loop_handle: &LoopHandle<'_, NuonuoState>) -> anyhow::Result<Self> {
+    pub fn new(loop_handle: &LoopHandle<'_, GlobalData>) -> anyhow::Result<Self> {
 
         // Initialize session
         let (session, notifier) = LibSeatSession::new()?;
@@ -144,18 +147,18 @@ impl Tty {
         let libinput_backend = LibinputInputBackend::new(libinput.clone());
 
         loop_handle
-            .insert_source(libinput_backend, |mut event, _, state| {
+            .insert_source(libinput_backend, |mut event, _, data| {
                 if let InputEvent::DeviceAdded { device } = &mut event {
                     info!("libinput Device added: {:?}", device);
                 } else if let InputEvent::DeviceRemoved { ref device } = event {
                     info!("libinput Device removed: {:?}", device);
                 }
-                state.process_input_event(event);
+                data.process_input_event(event);
             })
             .unwrap();
 
         loop_handle
-            .insert_source(notifier, move |event, _, state| match event {
+            .insert_source(notifier, move |event, _, _| match event {
                 SessionEvent::ActivateSession => {
                     info!("Session activated");
                 }
@@ -210,7 +213,7 @@ impl Tty {
     pub fn init(
         &mut self,
         output_manager: &mut OutputManager,
-        loop_handle: &LoopHandle<'_, NuonuoState>,
+        loop_handle: &LoopHandle<'_, GlobalData>,
     ) {
         let udev_backend = UdevBackend::new(&self.seat_name).unwrap();
 
@@ -223,14 +226,14 @@ impl Tty {
         }
 
         loop_handle
-            .insert_source(udev_backend, move |event, _, state| match event {
+            .insert_source(udev_backend, move |event, _, data| match event {
                 UdevEvent::Added { device_id, path } => {
                     if let Ok(node) = DrmNode::from_dev_id(device_id) {
-                        if let Err(err) = state.backend.tty().device_added(
+                        if let Err(err) = data.backend.tty().device_added(
                             node,
                             &path,
-                            &mut state.output_manager,
-                            &state.loop_handle,
+                            &mut data.output_manager,
+                            &data.loop_handle,
                         ) {
                             warn!("erro adding device: {:?}", err);
                         }
@@ -238,16 +241,16 @@ impl Tty {
                 }
                 UdevEvent::Changed { device_id } => {
                     if let Ok(node) = DrmNode::from_dev_id(device_id) {
-                        state.backend.tty().device_changed(
+                        data.backend.tty().device_changed(
                             node,
-                            &mut state.output_manager,
-                            &state.loop_handle,
+                            &mut data.output_manager,
+                            &data.loop_handle,
                         )
                     }
                 }
                 UdevEvent::Removed { device_id } => {
                     if let Ok(node) = DrmNode::from_dev_id(device_id) {
-                        state.backend.tty().device_removed(node)
+                        data.backend.tty().device_removed(node)
                     }
                 }
             })
@@ -259,7 +262,7 @@ impl Tty {
         node: DrmNode,
         path: &Path,
         output_manager: &mut OutputManager,
-        loop_handle: &LoopHandle<'_, NuonuoState>,
+        loop_handle: &LoopHandle<'_, GlobalData>,
     ) -> anyhow::Result<()> {
         info!("device added: {:?}", node);
         let fd = self.session.open(path, OFlags::RDWR | OFlags::CLOEXEC | OFlags::NOCTTY | OFlags::NONBLOCK)?;
@@ -269,24 +272,24 @@ impl Tty {
         let gbm = GbmDevice::new(device_fd)?;
 
         loop_handle
-            .insert_source(drm_notifier, move |event, meta, state| {
+            .insert_source(drm_notifier, move |event, meta, data| {
                 match event {
                     DrmEvent::VBlank(crtc) => {
                         let meta = meta.expect("VBlank events must have metadata");
-                        state.backend.tty().on_vblank(
+                        data.backend.tty().on_vblank(
                             node,
                             crtc,
                             meta,
-                            state.output_manager.current_output(),
-                            &state.clock,
-                            &state.loop_handle,
+                            data.output_manager.current_output(),
+                            &data.clock,
+                            &data.loop_handle,
                         );
                     }
                     DrmEvent::Error(error) => warn!("DRM Vblank error: {error}"),
                 };
-            })
-            .unwrap();
-
+        })
+        .unwrap();
+    
         let egl_display = unsafe { EGLDisplay::new(gbm.clone())? };
         let egl_device = EGLDevice::device_for_display(&egl_display)?;
 
@@ -341,7 +344,7 @@ impl Tty {
         &mut self,
         node: DrmNode,
         output_manager: &mut OutputManager,
-        loop_handle: &LoopHandle<'_, NuonuoState>,
+        loop_handle: &LoopHandle<'_, GlobalData>,
     ) {
         info!("device changed: {:?}", node);
         let device: &mut OutputDevice = if let Some(device) = self.devices.get_mut(&node) {
@@ -390,7 +393,7 @@ impl Tty {
         meta: DrmEventMetadata,
         output: &Output,
         clock: &Clock<Monotonic>,
-        loop_handle: &LoopHandle<'_, NuonuoState>,
+        loop_handle: &LoopHandle<'_, GlobalData>,
     ) {
         let device = if let Some(device) = self.devices.get_mut(&node) {
             device
@@ -486,15 +489,15 @@ impl Tty {
             };
 
             loop_handle
-                .insert_source(timer, move |_, _, state| {
-                    state.backend.tty().render(
+                .insert_source(timer, move |_, _, data| {
+                    data.backend.tty().render(
                         node,
                         Some(crtc),
-                        &state.workspace_manager,
-                        &state.output_manager,
+                        &data.workspace_manager.current_workspace().space,
+                        &data.output_manager.current_output(),
                         next_frame_target,
-                        &state.loop_handle,
-                        &state.clock,
+                        &data.loop_handle,
+                        &data.clock,
                     );
                     TimeoutAction::Drop
                 })
@@ -508,7 +511,7 @@ impl Tty {
         connector: connector::Info,
         crtc: crtc::Handle,
         output_manager: &mut OutputManager,
-        loop_handle: &LoopHandle<'_, NuonuoState>,
+        loop_handle: &LoopHandle<'_, GlobalData>,
     ) {
         info!("connector connected: {:?}", connector);
 
@@ -653,15 +656,15 @@ impl Tty {
 
             device.surfaces.insert(crtc, surface);
 
-            loop_handle.insert_idle(move |state| {
-                state.backend.tty().render_surface(
+            loop_handle.insert_idle(move |data| {
+                data.backend.tty().render_surface(
                     node,
                     crtc,
-                    &state.workspace_manager,
-                    &state.output_manager,
-                    state.clock.now(),
-                    &state.loop_handle,
-                    &state.clock,
+                    &data.workspace_manager.current_workspace().space,
+                    &data.output_manager.current_output(),
+                    data.clock.now(),
+                    &data.loop_handle,
+                    &data.clock,
                 );
             });
         }
@@ -672,10 +675,10 @@ impl Tty {
         &mut self,
         node: DrmNode,
         crtc: Option<crtc::Handle>,
-        workspace_manager: &WorkspaceManager,
-        output_manager: &OutputManager,
+        space: &Space<Window>,
+        output: &Output,
         frame_target: Time<Monotonic>,
-        loop_handle: &LoopHandle<'_, NuonuoState>,
+        loop_handle: &LoopHandle<'_, GlobalData>,
         clock: &Clock<Monotonic>,
     ) {
         let device = if let Some(device) = self.devices.get_mut(&node) {
@@ -688,8 +691,8 @@ impl Tty {
             self.render_surface(
                 node,
                 crtc,
-                workspace_manager,
-                output_manager,
+                space,
+                output,
                 frame_target,
                 loop_handle,
                 clock,
@@ -700,8 +703,8 @@ impl Tty {
                 self.render_surface(
                     node,
                     crtc,
-                    workspace_manager,
-                    output_manager,
+                    space,
+                    output,
                     frame_target,
                     loop_handle,
                     clock,
@@ -714,10 +717,10 @@ impl Tty {
         &mut self,
         node: DrmNode,
         crtc: crtc::Handle,
-        workspace_manager: &WorkspaceManager,
-        output_manager: &OutputManager,
+        space: &Space<Window>,
+        output: &Output,
         frame_target: Time<Monotonic>,
-        loop_handle: &LoopHandle<'_, NuonuoState>,
+        loop_handle: &LoopHandle<'_, GlobalData>,
         clock: &Clock<Monotonic>,
     ) {
         info!("rendering surface: {:?}", crtc);
@@ -738,10 +741,8 @@ impl Tty {
             .single_renderer(&surface.render_node)
             .unwrap();
 
-        let elements = workspace_manager
-            .current_workspace()
-            .space
-            .render_elements_for_output(&mut renderer, output_manager.current_output(), 1.0)
+        let elements = space
+            .render_elements_for_output(&mut renderer, output, 1.0)
             .unwrap();
 
         info!("elements: {:?}", elements);
@@ -767,8 +768,8 @@ impl Tty {
             .unwrap();
 
         update_primary_scanout_output(
-            &workspace_manager.current_workspace().space,
-            output_manager.current_output(),
+            space,
+            output,
             &states,
         );
         info!("rendered: {:?}", rendered);
@@ -779,8 +780,8 @@ impl Tty {
 
         if rendered {
             let output_presentation_feedback = take_presentation_feedback(
-                output_manager.current_output(),
-                &workspace_manager.current_workspace().space,
+                output,
+                space,
                 &states,
             );
             surface
@@ -800,8 +801,8 @@ impl Tty {
                     state.backend.tty().render(
                         node,
                         Some(crtc),
-                        &state.workspace_manager,
-                        &state.output_manager,
+                        &state.workspace_manager.current_workspace().space,
+                        &state.output_manager.current_output(),
                         next_frame_target,
                         &state.loop_handle,
                         &state.clock,

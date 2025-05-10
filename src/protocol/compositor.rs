@@ -7,13 +7,13 @@ use smithay::{
     },
 };
 
-use crate::state::{ClientState, NuonuoState};
+use crate::state::{ClientState, GlobalData};
 
 use crate::{protocol::xdg_shell, input::resize_grab};
 
-impl CompositorHandler for NuonuoState {
+impl CompositorHandler for GlobalData {
     fn compositor_state(&mut self) -> &mut CompositorState {
-        &mut self.compositor_state
+        &mut self.state.compositor_state
     }
 
     fn client_compositor_state<'a>(&self, client: &'a Client) -> &'a CompositorClientState {
@@ -50,4 +50,4 @@ impl CompositorHandler for NuonuoState {
         };
     }
 }
-delegate_compositor!(NuonuoState);
+delegate_compositor!(GlobalData);

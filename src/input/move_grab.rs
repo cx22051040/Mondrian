@@ -4,21 +4,21 @@ use smithay::{
     utils::{Logical, Point},
 };
 
-use crate::state::NuonuoState;
+use crate::state::GlobalData;
 
 pub struct PointerMoveSurfaceGrab {
     // TODO: can use smaller struct such as InputState
-    pub start_data: PointerGrabStartData<NuonuoState>,
+    pub start_data: PointerGrabStartData<GlobalData>,
     pub window: Window,
     pub initial_window_location: Point<i32, Logical>,
 }
 
-impl PointerGrab<NuonuoState> for PointerMoveSurfaceGrab {
-    fn start_data(&self) -> &PointerGrabStartData<NuonuoState> {
+impl PointerGrab<GlobalData> for PointerMoveSurfaceGrab {
+    fn start_data(&self) -> &PointerGrabStartData<GlobalData> {
         &self.start_data
     }
 
-    fn unset(&mut self, state: &mut NuonuoState) {
+    fn unset(&mut self, state: &mut GlobalData) {
         state
             .cursor_manager
             .set_cursor_image(CursorImageStatus::default_named());
@@ -26,16 +26,16 @@ impl PointerGrab<NuonuoState> for PointerMoveSurfaceGrab {
 
     fn frame(
         &mut self,
-        data: &mut NuonuoState,
-        handle: &mut smithay::input::pointer::PointerInnerHandle<'_, NuonuoState>,
+        data: &mut GlobalData,
+        handle: &mut smithay::input::pointer::PointerInnerHandle<'_, GlobalData>,
     ) {
         handle.frame(data);
     }
 
     fn button(
         &mut self,
-        data: &mut NuonuoState,
-        handle: &mut smithay::input::pointer::PointerInnerHandle<'_, NuonuoState>,
+        data: &mut GlobalData,
+        handle: &mut smithay::input::pointer::PointerInnerHandle<'_, GlobalData>,
         event: &smithay::input::pointer::ButtonEvent,
     ) {
         handle.button(data, event);
@@ -52,10 +52,10 @@ impl PointerGrab<NuonuoState> for PointerMoveSurfaceGrab {
 
     fn motion(
         &mut self,
-        data: &mut NuonuoState,
-        handle: &mut smithay::input::pointer::PointerInnerHandle<'_, NuonuoState>,
+        data: &mut GlobalData,
+        handle: &mut smithay::input::pointer::PointerInnerHandle<'_, GlobalData>,
         _focus: Option<(
-            <NuonuoState as smithay::input::SeatHandler>::PointerFocus,
+            <GlobalData as smithay::input::SeatHandler>::PointerFocus,
             Point<f64, Logical>,
         )>,
         event: &smithay::input::pointer::MotionEvent,
@@ -71,10 +71,10 @@ impl PointerGrab<NuonuoState> for PointerMoveSurfaceGrab {
 
     fn relative_motion(
         &mut self,
-        data: &mut NuonuoState,
-        handle: &mut smithay::input::pointer::PointerInnerHandle<'_, NuonuoState>,
+        data: &mut GlobalData,
+        handle: &mut smithay::input::pointer::PointerInnerHandle<'_, GlobalData>,
         focus: Option<(
-            <NuonuoState as smithay::input::SeatHandler>::PointerFocus,
+            <GlobalData as smithay::input::SeatHandler>::PointerFocus,
             Point<f64, Logical>,
         )>,
         event: &smithay::input::pointer::RelativeMotionEvent,
@@ -84,8 +84,8 @@ impl PointerGrab<NuonuoState> for PointerMoveSurfaceGrab {
 
     fn axis(
         &mut self,
-        data: &mut NuonuoState,
-        handle: &mut smithay::input::pointer::PointerInnerHandle<'_, NuonuoState>,
+        data: &mut GlobalData,
+        handle: &mut smithay::input::pointer::PointerInnerHandle<'_, GlobalData>,
         details: smithay::input::pointer::AxisFrame,
     ) {
         handle.axis(data, details);
@@ -93,8 +93,8 @@ impl PointerGrab<NuonuoState> for PointerMoveSurfaceGrab {
 
     fn gesture_swipe_begin(
         &mut self,
-        data: &mut NuonuoState,
-        handle: &mut smithay::input::pointer::PointerInnerHandle<'_, NuonuoState>,
+        data: &mut GlobalData,
+        handle: &mut smithay::input::pointer::PointerInnerHandle<'_, GlobalData>,
         event: &smithay::input::pointer::GestureSwipeBeginEvent,
     ) {
         handle.gesture_swipe_begin(data, event);
@@ -102,8 +102,8 @@ impl PointerGrab<NuonuoState> for PointerMoveSurfaceGrab {
 
     fn gesture_swipe_update(
         &mut self,
-        data: &mut NuonuoState,
-        handle: &mut smithay::input::pointer::PointerInnerHandle<'_, NuonuoState>,
+        data: &mut GlobalData,
+        handle: &mut smithay::input::pointer::PointerInnerHandle<'_, GlobalData>,
         event: &smithay::input::pointer::GestureSwipeUpdateEvent,
     ) {
         handle.gesture_swipe_update(data, event);
@@ -111,8 +111,8 @@ impl PointerGrab<NuonuoState> for PointerMoveSurfaceGrab {
 
     fn gesture_swipe_end(
         &mut self,
-        data: &mut NuonuoState,
-        handle: &mut smithay::input::pointer::PointerInnerHandle<'_, NuonuoState>,
+        data: &mut GlobalData,
+        handle: &mut smithay::input::pointer::PointerInnerHandle<'_, GlobalData>,
         event: &smithay::input::pointer::GestureSwipeEndEvent,
     ) {
         handle.gesture_swipe_end(data, event);
@@ -120,8 +120,8 @@ impl PointerGrab<NuonuoState> for PointerMoveSurfaceGrab {
 
     fn gesture_pinch_begin(
         &mut self,
-        data: &mut NuonuoState,
-        handle: &mut smithay::input::pointer::PointerInnerHandle<'_, NuonuoState>,
+        data: &mut GlobalData,
+        handle: &mut smithay::input::pointer::PointerInnerHandle<'_, GlobalData>,
         event: &smithay::input::pointer::GesturePinchBeginEvent,
     ) {
         handle.gesture_pinch_begin(data, event);
@@ -129,8 +129,8 @@ impl PointerGrab<NuonuoState> for PointerMoveSurfaceGrab {
 
     fn gesture_pinch_update(
         &mut self,
-        data: &mut NuonuoState,
-        handle: &mut smithay::input::pointer::PointerInnerHandle<'_, NuonuoState>,
+        data: &mut GlobalData,
+        handle: &mut smithay::input::pointer::PointerInnerHandle<'_, GlobalData>,
         event: &smithay::input::pointer::GesturePinchUpdateEvent,
     ) {
         handle.gesture_pinch_update(data, event);
@@ -138,8 +138,8 @@ impl PointerGrab<NuonuoState> for PointerMoveSurfaceGrab {
 
     fn gesture_pinch_end(
         &mut self,
-        data: &mut NuonuoState,
-        handle: &mut smithay::input::pointer::PointerInnerHandle<'_, NuonuoState>,
+        data: &mut GlobalData,
+        handle: &mut smithay::input::pointer::PointerInnerHandle<'_, GlobalData>,
         event: &smithay::input::pointer::GesturePinchEndEvent,
     ) {
         handle.gesture_pinch_end(data, event);
@@ -147,8 +147,8 @@ impl PointerGrab<NuonuoState> for PointerMoveSurfaceGrab {
 
     fn gesture_hold_begin(
         &mut self,
-        data: &mut NuonuoState,
-        handle: &mut smithay::input::pointer::PointerInnerHandle<'_, NuonuoState>,
+        data: &mut GlobalData,
+        handle: &mut smithay::input::pointer::PointerInnerHandle<'_, GlobalData>,
         event: &smithay::input::pointer::GestureHoldBeginEvent,
     ) {
         handle.gesture_hold_begin(data, event);
@@ -156,8 +156,8 @@ impl PointerGrab<NuonuoState> for PointerMoveSurfaceGrab {
 
     fn gesture_hold_end(
         &mut self,
-        data: &mut NuonuoState,
-        handle: &mut smithay::input::pointer::PointerInnerHandle<'_, NuonuoState>,
+        data: &mut GlobalData,
+        handle: &mut smithay::input::pointer::PointerInnerHandle<'_, GlobalData>,
         event: &smithay::input::pointer::GestureHoldEndEvent,
     ) {
         handle.gesture_hold_end(data, event);

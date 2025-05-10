@@ -13,16 +13,15 @@ use smithay::{
     utils::{Rectangle, Scale, Transform},
 };
 
-use crate::{render::border::compile_shaders, space::output::OutputManager, NuonuoState};
+use crate::{render::border::compile_shaders, manager::output::OutputManager, state::GlobalData};
 
 #[derive(Debug)]
 pub struct Winit {
     pub backend: WinitGraphicsBackend<GlesRenderer>,
 }
-
 impl Winit {
     pub fn new(
-        loop_handle: &LoopHandle<'_, NuonuoState>,
+        loop_handle: &LoopHandle<'_, GlobalData>,
         display_handle: &DisplayHandle,
     ) -> anyhow::Result<Self> {
         let (mut backend, winit) = winit::init::<GlesRenderer>()
@@ -37,10 +36,10 @@ impl Winit {
         compile_shaders(backend.renderer());
 
         loop_handle
-            .insert_source(winit, move |event, _, state| {
+            .insert_source(winit, move |event, _, data| {
                 match event {
                     WinitEvent::Resized { size, .. } => {
-                        state.output_manager.change_current_state(
+                        data.output_manager.change_current_state(
                             Some(OutputMode {
                                 size,
                                 refresh: 60_000,
@@ -50,28 +49,28 @@ impl Winit {
                             None,
                         );
                         // TODO: Handle scale change
-                        let scale = state.output_manager.current_output().current_scale();
+                        let scale = data.output_manager.current_output().current_scale();
                         let scale = Scale::from(scale.integer_scale());
 
-                        state.workspace_manager.modify_windows(Rectangle::from_size(size.to_logical(scale)));
+                        data.workspace_manager.modify_windows(Rectangle::from_size(size.to_logical(scale)));
                     }
                     WinitEvent::Input(event) => {
-                        state.process_input_event(event);
+                        data.process_input_event(event);
                     }
                     WinitEvent::Redraw => {
-                        let size = state.backend.winit().backend.window_size();
+                        let size = data.backend.winit().backend.window_size();
                         let damage = Rectangle::from_size(size);
 
-                        state
+                        data
                             .backend
                             .winit()
                             .render_output(
-                                state.output_manager.current_output(), 
-                                state.workspace_manager.current_workspace(), 
+                                data.output_manager.current_output(), 
+                                data.workspace_manager.current_workspace(), 
                                 vec![]
                             );
     
-                        state
+                        data
                             .backend
                             .winit()
                             .backend
@@ -79,25 +78,25 @@ impl Winit {
                             .unwrap();
     
                         // For each of the windows send the frame callbacks to tell them to draw next frame.
-                        state.workspace_manager.elements().for_each(
+                        data.workspace_manager.elements().for_each(
                             |window: &smithay::desktop::Window| {
                                 window.send_frame(
-                                    state.output_manager.current_output(),
-                                    state.start_time.elapsed(),
+                                    data.output_manager.current_output(),
+                                    data.start_time.elapsed(),
                                     Some(Duration::ZERO),
-                                    |_, _| Some(state.output_manager.current_output().clone()),
+                                    |_, _| Some(data.output_manager.current_output().clone()),
                                 )
                             },
                         );
     
                         // Refresh space nuonuo_state and handle certain events like enter/leave for outputs/windows
-                        state.workspace_manager.refresh();
-                        state.popups.cleanup();
+                        data.workspace_manager.refresh();
+                        data.popups.cleanup();
                         // Flush the outgoing buffers caontaining events so the clients get them.
-                        let _ = state.display_handle.flush_clients();
+                        let _ = data.display_handle.flush_clients();
     
                         // Ask for redraw to schedule new frame.
-                        state.backend.winit().backend.window().request_redraw();
+                        data.backend.winit().backend.window().request_redraw();
                     }
                     WinitEvent::CloseRequested => {}
                     _ => (),

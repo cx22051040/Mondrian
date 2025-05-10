@@ -2,7 +2,7 @@ use std::cell::RefCell;
 
 use smithay::{desktop::Window, utils::{Logical, Rectangle}};
 
-use crate::space::window::WindowExtElements;
+use crate::manager::window::WindowExtElements;
 
 pub mod tiled_tree;
 

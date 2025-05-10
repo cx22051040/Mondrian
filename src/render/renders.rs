@@ -1,21 +1,15 @@
-use smithay::backend::renderer::element::{
-    Kind, memory::MemoryRenderBufferRenderElement, surface::render_elements_from_surface_tree,
-};
-use smithay::backend::renderer::gles::GlesRenderer;
-use smithay::backend::renderer::{ImportAll, ImportMem, Renderer};
-use smithay::output::Output;
 use smithay::{
-    backend::renderer::{damage::OutputDamageTracker, element::AsRenderElements},
+    backend::renderer::{damage::OutputDamageTracker, element::{surface::WaylandSurfaceRenderElement, RenderElement}, gles::GlesRenderer, ImportAll, ImportMem, Renderer},
     desktop::space::render_output,
-    utils::Scale,
+    output::Output,
 };
 
 #[cfg(feature = "tty")]
 use crate::backend::tty::{Tty, TtyRenderer};
-use crate::backend::winit::Winit;
-use crate::space::workspace::Workspace;
-use crate::state::NuonuoState;
+use crate::{backend::winit::Winit, state::GlobalData};
+use crate::manager::workspace::Workspace;
 
+use super::elements::{OutputRenderElements, WindowRenderElement};
 use super::{
     border::BorderShader,
     cursor::{RenderCursor, XCursor},
@@ -23,22 +17,24 @@ use super::{
 };
 
 // TODO:
-impl NuonuoState {
-    // pub fn render_output<R>(&mut self) 
+impl GlobalData {
+    // pub fn get_render_elements<R>(&self, renderer: R) -> Vec<OutputRenderElements<R, WindowRenderElement<R>>>
     //     where 
     //         R: Renderer + ImportAll + ImportMem,
     //         R::TextureId: Clone + 'static,
     // {
-    //     let custom_elements: Vec<CustomRenderElements<R>> = vec![];
+    //     let mut output_render_elements: Vec<OutputRenderElements<R, WindowRenderElement<R>>> = vec![];
     //     // let custom_elements: Vec<CustomRenderElements> = self.get_render_elements();
     //     let output = self.output_manager.current_output();
-    //     let workspace = self.workspace_manager.current_workspace();
+    //     let space = &self.workspace_manager.current_workspace().space;
 
-    //     self.backend.render_output(
-    //         output,
-    //         workspace,
-    //         custom_elements,
+    //     let elements: Vec<smithay::desktop::space::SpaceRenderElements<R, WindowRenderElement<R>>> = space.render_elements_for_output(renderer, output, 1.0).unwrap();
+
+    //     output_render_elements.extend(
+    //         elements.into_iter().map(OutputRenderElements::Space)
     //     );
+
+    //     output_render_elements
     // }
 
     // // TODO: fix this, only use winit renderer

@@ -1,22 +1,19 @@
 pub mod winit;
-#[cfg(feature = "tty")]
 pub mod tty;
 
-use smithay::{backend::{allocator::dmabuf::Dmabuf, renderer::{ImportAll, ImportDma as _, ImportMem, Renderer}}, output::Output, reexports::calloop::LoopHandle, wayland::{dmabuf::{DmabufState, ImportNotifier}, shm::ShmState}};
-#[cfg(feature = "tty")]
+use smithay::reexports::calloop::LoopHandle;
+
 use tty::Tty;
 use winit::Winit;
 
-use crate::{render::elements::CustomRenderElements, space::{output::OutputManager, workspace::Workspace}, state::NuonuoState};
+use crate::{manager::output::OutputManager, state::GlobalData};
 
 pub enum Backend {
-    #[cfg(feature = "tty")]
     Tty(Tty),
     Winit(Winit),
 }
 
 impl Backend {
-    #[cfg(feature = "tty")]
     pub fn tty(&mut self) -> &mut Tty {
         if let Self::Tty(v) = self {
             v
@@ -33,7 +30,7 @@ impl Backend {
         }
     }
 
-    pub fn init(&mut self, output_manager: &mut OutputManager, loop_handle: &LoopHandle<'_, NuonuoState>) {
+    pub fn init(&mut self, output_manager: &mut OutputManager, loop_handle: &LoopHandle<'_, GlobalData>) {
         if let Self::Winit(v) = self {
             v.init(output_manager);
         } else if let Self::Tty(v) = self {
