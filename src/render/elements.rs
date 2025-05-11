@@ -42,19 +42,3 @@ impl <R: Renderer + ImportAll + ImportMem, E: RenderElement<R> + std::fmt::Debug
         }
     }
 }
-
-render_elements!(
-    pub WindowRenderElement<R> where R: ImportAll + ImportMem;
-    Window=WaylandSurfaceRenderElement<R>,
-    Decoration=SolidColorRenderElement,
-);
-
-impl<R: Renderer> std::fmt::Debug for WindowRenderElement<R> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Window(arg0) => f.debug_tuple("Window").field(arg0).finish(),
-            Self::Decoration(arg0) => f.debug_tuple("Decoration").field(arg0).finish(),
-            Self::_GenericCatcher(arg0) => f.debug_tuple("_GenericCatcher").field(arg0).finish(),
-        }
-    }
-}

@@ -1,6 +1,6 @@
 use anyhow::Context;
 use smithay::{
-    backend::allocator::dmabuf::Dmabuf, 
+    backend::{allocator::dmabuf::Dmabuf, renderer::ImportDma}, 
     delegate_data_device, delegate_dmabuf, delegate_output, delegate_seat, delegate_shm, delegate_viewporter, 
     desktop::PopupManager, 
     input::{Seat, SeatHandler, SeatState}, 
@@ -30,7 +30,18 @@ use smithay::{
 use crate::backend::tty::Tty;
 
 use crate::{
-    backend::{winit::Winit, Backend}, config::Configs, manager::{input::InputManager, output::OutputManager, window::WindowManager, workspace::WorkspaceManager}, render::cursor::{CursorManager, CursorTextureCache}
+    backend::{
+        winit::Winit, Backend
+    }, 
+    config::Configs, 
+    manager::{
+        input::InputManager, 
+        output::OutputManager, 
+        render::RenderManager, 
+        window::WindowManager, 
+        workspace::WorkspaceManager
+    }, 
+    render::cursor::CursorManager
 };
 
 #[derive(Default)]
@@ -64,9 +75,10 @@ pub struct GlobalData{
     pub output_manager: OutputManager,
     pub workspace_manager: WorkspaceManager,
     pub window_manager: WindowManager,
-    pub cursor_manager: CursorManager, //cursor_texture_cache: CursorTextureCache = Default::default()
+    pub cursor_manager: CursorManager,
     pub input_manager: InputManager,
     pub popups: PopupManager,
+    pub render_manager: RenderManager,
 
     // handles
     pub loop_handle: LoopHandle<'static, GlobalData>,
@@ -101,12 +113,13 @@ impl GlobalData {
         let nuonuo_state = State::new(&display_handle).expect("cannot make global state");
 
         // initial managers
-        let mut output_manager = OutputManager::new();
+        let mut output_manager = OutputManager::new(display_handle.clone());
         let mut workspace_manager = WorkspaceManager::new();
         let window_manager = WindowManager::new();
         let cursor_manager = CursorManager::new("default", 24);
         let input_manager = InputManager::new(backend.seat_name(), &display_handle);
         let popups = PopupManager::default();
+        let render_manager = RenderManager::new();
 
         // initial backend
         backend.init(&mut output_manager, &loop_handle);
@@ -131,6 +144,7 @@ impl GlobalData {
             cursor_manager,
             input_manager,
             popups,
+            render_manager,
 
             loop_handle,
             display_handle,
@@ -151,7 +165,6 @@ pub struct State {
     pub xdg_shell_state: XdgShellState,
     pub layer_shell_state: WlrLayerShellState,
     pub viewporter_state: ViewporterState,
-    pub dmabuf_state: DmabufState,
 }
 
 impl State {
@@ -166,7 +179,6 @@ impl State {
         let xdg_shell_state = XdgShellState::new::<GlobalData>(display_handle);
         let layer_shell_state = WlrLayerShellState::new::<GlobalData>(display_handle);
         let viewporter_state = ViewporterState::new::<GlobalData>(display_handle);
-        let dmabuf_state = DmabufState::new();
 
         Ok(State {
             compositor_state,
@@ -175,7 +187,6 @@ impl State {
             xdg_shell_state,
             layer_shell_state,
             viewporter_state,
-            dmabuf_state,
         })
     }
 }
@@ -235,17 +246,27 @@ delegate_shm!(GlobalData);
 
 impl DmabufHandler for GlobalData {
     fn dmabuf_state(&mut self) -> &mut DmabufState {
-        &mut self.state.dmabuf_state
+        &mut self.backend.winit().dmabuf_state.0
     }
 
     fn dmabuf_imported(
         &mut self,
         _global: &DmabufGlobal,
-        _dmabuf: Dmabuf,
-        _notifier: ImportNotifier,
+        dmabuf: Dmabuf,
+        notifier: ImportNotifier,
     ) {
-        info!("dmabuf_imported");
-        todo!()
+        if self
+            .backend
+            .winit()
+            .backend
+            .renderer()
+            .import_dmabuf(&dmabuf, None)
+            .is_ok()
+        {
+            let _ = notifier.successful::<GlobalData>();
+        } else {
+            notifier.failed();
+        }
     }
 }
 delegate_dmabuf!(GlobalData);

@@ -94,8 +94,6 @@ impl GlobalData {
                         return
                     }
                 };
-
-
     
                 let under = self.surface_under(position);
     

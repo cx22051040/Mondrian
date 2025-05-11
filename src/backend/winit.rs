@@ -5,19 +5,19 @@ use smithay::backend::renderer::ImportEgl;
 
 use smithay::{
     backend::{
-        renderer::gles::GlesRenderer,
-        winit::{self, WinitEvent, WinitGraphicsBackend},
+        egl::EGLDevice, renderer::{damage::OutputDamageTracker, gles::GlesRenderer, ImportDma}, winit::{self, WinitEvent, WinitGraphicsBackend}
     },
     output::{Mode as OutputMode, Subpixel},
     reexports::{calloop::LoopHandle, wayland_server::DisplayHandle},
-    utils::{Rectangle, Scale, Transform},
+    utils::{Rectangle, Scale, Transform}, wayland::dmabuf::{DmabufFeedback, DmabufFeedbackBuilder, DmabufGlobal, DmabufState},
 };
 
-use crate::{render::border::compile_shaders, manager::output::OutputManager, state::GlobalData};
+use crate::{manager::{input::InputManager, output::OutputManager, render::RenderManager, workspace::WorkspaceManager}, render::{border::compile_shaders, cursor::CursorManager}, state::GlobalData};
 
 #[derive(Debug)]
 pub struct Winit {
     pub backend: WinitGraphicsBackend<GlesRenderer>,
+    pub dmabuf_state: (DmabufState, DmabufGlobal, Option<DmabufFeedback>),
 }
 impl Winit {
     pub fn new(
@@ -25,13 +25,52 @@ impl Winit {
         display_handle: &DisplayHandle,
     ) -> anyhow::Result<Self> {
         let (mut backend, winit) = winit::init::<GlesRenderer>()
-            .map_err(|e| anyhow::anyhow!("Winit init error: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("Failed to initialize Winit backend: {}", e))?;
+
+        let render_node = EGLDevice::device_for_display(
+                backend.renderer().egl_context().display()
+            )
+            .and_then(|device| device.try_get_render_node());
+
+        let dmabuf_default_feedback = match render_node {
+            Ok(Some(node)) => {
+                let dmabuf_format = backend.renderer().dmabuf_formats();
+                let dmabuf_default_feedback = DmabufFeedbackBuilder::new(
+                        node.dev_id(), dmabuf_format
+                    )
+                    .build()
+                    .unwrap();
+                Some(dmabuf_default_feedback)
+            }
+            Ok(None) => {
+                warn!("Failed to query render node, dmabuf will use v3");
+                None
+            }
+            Err(err) => {
+                warn!(?err, "Failed to egl device for display, dmabuf will use v3");
+                None
+            }
+        };
+
+        let dmabuf_state = if let Some(default_feedback) = dmabuf_default_feedback {
+            let mut dmabuf_state = DmabufState::new();
+            let dmabuf_global = dmabuf_state
+                .create_global_with_default_feedback::<GlobalData>(display_handle, &default_feedback);
+
+            (dmabuf_state, dmabuf_global, Some(default_feedback))
+        } else {
+            let dmabuf_formats = backend.renderer().dmabuf_formats();
+            let mut dmabuf_state = DmabufState::new();
+            let dmabuf_global = dmabuf_state
+                .create_global::<GlobalData>(display_handle, dmabuf_formats);
+            (dmabuf_state, dmabuf_global, None)
+        };
 
         #[cfg(feature = "egl")]
         if backend.renderer().bind_wl_display(&display_handle).is_ok() {
             tracing::info!("EGL hardware-acceleration enabled");
         };
-    
+
         // TODO: tidy it
         compile_shaders(backend.renderer());
 
@@ -48,7 +87,6 @@ impl Winit {
                             None,
                             None,
                         );
-                        // TODO: Handle scale change
                         let scale = data.output_manager.current_output().current_scale();
                         let scale = Scale::from(scale.integer_scale());
 
@@ -61,13 +99,17 @@ impl Winit {
                         let size = data.backend.winit().backend.window_size();
                         let damage = Rectangle::from_size(size);
 
+                        let damage_traker = &mut OutputDamageTracker::from_output(data.output_manager.current_output());
                         data
                             .backend
                             .winit()
                             .render_output(
-                                data.output_manager.current_output(), 
-                                data.workspace_manager.current_workspace(), 
-                                vec![]
+                                damage_traker,
+                                &data.render_manager,
+                                &data.output_manager,
+                                &data.workspace_manager,
+                                &mut data.cursor_manager,
+                                &data.input_manager,
                             );
     
                         data
@@ -79,7 +121,7 @@ impl Winit {
     
                         // For each of the windows send the frame callbacks to tell them to draw next frame.
                         data.workspace_manager.elements().for_each(
-                            |window: &smithay::desktop::Window| {
+                            |window| {
                                 window.send_frame(
                                     data.output_manager.current_output(),
                                     data.start_time.elapsed(),
@@ -106,6 +148,7 @@ impl Winit {
     
         Ok(Self { 
             backend,
+            dmabuf_state,
         }
         )
     }
@@ -132,5 +175,35 @@ impl Winit {
             Some((0, 0).into())
         );
         output_manager.set_preferred(mode);
+    }
+
+    pub fn render_output(
+        &mut self, 
+        damage_tracker: &mut OutputDamageTracker, 
+        render_manager: &RenderManager,
+        output_manager: &OutputManager,
+        workspace_manager: &WorkspaceManager,
+        cursor_manager: &mut CursorManager,
+        input_manager: &InputManager,
+    ) {
+
+        let (renderer, mut framebuffer) = self.backend.bind().unwrap();
+
+        let elements = render_manager.get_render_elements(
+            renderer,
+            output_manager,
+            workspace_manager,
+            cursor_manager,
+            input_manager,
+        );
+
+        let res = damage_tracker
+            .render_output(
+                renderer, 
+                &mut framebuffer, 
+                0, 
+                &elements, 
+                [1.0, 0.0, 0.0, 1.0],
+            );
     }
 }

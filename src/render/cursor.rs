@@ -70,6 +70,7 @@ pub struct CursorManager {
     pub size: u8,
     pub current_cursor: CursorImageStatus,
     pub named_cursor_cache: RefCell<XCursorCache>,
+    pub cursor_texture_cache: CursorTextureCache,
 }
 
 impl CursorManager {
@@ -88,6 +89,7 @@ impl CursorManager {
             size,
             current_cursor: CursorImageStatus::default_named(),
             named_cursor_cache: Default::default(),
+            cursor_texture_cache: Default::default(),
         }
     }
 

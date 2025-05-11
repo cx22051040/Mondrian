@@ -1,6 +1,6 @@
 use smithay::{
     output::{Mode, Output, PhysicalProperties, Scale, Subpixel},
-    reexports::{wayland_server::{Display, DisplayHandle}},
+    reexports::wayland_server::{Display, DisplayHandle},
     utils::{Logical, Point, Raw, Size, Transform},
     wayland::output::OutputManagerState,
 };
@@ -55,21 +55,18 @@ impl OutputElement {
 pub struct OutputManager {
     pub outputs: Vec<OutputElement>,
     pub output_manager_state: OutputManagerState,
-    pub display: Display<GlobalData>,
+    pub display_handle: DisplayHandle,
 }
 
 impl OutputManager {
-    pub fn new() -> Self {
-
-        let display: Display<GlobalData> = Display::new().unwrap();
-        let display_handle = display.handle();
+    pub fn new(display_handle: DisplayHandle) -> Self {
 
         let output_manager_state = OutputManagerState::new_with_xdg_output::<GlobalData>(&display_handle);
 
         Self {
             outputs: Vec::new(),
             output_manager_state,
-            display,
+            display_handle,
         }
     }
 
@@ -109,8 +106,8 @@ impl OutputManager {
             .change_current_state(mode, transform, scale, location);
     }
 
-    pub fn get_display_handle(&self) -> DisplayHandle {
-        self.display.handle()
+    pub fn get_display_handle(&self) -> &DisplayHandle {
+        &self.display_handle
     }
 }
 

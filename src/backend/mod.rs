@@ -1,7 +1,7 @@
 pub mod winit;
 pub mod tty;
 
-use smithay::reexports::calloop::LoopHandle;
+use smithay::{backend::renderer::{ImportAll, ImportMem, Renderer}, reexports::calloop::LoopHandle};
 
 use tty::Tty;
 use winit::Winit;
@@ -49,20 +49,4 @@ impl Backend {
             panic!("backend is not Winit");
         }
     }
-
-    // pub fn render_output<R>(&mut self, output: &Output, workspace: &Workspace, custom_elements: Vec<CustomRenderElements<R>>) 
-    //     where
-    //         R: Renderer + ImportAll + ImportMem,
-    //         R::TextureId: Clone + 'static,
-    // {
-    //     if let Self::Winit(v) = self {
-    //         v.render_output(output, workspace, custom_elements);
-    //     } else if let Self::Tty(v) = self {
-    //         v.render_output(output, workspace, custom_elements);
-    //     }
-    //     else {
-    //         panic!("backend is not Winit");
-    //     }
-    // }
-    
 }
