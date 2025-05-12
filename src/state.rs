@@ -124,9 +124,11 @@ impl GlobalData {
         // initial backend
         backend.init(&mut output_manager, &loop_handle);
 
-        // TODO: tidy
-        workspace_manager.add_workspace(output_manager.current_output(), (0, 0), None, true);
-        workspace_manager.add_workspace(output_manager.current_output(), (0, 0), None, false);
+        // TODO: just easy for test workspace exchange
+        let output = output_manager.current_output();
+        let output_geo = output_manager.output_geometry(output).expect("workspace add test error");
+        workspace_manager.add_workspace(output, output_geo, None, true);
+        workspace_manager.add_workspace(output, output_geo, None, false);
         
         // load configs
         let configs = Configs::new("src/config/keybindings.conf");

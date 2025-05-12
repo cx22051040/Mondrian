@@ -8,11 +8,13 @@ use smithay::{
     render_elements,
 };
 
+use super::border::BorderRenderElement;
+
 render_elements! {
     pub CustomRenderElements<R> where R: ImportAll + ImportMem;
     Surface=WaylandSurfaceRenderElement<R>,
     NamedPointer=MemoryRenderBufferRenderElement<R>,
-    // Border=PixelShaderElement,
+    Border=BorderRenderElement<R>,
 }
 
 impl <R: Renderer + ImportAll + ImportMem> std::fmt::Debug for CustomRenderElements<R> {
@@ -20,7 +22,7 @@ impl <R: Renderer + ImportAll + ImportMem> std::fmt::Debug for CustomRenderEleme
         match self {
             Self::Surface(arg0) => f.debug_tuple("Surface").field(arg0).finish(),
             Self::NamedPointer(arg0) => f.debug_tuple("NamedPointer").field(arg0).finish(),
-            // Self::Border(arg0) => f.debug_tuple("Border").field(arg0).finish(),
+            Self::Border(arg0) => f.debug_tuple("Border").field(arg0).finish(),
             Self::_GenericCatcher(arg0) => f.debug_tuple("_GenericCatcher").field(arg0).finish(),
         }
     }

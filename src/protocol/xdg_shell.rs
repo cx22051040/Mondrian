@@ -1,6 +1,5 @@
 use crate::{
-    input::{move_grab::PointerMoveSurfaceGrab, resize_grab::ResizeSurfaceGrab},
-    state::GlobalData,
+    input::{move_grab::PointerMoveSurfaceGrab, resize_grab::ResizeSurfaceGrab}, manager::window::WindowExt, state::GlobalData
 };
 use smithay::{desktop::{find_popup_root_surface, get_popup_toplevel_coords}, input::pointer::{
     CursorIcon, CursorImageStatus, GrabStartData as PointerGrabStartData,
@@ -76,7 +75,7 @@ impl XdgShellHandler for GlobalData {
             .add_window(window.clone(), self.workspace_manager.current_workspace().id());
 
         let focus = self.get_focus();
-        self.workspace_manager.map_tiled_element(window, self.output_manager.current_output(), focus, true);
+        self.workspace_manager.map_tiled_element(window, focus, true);
     }
 
     fn new_popup(&mut self, surface: PopupSurface, _positioner: PositionerState) {
@@ -204,8 +203,21 @@ impl GlobalData {
         };
 
         let output = self.output_manager.current_output();
-        let output_geo = self.workspace_manager.output_geometry(output);
-        let window_geo = self.workspace_manager.element_geometry(window);
+        let output_geo = match self.output_manager.output_geometry(&output) {
+            Some(g) => g,
+            None => {
+                warn!("Failed to get output {:?} geometry", output);
+                return
+            }
+        };
+
+        let window_geo = match window.get_rec() {
+            Some(g) => g,
+            None => {
+                warn!("Failed to get window {:?} geometry", window);
+                return
+            }
+        };
 
         // The target geometry for the positioner should be relative to its parent's geometry, so
         // we will compute that here.

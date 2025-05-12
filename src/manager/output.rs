@@ -1,8 +1,5 @@
 use smithay::{
-    output::{Mode, Output, PhysicalProperties, Scale, Subpixel},
-    reexports::wayland_server::{Display, DisplayHandle},
-    utils::{Logical, Point, Raw, Size, Transform},
-    wayland::output::OutputManagerState,
+    desktop::{Space, Window}, output::{Mode, Output, PhysicalProperties, Scale, Subpixel}, reexports::wayland_server::DisplayHandle, utils::{Logical, Point, Raw, Rectangle, Size, Transform}, wayland::output::OutputManagerState
 };
 
 use crate::state::GlobalData;
@@ -14,18 +11,7 @@ pub struct OutputElement {
 }
 
 impl OutputElement {
-    pub fn new(name: String, size: Size<i32, Raw>, subpixel: Subpixel, make: String, model: String, activate: bool, display_handle: &DisplayHandle) -> Self {
-        let output = Output::new(
-            name,
-            PhysicalProperties {
-                size,
-                subpixel,
-                make,
-                model,
-            }
-        );
-        let _ = output.create_global::<GlobalData>(display_handle);
-
+    pub fn new(output: Output, activate: bool) -> Self {
         Self {
             output,
             activate,
@@ -56,24 +42,43 @@ pub struct OutputManager {
     pub outputs: Vec<OutputElement>,
     pub output_manager_state: OutputManagerState,
     pub display_handle: DisplayHandle,
+    // This space does not actually contain any windows, but all outputs are
+    // mapped into it
+    pub output_space: Space<Window>,
 }
 
 impl OutputManager {
     pub fn new(display_handle: DisplayHandle) -> Self {
 
         let output_manager_state = OutputManagerState::new_with_xdg_output::<GlobalData>(&display_handle);
+        let output_space: Space<Window> = Default::default();
 
         Self {
             outputs: Vec::new(),
             output_manager_state,
             display_handle,
+            output_space,
         }
     }
 
-    pub fn add_output(&mut self, name: String, size: Size<i32, Raw>, subpixel: Subpixel, make: String, model: String, activate: bool) {
+    pub fn add_output(&mut self, name: String, size: Size<i32, Raw>, subpixel: Subpixel, make: String, model: String, location: Point<i32, Logical>, activate: bool) {
+
+        let output = Output::new(
+            name,
+            PhysicalProperties {
+                size,
+                subpixel,
+                make,
+                model,
+            }
+        );
+        let _ = output.create_global::<GlobalData>(&self.get_display_handle());
+
+        self.output_space.map_output(&output, location);
+
         self
             .outputs
-            .push(OutputElement::new(name, size, subpixel, make, model, activate, &self.get_display_handle()));
+            .push(OutputElement::new(output, activate));
     }
 
     pub fn _remove_output() {
@@ -109,5 +114,8 @@ impl OutputManager {
     pub fn get_display_handle(&self) -> &DisplayHandle {
         &self.display_handle
     }
-}
 
+    pub fn output_geometry(&self, output: &Output) -> Option<Rectangle<i32, Logical>> {
+        self.output_space.output_geometry(output)
+    }
+}

@@ -12,7 +12,7 @@ use smithay::{
     utils::{Rectangle, Scale, Transform}, wayland::dmabuf::{DmabufFeedback, DmabufFeedbackBuilder, DmabufGlobal, DmabufState},
 };
 
-use crate::{manager::{input::InputManager, output::OutputManager, render::RenderManager, workspace::WorkspaceManager}, render::{border::compile_shaders, cursor::CursorManager}, state::GlobalData};
+use crate::{manager::{input::InputManager, output::OutputManager, render::RenderManager, workspace::WorkspaceManager}, render::cursor::CursorManager, state::GlobalData};
 
 #[derive(Debug)]
 pub struct Winit {
@@ -70,9 +70,6 @@ impl Winit {
         if backend.renderer().bind_wl_display(&display_handle).is_ok() {
             tracing::info!("EGL hardware-acceleration enabled");
         };
-
-        // TODO: tidy it
-        compile_shaders(backend.renderer());
 
         loop_handle
             .insert_source(winit, move |event, _, data| {
@@ -159,8 +156,9 @@ impl Winit {
             (0, 0).into(), 
             Subpixel::Unknown, 
             "Smithay".into(), 
-            "Winit".into(), 
-            true
+            "Winit".into(),
+            (0, 0).into(),
+            true,
         );
         
         let mode = OutputMode {

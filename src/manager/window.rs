@@ -26,6 +26,8 @@ impl WindowID {
 pub trait WindowExt {
     fn set_id(&self) -> WindowID;
     fn get_id(&self) -> Option<WindowID>;
+    fn set_rec(&self, new_rec: Rectangle<i32, Logical>);
+    fn get_rec(&self) -> Option<Rectangle<i32, Logical>>;
 }
 
 impl WindowExt for Window {
@@ -40,6 +42,22 @@ impl WindowExt for Window {
             .user_data()
             .get::<RefCell<WindowExtElements>>()
             .and_then(|e| Some(e.borrow().id.clone()))
+    }
+
+    fn set_rec(&self, new_rec: Rectangle<i32, Logical>) {
+        if let Some(e) = self
+            .user_data()
+            .get::<RefCell<WindowExtElements>>() 
+        {
+            e.borrow_mut().rec = new_rec;
+        }
+    }
+
+    fn get_rec(&self) -> Option<Rectangle<i32, Logical>> {
+        self.
+            user_data()
+            .get::<RefCell<WindowExtElements>>()
+            .and_then(|e| Some(e.borrow().rec.clone()))
     }
 }
 

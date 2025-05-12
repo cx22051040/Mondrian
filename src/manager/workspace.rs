@@ -1,13 +1,12 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use smithay::{
-    desktop::{Space, Window},
-    output::Output,
-    reexports::{wayland_protocols::xdg::shell::server::xdg_toplevel, wayland_server::protocol::wl_surface::WlSurface},
-    utils::{Logical, Point, Rectangle},
+    desktop::{Space, Window}, output::Output, reexports::{wayland_protocols::xdg::shell::server::xdg_toplevel, wayland_server::protocol::wl_surface::WlSurface}, utils::{Logical, Point, Rectangle}
 };
 
-use crate::layout::{tiled_tree::{LayoutScheme, TiledTree}, LayoutHandle};
+use crate::layout::tiled_tree::{LayoutScheme, TiledTree};
+
+use super::window::WindowExt;
 
 
 static NEXT_ID: AtomicUsize = AtomicUsize::new(1);
@@ -34,18 +33,21 @@ pub struct Workspace {
     pub layout: LayoutScheme,
     pub layout_tree: Option<TiledTree>,
     pub focus: Option<Window>,
+    pub output_geometry: Rectangle<i32, Logical>,
 }
 
 impl Workspace {
-    pub fn new(output: &Output, location: (i32, i32), layout: LayoutScheme) -> Self {
+    pub fn new(output: &Output, output_geometry: Rectangle<i32, Logical>, layout: LayoutScheme) -> Self {
         let mut space: Space<Window> = Default::default();
-        space.map_output(output, location);
+        space.map_output(output, output_geometry.loc);
+
         Self {
             id: WorkspaceId::next(),
             space,
             layout,
             layout_tree: None,
             focus: None,
+            output_geometry,
         }
     }
 
@@ -60,19 +62,17 @@ impl Workspace {
     pub fn map_tiled_element(
         &mut self,
         window: Window,
-        output: &Output,
         focused_surface: Option<WlSurface>,
         activate: bool,
     ) {
         self.refresh();
-        let output_geo = self.output_geometry(output);
 
         if self.layout_tree.is_none() {
             window.toplevel().unwrap().with_pending_state(|state| {
-                state.size = Some(output_geo.size - (GAP*2, GAP*2).into())
+                state.size = Some(self.output_geometry.size - (GAP*2, GAP*2).into())
             });
             window.toplevel().unwrap().send_pending_configure();
-            window.set_rec(Rectangle::new((GAP, GAP).into(), (output_geo.size - (GAP*2, GAP*2).into()).into()));
+            window.set_rec(Rectangle::new((GAP, GAP).into(), (self.output_geometry.size - (GAP*2, GAP*2).into()).into()));
             self.layout_tree = Some(TiledTree::new(window.clone()));
             self.map_element(window, (GAP, GAP).into(), activate);
             return;
@@ -136,17 +136,12 @@ impl Workspace {
         self.space.element_location(window).unwrap()
     }
 
-    pub fn element_geometry(&self, window: &Window) -> Rectangle<i32, Logical> {
-        self.space.element_geometry(window).unwrap()
+    pub fn element_geometry(&self, window: &Window) -> Option<Rectangle<i32, Logical>> {
+        self.space.element_geometry(window)
     }
 
     pub fn elements(&self) -> impl DoubleEndedIterator<Item = &Window> + ExactSizeIterator {
         self.space.elements()
-    }
-
-    // TODO: move this to outputmanager
-    pub fn output_geometry(&self, output: &Output) -> Rectangle<i32, Logical> {
-        self.space.output_geometry(output).unwrap()
     }
 
     // deactivate all window
@@ -192,6 +187,7 @@ impl Workspace {
     }
 
     pub fn modify_windows(&mut self, rec: Rectangle<i32, Logical>) {
+        self.output_geometry = rec;
         if let Some(layout_tree) = &mut self.layout_tree {
             let root_id = layout_tree.get_root().unwrap();
             layout_tree.modify(root_id, Rectangle::new((GAP, GAP).into(), (rec.size - (GAP*2, GAP*2).into()).into()));
@@ -255,13 +251,17 @@ impl Workspace {
         }
     }
 
-    pub fn set_focus(&mut self, surface: WlSurface) {
-        let focus_window = self
+    pub fn set_focus(&mut self, surface: Option<WlSurface>) {
+        if let Some(surface) = surface {
+            let focus_window = self
             .elements()
             .find(|w| *w.toplevel().unwrap().wl_surface() == surface);
 
-        if let Some(window) = focus_window {
-            self.focus = Some(window.clone())
+            if let Some(window) = focus_window {
+                self.focus = Some(window.clone())
+            }
+        } else {
+            self.focus = None;
         }
     }
 
@@ -289,13 +289,13 @@ impl WorkspaceManager {
     pub fn add_workspace(
         &mut self,
         output: &Output,
-        location: (i32, i32),
+        output_geometry: Rectangle<i32, Logical>,
         layout: Option<LayoutScheme>,
         activate: bool,
     ) {
         let workspace = Workspace::new(
             output,
-            location,
+            output_geometry,
             layout.unwrap_or_else(|| LayoutScheme::Default),
         );
 
@@ -342,11 +342,10 @@ impl WorkspaceManager {
     pub fn map_tiled_element(
         &mut self,
         window: Window,
-        output: &Output,
         focused_surface: Option<WlSurface>,
         activate: bool,
     ) {
-        self.current_workspace_mut().map_tiled_element(window, output, focused_surface, activate);
+        self.current_workspace_mut().map_tiled_element(window, focused_surface, activate);
     }
 
     pub fn raise_element(&mut self, window: &Window, activate: bool) {
@@ -370,7 +369,7 @@ impl WorkspaceManager {
         self.current_workspace().element_location(window)
     }
 
-    pub fn element_geometry(&self, window: &Window) -> Rectangle<i32, Logical> {
+    pub fn element_geometry(&self, window: &Window) -> Option<Rectangle<i32, Logical>> {
         self.current_workspace().element_geometry(window)
     }
 
@@ -383,10 +382,6 @@ impl WorkspaceManager {
         self.elements()
             .find(|w| w.toplevel().unwrap().wl_surface() == wl_surface)
             .unwrap()
-    }
-
-    pub fn output_geometry(&self, output: &Output) -> Rectangle<i32, Logical> {
-        self.current_workspace().output_geometry(output)
     }
 
     pub fn _workspaces_counts(&self) -> usize {
@@ -409,8 +404,12 @@ impl WorkspaceManager {
         self.current_workspace_mut().resize(focused_surface, offset);
     }
 
-    pub fn set_focus(&mut self, surface: WlSurface) {
+    pub fn set_focus(&mut self, surface: Option<WlSurface>) {
         self.current_workspace_mut().set_focus(surface);
+    }
+
+    pub fn get_focus(&self) -> &Option<Window> {
+        &self.current_workspace().get_focus()
     }
 
 }

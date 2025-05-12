@@ -15,17 +15,15 @@ use smithay::{
 use crate::{
     backend::tty::TtyRenderer, 
     render::{
-        border::BorderShader, 
-        cursor::{
+        border::BorderRenderElement, cursor::{
             CursorManager, RenderCursor, XCursor
-        }, 
-        elements::{
+        }, elements::{
             CustomRenderElements, OutputRenderElements
         }
     }
 };
 
-use super::{input::InputManager, output::OutputManager, workspace::WorkspaceManager};
+use super::{input::InputManager, output::OutputManager, window::WindowExt, workspace::WorkspaceManager};
 
 /// Trait with our main renderer requirements to save on the typing.
 pub trait NuonuoRenderer:
@@ -95,7 +93,29 @@ impl RenderManager {
     ) -> Vec<OutputRenderElements<R, WaylandSurfaceRenderElement<R>>>
     {
         let mut output_elements = vec![];
+        
+        // First is Cursor
+        output_elements.extend(
+            self
+                .get_cursor_render_elements(
+                    renderer, 
+                    output_manager, 
+                    cursor_manager, 
+                    input_manager
+                )
+                .into_iter()
+                .map(OutputRenderElements::Custom)
+        );
 
+        // Then Some Control elements
+
+        // Then Fullscreen
+        // TODO:
+
+        // Then LayerShell Overlay and Top
+        // TODO:
+
+        // Then common Windows
         output_elements.extend(
             self
                 .get_windows_render_elements(
@@ -107,18 +127,19 @@ impl RenderManager {
                 .map(OutputRenderElements::Space)
         );
 
+        // Then Shader and CustomRenderElements
         output_elements.extend(
             self
-                .get_cursor_render_elements(
+                .get_border_render_elements(
                     renderer, 
-                    output_manager, 
-                    workspace_manager, 
-                    cursor_manager, 
-                    input_manager
+                    workspace_manager
                 )
                 .into_iter()
                 .map(OutputRenderElements::Custom)
         );
+
+        // Then LayerShell Bottom and Background
+        // TODO:
 
         output_elements
     }
@@ -133,29 +154,37 @@ impl RenderManager {
         let space = &workspace_manager.current_workspace().space;
         let output = output_manager.current_output();
 
-        space
-            .render_elements_for_output(renderer, output, 1.0)
-            .unwrap()
+        match space
+            .render_elements_for_output(renderer, output, 1.0) {
+                Ok(r) => r,
+                Err(err) => {
+                    warn!("Failed to get windows render elements: {:?}", err);
+                    return vec![]
+                }
+            }
     }
 
     pub fn get_cursor_render_elements<R: NuonuoRenderer>(
         &self, 
         renderer: &mut R,
         output_manager: &OutputManager,
-        workspace_manager: &WorkspaceManager,
         cursor_manager: &mut CursorManager,
         input_manager: &InputManager,
     ) -> Vec<CustomRenderElements<R>> 
     {
         cursor_manager.check_cursor_image_surface_alive();
 
-        let output_scale = output_manager.current_output().current_scale();
-        let output_pos = workspace_manager
-            .current_workspace()
-            .space
-            .output_geometry(output_manager.current_output())
-            .unwrap()
-            .loc;
+        let output = output_manager.current_output();
+        let output_scale = output.current_scale();
+
+        let output_geo = match output_manager.output_geometry(&output) {
+            Some(g) => g,
+            None => {
+                warn!("Failed to get output {:?} geometry", output);
+                return vec![]
+            }
+        };
+        let output_pos = output_geo.loc;
 
         let pointer = input_manager.get_pointer();
         let pointer = match pointer {
@@ -225,35 +254,28 @@ impl RenderManager {
         pointer_render_elements
     }
 
-    // pub fn get_border_render_elements<R: NuonuoRenderer>(&mut self, renderer: &mut R) -> Vec<CustomRenderElements<R>> {
-    //     let mut elements: Vec<CustomRenderElements<R>> = vec![];
+    pub fn get_border_render_elements<R: NuonuoRenderer>(&self, renderer: &mut R, workspace_manager: &WorkspaceManager) -> Vec<CustomRenderElements<R>> {
+        let mut elements: Vec<CustomRenderElements<R>> = vec![];
 
-    //     let focus_surface = self.seat.get_keyboard().unwrap().current_focus();
-    //     if let Some(surface) = focus_surface {
+        let focus = workspace_manager.get_focus();
+        if let Some(window) = focus {
             
-    //         let focused_window = self
-    //             .workspace_manager
-    //             .current_workspace()
-    //             .space
-    //             .elements()
-    //             .find(|w| *w.toplevel().unwrap().wl_surface() == surface);
+            let window_geo = match window.get_rec() {
+                Some(g) => g,
+                None => {
+                    warn!("Failed to get window {:?} geometry", window);
+                    return vec![]
+                }
+            };
+    
+            // elements.push(CustomRenderElements::Border(BorderRenderElement::element(
+            //     renderer,
+            //     window_geo,
+            //     1.0,
+            // )));
+        }
 
-    //         if let Some(window) = focused_window {
-    //             let geometry = self
-    //                 .workspace_manager
-    //                 .current_workspace()
-    //                 .space
-    //                 .element_geometry(window)
-    //                 .unwrap();
-    //             elements.push(CustomRenderElements::Border(BorderShader::element(
-    //                 renderer,
-    //                 geometry,
-    //                 1.0,
-    //             )));
-    //         }
-    //     }
-
-    //     elements
-    // }
+        elements
+    }
 }
 

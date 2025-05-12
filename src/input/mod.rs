@@ -81,7 +81,13 @@ impl GlobalData {
                 let serial = SERIAL_COUNTER.next_serial();
                 
                 let output = self.output_manager.current_output();
-                let output_geo = self.workspace_manager.output_geometry(output);
+                let output_geo = match self.output_manager.output_geometry(output) {
+                    Some(o) => o,
+                    None => {
+                        warn!("Failed to get output {:?} geometry", output);
+                        return
+                    }
+                };
 
                 // because the absolute move, need to plus the output location
                 let position = event.position_transformed(output_geo.size) + output_geo.loc.to_f64();
@@ -98,11 +104,7 @@ impl GlobalData {
                 let under = self.surface_under(position);
     
                 // set focus
-                if let Some((surface, _)) = under.clone() {
-                    self.set_focus(surface);
-                } else {
-                    self.modify_all_windows_state(false);
-                }
+                self.set_focus(under.clone().map(|(surface, _)| surface));
 
                 pointer.motion(
                     self,
@@ -177,9 +179,16 @@ impl GlobalData {
     
     pub fn surface_under (&mut self, position: Point<f64, Logical>) -> Option<(WlSurface, Point<f64, Logical>)> {
         // get the surface under giving position,
-        let output = self.output_manager.current_output().clone();
-        let output_geo = self.workspace_manager.output_geometry(&output);
-        let layer_map = layer_map_for_output(&output);
+        let output = self.output_manager.current_output();
+        let output_geo = match self.output_manager.output_geometry(output) {
+            Some(o) => o,
+            None => {
+                warn!("Failed to get output {:?} geometry", output);
+                return None
+            }
+        };
+
+        let layer_map = layer_map_for_output(output);
 
         if let Some(layer) = layer_map
             .layer_under(WlrLayer::Overlay, position - output_geo.loc.to_f64())
@@ -213,20 +222,16 @@ impl GlobalData {
     }
 
     pub fn action_pointer_button(&mut self, position: Point<f64, Logical>) {
-
-        let serial = SERIAL_COUNTER.next_serial();
-
-        let keyboard = self.input_manager.get_keyboard();
-        let keyboard = match keyboard {
-            Some(k) => k,
+        // TODO: remove clone
+        let output = self.output_manager.current_output().clone();
+        let output_geo = match self.output_manager.output_geometry(&output) {
+            Some(g) => g,
             None => {
-                error!("get keyboard error");
+                warn!("Failed to get output {:?} geometry", output);
                 return
             }
         };
 
-        let output = self.output_manager.current_output().clone();
-        let output_geo = self.workspace_manager.output_geometry(&output);
         let layer_map = layer_map_for_output(&output);
 
         // TODO: First is full screen
@@ -239,11 +244,7 @@ impl GlobalData {
                     position - output_geo.loc.to_f64() - layer_map.layer_geometry(layer).unwrap().loc.to_f64(), 
                     WindowSurfaceType::ALL,
                 ) {
-                    keyboard.set_focus(
-                        self, 
-                        Some(layer.wl_surface().clone()),
-                        serial
-                    );
+                    self.set_focus(Some(layer.wl_surface().clone()));
                     return
                 }
             }
@@ -261,11 +262,7 @@ impl GlobalData {
 
             self.workspace_manager.raise_element(&window, true);
 
-            keyboard.set_focus(
-                self,
-                surface,
-                serial,
-            );
+            self.set_focus(surface);
         } else if let Some(layer) = layer_map
             .layer_under(WlrLayer::Bottom, position - output_geo.loc.to_f64())
             .or_else(|| layer_map.layer_under(WlrLayer::Background, position - output_geo.loc.to_f64()))
@@ -275,17 +272,12 @@ impl GlobalData {
                     position - output_geo.loc.to_f64() - layer_map.layer_geometry(layer).unwrap().loc.to_f64(), 
                     WindowSurfaceType::ALL,
                 ) {
-                    keyboard.set_focus(
-                        self, 
-                        Some(layer.wl_surface().clone()),
-                        serial
-                    );
+                    self.set_focus(Some(layer.wl_surface().clone()));
                     return
                 }
             }
         } else {
-            keyboard.set_focus(self, None, serial);
-            self.modify_all_windows_state(false);
+            self.set_focus(None);
         }
     }
 
@@ -306,38 +298,13 @@ impl GlobalData {
                 KeyAction::Internal(func) => {
                     match func {
                         FunctionEnum::SwitchWorkspace1 => {
-                            let serial = SERIAL_COUNTER.next_serial();
-                            // TODO: move cursor to first window and set focus or none
-                            self.modify_all_windows_state(false);
-
-                            let keyboard = self.input_manager.get_keyboard();
-                            let keyboard = match keyboard {
-                                Some(k) => k,
-                                None => {
-                                    error!("get keyboard error");
-                                    return
-                                }
-                            };
-                    
-                            keyboard.set_focus(self, None, serial);
+                            self.set_focus(None);
                             self
                                 .workspace_manager
                                 .set_activated(WorkspaceId::new(1));
                         }
                         FunctionEnum::SwitchWorkspace2 => {
-                            let serial = SERIAL_COUNTER.next_serial();
-                            self.modify_all_windows_state(false);
-
-                            let keyboard = self.input_manager.get_keyboard();
-                            let keyboard = match keyboard {
-                                Some(k) => k,
-                                None => {
-                                    error!("get keyboard error");
-                                    return
-                                }
-                            };
-                    
-                            keyboard.set_focus(self, None, serial);
+                            self.set_focus(None);
                             self
                                 .workspace_manager
                                 .set_activated(WorkspaceId::new(2));
@@ -365,7 +332,7 @@ impl GlobalData {
         }
     }
 
-    pub fn set_focus(&mut self, surface: WlSurface) {
+    pub fn set_focus(&mut self, surface: Option<WlSurface>) {
         // set giving surface's root surface as focus
         let serial = SERIAL_COUNTER.next_serial();
 
@@ -378,17 +345,23 @@ impl GlobalData {
             }
         };
 
-        let mut root = surface.clone();
-        while let Some(parent) = get_parent(&root) {
-            root = parent;
-        }
+        let root = match surface.clone() {
+            Some(surface) => {
+                let mut root = surface;
+                while let Some(parent) = get_parent(&root) {
+                    root = parent;
+                }
+                Some(root)
+            }
+            None => None
+        };
 
         // unfocus all window
         self.modify_all_windows_state(false);
 
         keyboard.set_focus(
             self,
-            Some(root),
+            root,
             serial,
         );
 

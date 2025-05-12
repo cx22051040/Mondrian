@@ -582,6 +582,7 @@ impl Tty {
                 connector.subpixel().into(),
                 make,
                 model,
+                (0, 0).into(),
                 true,
             );
 

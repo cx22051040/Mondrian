@@ -1,76 +1,78 @@
 use smithay::{
     backend::renderer::{
-        Color32F,
-        element::Kind,
-        gles::{
-            GlesPixelProgram, GlesRenderer, Uniform, UniformName, UniformType,
-            element::PixelShaderElement,
-        },
-    },
-    utils::{Logical, Rectangle},
+        element::{
+            Element, Id, Kind, RenderElement, UnderlyingStorage
+        }, gles::{GlesError, GlesFrame, GlesRenderer}, utils::{CommitCounter, OpaqueRegions}, ImportAll, Renderer
+    }, 
+    utils::{
+        Buffer, Logical, Physical, Rectangle, Scale, Size
+    }
 };
 
-const BORDER_SHADER: &str = include_str!("shaders/border.frag");
-
-// Define a struct that holds a pixel shader. This struct will be stored in the data of the
-// EGL rendering context.
-pub struct BorderShader(pub GlesPixelProgram);
-
-pub fn compile_shaders(renderer: &mut GlesRenderer) {
-    // Compile GLSL file into pixel shader.
-    let border_shader = renderer
-        .compile_custom_pixel_shader(
-            BORDER_SHADER,
-            &[
-                UniformName::new("u_resolution", UniformType::_2f),
-                UniformName::new("border_color", UniformType::_3f),
-                UniformName::new("border_thickness", UniformType::_1f),
-            ],
-        )
-        .unwrap();
-
-    // Save pixel shader in EGL rendering context.
-    renderer
-        .egl_context()
-        .user_data()
-        .insert_if_missing(|| BorderShader(border_shader));
+#[derive(Debug)]
+pub struct BorderRenderElement<R: Renderer> {
+    id: Id,
+    commit_counter: CommitCounter,
+    rec: Rectangle<f64, Logical>,
+    opaque_regions: Vec<Rectangle<f64, Logical>>,
+    alpha: f32,
+    kind: Kind,
+    texture: R
 }
 
-impl BorderShader {
-    pub fn element(
-        renderer: &GlesRenderer,
-        geometry: Rectangle<i32, Logical>,
-        alpha: f32,
-    ) -> PixelShaderElement {
-        let program = renderer
-            .egl_context()
-            .user_data()
-            .get::<BorderShader>()
-            .unwrap()
-            .0
-            .clone();
+impl<R: Renderer> BorderRenderElement<R> {
 
-        // TODO: use config
-        let border_color: Color32F = Color32F::from([1.0, 0.0, 0.0, 1.0]);
-        let border_thickness = 5.0;
+}
 
-        let point = geometry.size.to_point();
+impl<R: Renderer + ImportAll> Element for BorderRenderElement<R> {
+    fn id(&self) -> &Id {
+        &self.id
+    }
 
-        PixelShaderElement::new(
-            program,
-            geometry,
-            None,
-            alpha,
-            vec![
-                Uniform::new("u_resolution", (point.x as f32, point.y as f32)),
-                Uniform::new(
-                    "border_color",
-                    (border_color.r(), border_color.g(), border_color.b()),
-                ),
-                Uniform::new("border_thickness", border_thickness),
-            ],
-            Kind::Unspecified,
-        )
+    fn current_commit(&self) -> CommitCounter {
+        self.commit_counter
+    }
+
+    fn src(&self) -> Rectangle<f64, Buffer> {
+        Rectangle::from_size(Size::from((1., 1.)))
+    }
+
+    fn geometry(&self, scale: Scale<f64>) -> Rectangle<i32, Physical> {
+        self.rec.to_physical_precise_round(scale)
+    }
+
+    fn opaque_regions(&self, scale: Scale<f64>) -> OpaqueRegions<i32, Physical> {
+        self
+            .opaque_regions
+            .iter()
+            .map(|region| region.to_physical_precise_down(scale))
+            .collect()
+    }
+
+    fn alpha(&self) -> f32 {
+        self.alpha
+    }
+
+    fn kind(&self) -> Kind {
+        self.kind
     }
 }
 
+impl<R: Renderer + ImportAll> RenderElement<R> for BorderRenderElement<R> {
+    fn draw(
+            &self,
+            frame: &mut R::Frame<'_, '_>,
+            src: Rectangle<f64, Buffer>,
+            dst: Rectangle<i32, Physical>,
+            damage: &[Rectangle<i32, Physical>],
+            opaque_regions: &[Rectangle<i32, Physical>],
+        ) -> Result<(), R::Error> {
+            todo!()
+    }
+
+    fn underlying_storage(&self, _renderer: &mut R) -> Option<UnderlyingStorage> {
+        // If scanout for things other than Wayland buffers is implemented, this will need to take
+        // the target GPU into account.
+        None
+    }
+}
