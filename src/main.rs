@@ -5,20 +5,25 @@ extern crate tracing;
 
 mod backend;
 mod config;
-mod protocol;
 mod input;
 mod layout;
+mod manager;
+mod protocol;
 mod render;
 mod state;
-mod manager;
-
 
 use std::sync::Arc;
 
-use smithay::{reexports::{calloop::{generic::Generic, EventLoop, Interest, Mode, PostAction}, wayland_server::Display}, wayland::socket::ListeningSocketSource};
+use smithay::{
+    reexports::{
+        calloop::{EventLoop, Interest, Mode, PostAction, generic::Generic},
+        wayland_server::Display,
+    },
+    wayland::socket::ListeningSocketSource,
+};
 
-use tracing_subscriber::{self, layer::SubscriberExt, FmtSubscriber};
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
+use tracing_subscriber::{self, FmtSubscriber, layer::SubscriberExt};
 
 use state::{ClientState, GlobalData};
 
@@ -52,8 +57,7 @@ fn main() {
 
     loop_handle
         .insert_source(source, move |client_stream, _, data| {
-            data
-                .display_handle
+            data.display_handle
                 .insert_client(client_stream, Arc::new(ClientState::default()))
                 .unwrap();
         })
@@ -67,14 +71,14 @@ fn main() {
     let mut args = std::env::args().skip(1);
     let flag = args.next();
     let arg = args.next();
-    
+
     unsafe { std::env::set_var("WAYLAND_DISPLAY", &socket_name) };
 
     match (flag.as_deref(), arg) {
         (Some("-c") | Some("--command"), Some(command)) => {
             std::process::Command::new(command).spawn().ok();
         }
-        _ => { }
+        _ => {}
     }
 
     tracing::info!("Initialization completed, starting the main loop.");
@@ -95,10 +99,11 @@ fn init_trace() {
         .with_level(true);
 
     let subscriber = FmtSubscriber::builder()
-        .with_max_level(tracing::Level::INFO)  // 不限制日志级别，记录所有日志级别
+        .with_max_level(tracing::Level::INFO) // 不限制日志级别，记录所有日志级别
         .finish()
         .with(fmt_layer);
-    
+
     // 设置全局默认日志记录器
     tracing::subscriber::set_global_default(subscriber).expect("Failed to set global subscriber");
 }
+

@@ -1,9 +1,8 @@
 use crate::{
-    input::{move_grab::PointerMoveSurfaceGrab, resize_grab::ResizeSurfaceGrab}, manager::window::WindowExt, state::GlobalData
+    input::{move_grab::PointerMoveSurfaceGrab, resize_grab::ResizeSurfaceGrab},
+    manager::window::WindowExt,
+    state::GlobalData,
 };
-use smithay::{desktop::{find_popup_root_surface, get_popup_toplevel_coords}, input::pointer::{
-    CursorIcon, CursorImageStatus, GrabStartData as PointerGrabStartData,
-}};
 use smithay::{
     delegate_xdg_shell,
     desktop::{PopupKind, PopupManager, Space, Window},
@@ -23,6 +22,10 @@ use smithay::{
             XdgToplevelSurfaceData,
         },
     },
+};
+use smithay::{
+    desktop::{find_popup_root_surface, get_popup_toplevel_coords},
+    input::pointer::{CursorIcon, CursorImageStatus, GrabStartData as PointerGrabStartData},
 };
 
 /// Should be called on `WlSurface::commit`
@@ -71,11 +74,14 @@ impl XdgShellHandler for GlobalData {
 
     fn new_toplevel(&mut self, surface: ToplevelSurface) {
         let window = Window::new_wayland_window(surface.clone());
-        self.window_manager
-            .add_window(window.clone(), self.workspace_manager.current_workspace().id());
+        self.window_manager.add_window(
+            window.clone(),
+            self.workspace_manager.current_workspace().id(),
+        );
 
         let focus = self.get_focus();
-        self.workspace_manager.map_tiled_element(window, focus, true);
+        self.workspace_manager
+            .map_tiled_element(window, focus, true);
     }
 
     fn new_popup(&mut self, surface: PopupSurface, _positioner: PositionerState) {
@@ -121,7 +127,7 @@ impl XdgShellHandler for GlobalData {
             };
 
             pointer.set_grab(self, grab, serial, Focus::Clear);
-            
+
             self.cursor_manager
                 .set_cursor_image(CursorImageStatus::Named(CursorIcon::Grabbing));
         }
@@ -161,7 +167,7 @@ impl XdgShellHandler for GlobalData {
         }
     }
 
-    fn grab(&mut self, _surface: PopupSurface, _seat: wl_seat::WlSeat, _serial: Serial) { }
+    fn grab(&mut self, _surface: PopupSurface, _seat: wl_seat::WlSeat, _serial: Serial) {}
 }
 delegate_xdg_shell!(GlobalData);
 
@@ -207,7 +213,7 @@ impl GlobalData {
             Some(g) => g,
             None => {
                 warn!("Failed to get output {:?} geometry", output);
-                return
+                return;
             }
         };
 
@@ -215,7 +221,7 @@ impl GlobalData {
             Some(g) => g,
             None => {
                 warn!("Failed to get window {:?} geometry", window);
-                return
+                return;
             }
         };
 
@@ -230,3 +236,4 @@ impl GlobalData {
         });
     }
 }
+

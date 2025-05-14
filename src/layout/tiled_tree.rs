@@ -62,10 +62,52 @@ impl TiledTree {
             })
     }
 
-    pub fn insert_window(&mut self, target: &Window, new_window: Window) -> bool {
+    pub fn get_first_window(&self) -> Option<&Window> {
+        let root_id = match self.get_root() {
+            Some(r) => {
+                r
+            }
+            None => {
+                warn!("Failed to get root_id");
+                return None
+            }
+        };
+
+        fn get_window(nodes: &SlotMap<NodeId, NodeData>, id: NodeId) -> Option<&Window> {
+            match &nodes[id] {
+                NodeData::Leaf { window } => Some(window),
+                NodeData::Split { left, .. } => {
+                    get_window(nodes, *left)
+                }
+            }
+        }
+
+        get_window(&self.nodes, root_id)
+    }
+
+    pub fn insert_window(&mut self, focus: &Option<Window>, new_window: Window) -> bool {
+        let target = match focus {
+            Some(r) => r,
+            None => {
+                match self.get_first_window() {
+                    Some(r) => r,
+                    None => {
+                        warn!("Failed to get first window");
+                        return false
+                    }
+                }
+            }
+        };
+
         if let Some(target_id) = self.find_node(target) {
             // resize
-            let rec = target.get_rec().unwrap();
+            let rec = match target.get_rec(){
+                Some(r) => r,
+                None => {
+                    warn!("Failed to get window rectangle");
+                    return false
+                }
+            };
             let (direction, l_rec, r_rec) = get_new_rec(&rec);
             target.set_rec(l_rec);
             new_window.set_rec(r_rec);
@@ -92,8 +134,15 @@ impl TiledTree {
     }
 
     pub fn remove(&mut self, target: &Window) -> bool {
-        let target_id = self.find_node(target).unwrap();
-
+        let target_id = match self.find_node(target) {
+            Some(r) => {
+                r
+            }
+            None => {
+                warn!("Failed to get target_id");
+                return false
+            }
+        };
         // remove last node
         if let Some(root_id) = self.root {
             if target_id == root_id {
@@ -105,11 +154,23 @@ impl TiledTree {
             }
         }
 
-        let (parent_id, sibling_id) = self.find_parent_and_sibling(target_id).unwrap();
+        let (parent_id, sibling_id) = match self.find_parent_and_sibling(target_id) {
+            Some(r) => r,
+            None => {
+                warn!("Failed to get node: {:?} parent and sibling", target_id);
+                return false
+            }
+        };
 
         match self.nodes[parent_id] {
             NodeData::Split { rec, .. } => {
-                let sibling_data = self.nodes.remove(sibling_id).unwrap();
+                let sibling_data = match self.nodes.remove(sibling_id){
+                    Some(r) => r,
+                    None => {
+                        warn!("Failed to remove sibling: {:?}", sibling_id);
+                        return false
+                    }
+                };
 
                 match sibling_data {
                     NodeData::Leaf { window } => {
@@ -174,11 +235,29 @@ impl TiledTree {
     }
 
     pub fn invert_window(&mut self, target: &Window){
-        let target_id = self.find_node(target).unwrap();
+        let target_id = match self.find_node(target) {
+            Some(r) => {
+                r
+            }
+            None => {
+                warn!("Failed to get target_id");
+                return
+            }
+        };
+
+        // Only single window
         if self.get_root() == Some(target_id) {
             return;
         }
-        let (parent_id, _) = self.find_parent_and_sibling(target_id).unwrap();
+
+        let (parent_id, _) = match self.find_parent_and_sibling(target_id) {
+            Some(r) => r,
+            None => {
+                warn!("Failed to get node: {:?} parent and sibling", target_id);
+                return
+            }
+        };
+
         match &mut self.nodes[parent_id] {
             NodeData::Split { direction, rec , .. } => {
                 *direction = invert_direction(direction);
@@ -194,11 +273,29 @@ impl TiledTree {
     }
 
     pub fn resize(&mut self, target: &Window, offset: (i32, i32)) {
-        let target_id = self.find_node(target).unwrap();
+        let target_id = match self.find_node(target) {
+            Some(r) => {
+                r
+            }
+            None => {
+                warn!("Failed to get target_id");
+                return
+            }
+        };
+
+        // Only single window
         if self.get_root() == Some(target_id) {
             return;
         }
-        let (parent_id, _) = self.find_parent_and_sibling(target_id).unwrap();
+
+        let (parent_id, _) = match self.find_parent_and_sibling(target_id) {
+            Some(r) => r,
+            None => {
+                warn!("Failed to get node: {:?} parent and sibling", target_id);
+                return
+            }
+        };
+
         match &mut self.nodes[parent_id] {
             NodeData::Split { offset: current_offset, rec, .. } => {
                 current_offset.0 += offset.0;
@@ -212,6 +309,16 @@ impl TiledTree {
 
     #[cfg(feature="trace_layout")]
     pub fn print_tree(&self) {
+        let root_id = match self.get_root() {
+            Some(r) => {
+                r
+            }
+            None => {
+                warn!("Failed to get root_id");
+                return
+            }
+        };
+
         fn print(nodes: &SlotMap<NodeId, NodeData>, id: NodeId, depth: usize) {
             let indent = "  ".repeat(depth);
             match &nodes[id] {
@@ -224,7 +331,7 @@ impl TiledTree {
             }
         }
 
-        print(&self.nodes, self.root.unwrap(), 0);
+        print(&self.nodes, root_id, 0);
     }
 }
 

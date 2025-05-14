@@ -9,7 +9,7 @@ use smithay::{
 
 use crate::state::{ClientState, GlobalData};
 
-use crate::{protocol::xdg_shell, input::resize_grab};
+use crate::{input::resize_grab, protocol::xdg_shell};
 
 impl CompositorHandler for GlobalData {
     fn compositor_state(&mut self) -> &mut CompositorState {
@@ -29,7 +29,7 @@ impl CompositorHandler for GlobalData {
             }
 
             if self.layer_shell_handle_commit(&root) {
-                return
+                return;
             }
 
             if let Some(window) = self

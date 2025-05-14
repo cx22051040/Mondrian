@@ -2,28 +2,30 @@ use std::time::Instant;
 
 use smithay::{
     backend::renderer::{
+        ExportMem, ImportAll, ImportMem, ImportMemWl, Renderer, RendererSuper, Texture,
         element::{
-            memory::MemoryRenderBufferRenderElement, 
-            surface::{render_elements_from_surface_tree, WaylandSurfaceRenderElement}, 
-            Kind
-        }, gles::GlesRenderer, ExportMem, ImportAll, ImportMem, ImportMemWl, Renderer, RendererSuper, Texture
-    }, 
-    desktop::space::SpaceRenderElements, 
-    utils::Scale
+            Kind,
+            memory::MemoryRenderBufferRenderElement,
+            surface::{WaylandSurfaceRenderElement, render_elements_from_surface_tree},
+        },
+        gles::GlesRenderer,
+    },
+    desktop::space::SpaceRenderElements,
+    utils::Scale,
 };
 
 use crate::{
-    backend::tty::TtyRenderer, 
+    backend::tty::TtyRenderer,
     render::{
-        border::BorderRenderElement, cursor::{
-            CursorManager, RenderCursor, XCursor
-        }, elements::{
-            CustomRenderElements, OutputRenderElements
-        }
-    }
+        border::BorderRenderElement,
+        cursor::{CursorManager, RenderCursor, XCursor},
+        elements::{CustomRenderElements, OutputRenderElements},
+    },
 };
 
-use super::{input::InputManager, output::OutputManager, window::WindowExt, workspace::WorkspaceManager};
+use super::{
+    input::InputManager, output::OutputManager, window::WindowExt, workspace::WorkspaceManager,
+};
 
 /// Trait with our main renderer requirements to save on the typing.
 pub trait NuonuoRenderer:
@@ -32,7 +34,7 @@ pub trait NuonuoRenderer:
     + ExportMem
     + ImportMemWl
     + Renderer<TextureId = Self::NuonuoTextureId, Error = Self::NuonuoError>
-    + AsGlesRenderer    
+    + AsGlesRenderer
 {
     // Associated types to work around the instability of associated type bounds.
     type NuonuoTextureId: Texture + Clone + Send + 'static;
@@ -84,27 +86,25 @@ impl RenderManager {
     }
 
     pub fn get_render_elements<R: NuonuoRenderer>(
-        &self, 
+        &self,
         renderer: &mut R,
         output_manager: &OutputManager,
         workspace_manager: &WorkspaceManager,
         cursor_manager: &mut CursorManager,
         input_manager: &InputManager,
-    ) -> Vec<OutputRenderElements<R, WaylandSurfaceRenderElement<R>>>
-    {
+    ) -> Vec<OutputRenderElements<R, WaylandSurfaceRenderElement<R>>> {
         let mut output_elements = vec![];
-        
+
         // First is Cursor
         output_elements.extend(
-            self
-                .get_cursor_render_elements(
-                    renderer, 
-                    output_manager, 
-                    cursor_manager, 
-                    input_manager
-                )
-                .into_iter()
-                .map(OutputRenderElements::Custom)
+            self.get_cursor_render_elements(
+                renderer,
+                output_manager,
+                cursor_manager,
+                input_manager,
+            )
+            .into_iter()
+            .map(OutputRenderElements::Custom),
         );
 
         // Then Some Control elements
@@ -117,25 +117,16 @@ impl RenderManager {
 
         // Then common Windows
         output_elements.extend(
-            self
-                .get_windows_render_elements(
-                    renderer, 
-                    output_manager, 
-                    workspace_manager,
-                )
+            self.get_windows_render_elements(renderer, output_manager, workspace_manager)
                 .into_iter()
-                .map(OutputRenderElements::Space)
+                .map(OutputRenderElements::Space),
         );
 
         // Then Shader and CustomRenderElements
         output_elements.extend(
-            self
-                .get_border_render_elements(
-                    renderer, 
-                    workspace_manager
-                )
+            self.get_border_render_elements(renderer, workspace_manager)
                 .into_iter()
-                .map(OutputRenderElements::Custom)
+                .map(OutputRenderElements::Custom),
         );
 
         // Then LayerShell Bottom and Background
@@ -145,33 +136,30 @@ impl RenderManager {
     }
 
     pub fn get_windows_render_elements<R: NuonuoRenderer>(
-        &self, 
+        &self,
         renderer: &mut R,
         output_manager: &OutputManager,
         workspace_manager: &WorkspaceManager,
-    ) -> Vec<SpaceRenderElements<R, WaylandSurfaceRenderElement<R>>> 
-    {
+    ) -> Vec<SpaceRenderElements<R, WaylandSurfaceRenderElement<R>>> {
         let space = &workspace_manager.current_workspace().space;
         let output = output_manager.current_output();
 
-        match space
-            .render_elements_for_output(renderer, output, 1.0) {
-                Ok(r) => r,
-                Err(err) => {
-                    warn!("Failed to get windows render elements: {:?}", err);
-                    return vec![]
-                }
+        match space.render_elements_for_output(renderer, output, 1.0) {
+            Ok(r) => r,
+            Err(err) => {
+                warn!("Failed to get windows render elements: {:?}", err);
+                return vec![];
             }
+        }
     }
 
     pub fn get_cursor_render_elements<R: NuonuoRenderer>(
-        &self, 
+        &self,
         renderer: &mut R,
         output_manager: &OutputManager,
         cursor_manager: &mut CursorManager,
         input_manager: &InputManager,
-    ) -> Vec<CustomRenderElements<R>> 
-    {
+    ) -> Vec<CustomRenderElements<R>> {
         cursor_manager.check_cursor_image_surface_alive();
 
         let output = output_manager.current_output();
@@ -181,7 +169,7 @@ impl RenderManager {
             Some(g) => g,
             None => {
                 warn!("Failed to get output {:?} geometry", output);
-                return vec![]
+                return vec![];
             }
         };
         let output_pos = output_geo.loc;
@@ -191,7 +179,7 @@ impl RenderManager {
             Some(k) => k,
             None => {
                 error!("get pointer error");
-                return vec![]
+                return vec![];
             }
         };
 
@@ -228,7 +216,9 @@ impl RenderManager {
                 let pointer_pos =
                     (pointer_pos - hotspot.to_f64()).to_physical_precise_round(output_scale);
 
-                let texture = cursor_manager.cursor_texture_cache.get(icon, scale, &cursor, idx);
+                let texture = cursor_manager
+                    .cursor_texture_cache
+                    .get(icon, scale, &cursor, idx);
                 let mut pointer_elements = vec![];
                 let pointer_element = match MemoryRenderBufferRenderElement::from_buffer(
                     renderer,
@@ -254,20 +244,25 @@ impl RenderManager {
         pointer_render_elements
     }
 
-    pub fn get_border_render_elements<R: NuonuoRenderer>(&self, renderer: &mut R, workspace_manager: &WorkspaceManager) -> Vec<CustomRenderElements<R>> {
+    pub fn get_border_render_elements<R: NuonuoRenderer>(
+        &self,
+        renderer: &mut R,
+        workspace_manager: &WorkspaceManager,
+    ) -> Vec<CustomRenderElements<R>> {
         let mut elements: Vec<CustomRenderElements<R>> = vec![];
 
         let focus = workspace_manager.get_focus();
         if let Some(window) = focus {
-            
             let window_geo = match window.get_rec() {
                 Some(g) => g,
                 None => {
                     warn!("Failed to get window {:?} geometry", window);
-                    return vec![]
+                    return vec![];
                 }
             };
-    
+
+            let a = renderer.as_gles_renderer();
+
             // elements.push(CustomRenderElements::Border(BorderRenderElement::element(
             //     renderer,
             //     window_geo,
@@ -278,4 +273,3 @@ impl RenderManager {
         elements
     }
 }
-

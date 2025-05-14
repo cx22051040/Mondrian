@@ -1,5 +1,4 @@
 use anyhow::Context;
-use smithay::backend::renderer::element::RenderElement;
 use smithay::reexports::drm::Device;
 use smithay::{
     backend::drm::output::DrmOutputManager,
@@ -9,51 +8,44 @@ use smithay::{
     },
 };
 use smithay::{
-    output::Mode as WlMode,
     backend::{
         SwapBuffersError,
-        drm::{
-            DrmAccessError, DrmError, DrmSurface,
-            compositor::{DrmCompositor, FrameFlags},
-            output::{DrmOutput, DrmOutputRenderElements},
-            DrmDevice, DrmDeviceFd, DrmEvent, DrmEventMetadata, DrmNode, NodeType
-        },
-        renderer::{
-            Color32F, DebugFlags, ImportDma,
-            damage::Error as OutputDamageTrackerError,
-            element::{RenderElementStates, default_primary_scanout_output_compare},
-            gles::GlesRenderer,
-            multigpu::{GpuManager, MultiRenderer, gbm::GbmGlesBackend},
-        },
         allocator::{
             Fourcc,
-            format::FormatSet,
             gbm::{GbmAllocator, GbmBufferFlags, GbmDevice},
+        },
+        drm::{
+            DrmAccessError, DrmDevice, DrmDeviceFd, DrmError, DrmEvent, DrmEventMetadata, DrmNode,
+            NodeType,
+            compositor::FrameFlags,
+            output::{DrmOutput, DrmOutputRenderElements},
         },
         egl::{EGLDevice, EGLDisplay, context::ContextPriority},
         input::InputEvent,
         libinput::{LibinputInputBackend, LibinputSessionInterface},
+        renderer::{
+            Color32F,
+            element::{RenderElementStates, default_primary_scanout_output_compare},
+            gles::GlesRenderer,
+            multigpu::{GpuManager, MultiRenderer, gbm::GbmGlesBackend},
+        },
         session::{Event as SessionEvent, Session, libseat::LibSeatSession},
         udev::{self, UdevBackend, UdevEvent},
     },
     desktop::{Space, Window},
+    output::Mode as WlMode,
     reexports::{
-        calloop::{LoopHandle, RegistrationToken, timer::{TimeoutAction, Timer}},
-        drm::control::{connector, crtc, Device as _},
-        gbm::Modifier,
-        wayland_protocols::wp::{
-            linux_dmabuf::zv1::server::zwp_linux_dmabuf_feedback_v1::{self, TrancheFlags},
-            presentation_time::server::wp_presentation_feedback,
+        calloop::{
+            LoopHandle,
+            timer::{TimeoutAction, Timer},
         },
-        rustix::fs::OFlags,
+        drm::control::{Device as _, connector, crtc},
         input::Libinput,
+        rustix::fs::OFlags,
+        wayland_protocols::wp::presentation_time::server::wp_presentation_feedback,
     },
-    utils::{Clock, Monotonic, Time, DeviceFd},
-    wayland::{
-        dmabuf::{DmabufFeedback, DmabufFeedbackBuilder},
-        presentation::Refresh,
-        drm_lease::DrmLease
-    },
+    utils::{Clock, DeviceFd, Monotonic},
+    wayland::{drm_lease::DrmLease, presentation::Refresh},
 };
 use smithay::{output::Output, reexports::drm::control::ModeTypeFlags};
 use smithay_drm_extras::{
@@ -67,12 +59,13 @@ use std::{
     time::Duration,
 };
 
-use crate::render::elements::OutputRenderElements;
+use crate::manager::input::InputManager;
+use crate::manager::render::RenderManager;
+use crate::render::cursor::CursorManager;
 use crate::state::GlobalData;
 use crate::{
-    render::elements::CustomRenderElements,
     manager::{output::OutputManager, workspace::WorkspaceManager},
-    state::State,
+    render::elements::CustomRenderElements,
 };
 
 // we cannot simply pick the first supported format of the intersection of *all* formats, because:
@@ -87,6 +80,8 @@ const SUPPORTED_COLOR_FORMATS: [Fourcc; 4] = [
     Fourcc::Abgr8888,
     Fourcc::Argb8888,
 ];
+
+const MINIMIZE: Duration = Duration::from_millis(6);
 
 pub type TtyRenderer<'render> = MultiRenderer<
     'render,
@@ -103,6 +98,7 @@ pub struct Tty {
     pub primary_render_node: DrmNode,
     pub devices: HashMap<DrmNode, OutputDevice>,
     pub seat_name: String,
+    pub vblank_meta_data: HashMap<crtc::Handle, DrmEventMetadata>,
 }
 
 pub struct Surface {
@@ -135,7 +131,6 @@ pub struct OutputDevice {
 
 impl Tty {
     pub fn new(loop_handle: &LoopHandle<'_, GlobalData>) -> anyhow::Result<Self> {
-
         // Initialize session
         let (session, notifier) = LibSeatSession::new()?;
         let seat_name = session.seat();
@@ -207,6 +202,7 @@ impl Tty {
             primary_render_node,
             devices: HashMap::new(),
             seat_name,
+            vblank_meta_data: HashMap::new(),
         })
     }
 
@@ -217,6 +213,7 @@ impl Tty {
     ) {
         let udev_backend = UdevBackend::new(&self.seat_name).unwrap();
 
+        // gpu device
         for (device_id, path) in udev_backend.device_list() {
             if let Ok(node) = DrmNode::from_dev_id(device_id) {
                 if let Err(err) = self.device_added(node, &path, output_manager, loop_handle) {
@@ -244,7 +241,6 @@ impl Tty {
                         data.backend.tty().device_changed(
                             node,
                             &mut data.output_manager,
-                            &data.loop_handle,
                         )
                     }
                 }
@@ -255,6 +251,67 @@ impl Tty {
                 }
             })
             .unwrap();
+
+        loop_handle.insert_idle(move |data| {
+            info!(
+                "The tty render start at: {:?}",
+                data.clock.now().as_millis()
+            );
+            // TODO: use true frame rate
+            let duration = Duration::from_millis(1000 / 60);
+            let next_frame_target = data.clock.now() + duration;
+            let timer = Timer::from_duration(duration);
+            data.next_frame_target = next_frame_target;
+
+            data.loop_handle
+                .insert_source(timer, move |_, _, data| {
+                    info!(
+                        "render event, time: {:?}, next_frame_target: {:?}",
+                        data.clock.now().as_millis(),
+                        data.next_frame_target.as_millis()
+                    );
+                    if data.clock.now() > data.next_frame_target + MINIMIZE {
+                        // drop current frame, render next frame
+                        info!("jump the frame");
+                        data.next_frame_target = data.next_frame_target + duration;
+                        let new_duration = Duration::from(data.next_frame_target)
+                            .saturating_sub(data.clock.now().into());
+                        return TimeoutAction::ToDuration(new_duration);
+                    }
+
+                    // VBlank
+                    for (crtc, meta) in &data.backend.tty().vblank_meta_data.clone() {
+                        data.backend.tty().on_vblank(
+                            crtc,
+                            meta,
+                            data.output_manager.current_output(),
+                            &data.clock,
+                        );
+                    }
+
+                    data.backend.tty().render_output(
+                        &data.render_manager,
+                        &data.output_manager,
+                        &data.workspace_manager,
+                        &mut data.cursor_manager,
+                        &data.input_manager,
+                    );
+
+                    data.next_frame_target = data.next_frame_target + duration;
+                    let new_duration = Duration::from(data.next_frame_target)
+                        .saturating_sub(data.clock.now().into());
+                    TimeoutAction::ToDuration(new_duration)
+                })
+                .unwrap();
+
+            data.backend.tty().render_output(
+                &data.render_manager,
+                &data.output_manager,
+                &data.workspace_manager,
+                &mut data.cursor_manager,
+                &data.input_manager,
+            );
+        });
     }
 
     pub fn device_added(
@@ -265,7 +322,10 @@ impl Tty {
         loop_handle: &LoopHandle<'_, GlobalData>,
     ) -> anyhow::Result<()> {
         info!("device added: {:?}", node);
-        let fd = self.session.open(path, OFlags::RDWR | OFlags::CLOEXEC | OFlags::NOCTTY | OFlags::NONBLOCK)?;
+        let fd = self.session.open(
+            path,
+            OFlags::RDWR | OFlags::CLOEXEC | OFlags::NOCTTY | OFlags::NONBLOCK,
+        )?;
         let device_fd = DrmDeviceFd::new(DeviceFd::from(fd));
 
         let (drm, drm_notifier) = DrmDevice::new(device_fd.clone(), true)?;
@@ -276,20 +336,13 @@ impl Tty {
                 match event {
                     DrmEvent::VBlank(crtc) => {
                         let meta = meta.expect("VBlank events must have metadata");
-                        data.backend.tty().on_vblank(
-                            node,
-                            crtc,
-                            meta,
-                            data.output_manager.current_output(),
-                            &data.clock,
-                            &data.loop_handle,
-                        );
+                        data.backend.tty().vblank_meta_data.insert(crtc, meta);
                     }
                     DrmEvent::Error(error) => warn!("DRM Vblank error: {error}"),
                 };
-        })
-        .unwrap();
-    
+            })
+            .unwrap();
+
         let egl_display = unsafe { EGLDisplay::new(gbm.clone())? };
         let egl_device = EGLDevice::device_for_display(&egl_display)?;
 
@@ -335,7 +388,7 @@ impl Tty {
             },
         );
 
-        self.device_changed(node, output_manager, loop_handle);
+        self.device_changed(node, output_manager);
 
         Ok(())
     }
@@ -344,7 +397,6 @@ impl Tty {
         &mut self,
         node: DrmNode,
         output_manager: &mut OutputManager,
-        loop_handle: &LoopHandle<'_, GlobalData>,
     ) {
         info!("device changed: {:?}", node);
         let device: &mut OutputDevice = if let Some(device) = self.devices.get_mut(&node) {
@@ -371,7 +423,7 @@ impl Tty {
                     connector,
                     crtc: Some(crtc),
                 } => {
-                    self.connector_connected(node, connector, crtc, output_manager, loop_handle);
+                    self.connector_connected(node, connector, crtc, output_manager);
                 }
                 DrmScanEvent::Disconnected {
                     connector,
@@ -384,124 +436,93 @@ impl Tty {
         }
     }
 
-    pub fn device_removed(&mut self, node: DrmNode) {}
+    pub fn device_removed(&mut self, _node: DrmNode) {}
 
     pub fn on_vblank(
         &mut self,
-        node: DrmNode,
-        crtc: crtc::Handle,
-        meta: DrmEventMetadata,
+        crtc: &crtc::Handle,
+        meta: &DrmEventMetadata,
         output: &Output,
         clock: &Clock<Monotonic>,
-        loop_handle: &LoopHandle<'_, GlobalData>,
     ) {
-        let device = if let Some(device) = self.devices.get_mut(&node) {
-            device
-        } else {
-            error!("Trying to finish frame on non-existent backend");
-            return;
-        };
-
-        let surface = if let Some(surface) = device.surfaces.get_mut(&crtc) {
-            surface
-        } else {
-            error!("Trying to finish frame on non-existent backend surface");
-            return;
-        };
-
-        let tp = match meta.time {
-            smithay::backend::drm::DrmEventTime::Monotonic(tp) => Some(tp),
-            smithay::backend::drm::DrmEventTime::Realtime(_) => None,
-        };
-
-        let seq = meta.sequence;
-
-        let (clock, flags) = if let Some(tp) = tp {
-            (
-                tp.into(),
-                wp_presentation_feedback::Kind::Vsync
-                    | wp_presentation_feedback::Kind::HwClock
-                    | wp_presentation_feedback::Kind::HwCompletion,
-            )
-        } else {
-            (clock.now(), wp_presentation_feedback::Kind::Vsync)
-        };
-
-        let submit_result = surface
-            .drm_output
-            .frame_submitted()
-            .map_err(Into::<SwapBuffersError>::into);
-
-        let Some(frame_duration) = output
-            .current_mode()
-            .map(|mode| Duration::from_secs_f64(1_000f64 / mode.refresh as f64))
-        else {
-            return;
-        };
-
-        let schedule_render = match submit_result {
-            Ok(user_data) => {
-                if let Some(mut feedback) = user_data.flatten() {
-                    feedback.presented(clock, Refresh::fixed(frame_duration), seq as u64, flags);
-                }
-
-                true
-            }
-            Err(err) => {
-                warn!("Error during rendering: {:?}", err);
-                match err {
-                    SwapBuffersError::AlreadySwapped => true,
-                    // If the device has been deactivated do not reschedule, this will be done
-                    // by session resume
-                    SwapBuffersError::TemporaryFailure(err)
-                        if matches!(
-                            err.downcast_ref::<DrmError>(),
-                            Some(&DrmError::DeviceInactive)
-                        ) =>
-                    {
-                        false
-                    }
-                    SwapBuffersError::TemporaryFailure(err) => matches!(
-                        err.downcast_ref::<DrmError>(),
-                        Some(DrmError::Access(DrmAccessError {
-                            source,
-                            ..
-                        })) if source.kind() == io::ErrorKind::PermissionDenied
-                    ),
-                    SwapBuffersError::ContextLost(err) => panic!("Rendering loop lost: {}", err),
-                }
-            }
-        };
-
-        if schedule_render {
-            let next_frame_target = clock + frame_duration;
-            let repaint_delay = Duration::from_secs_f64(frame_duration.as_secs_f64() * 0.6f64);
-
-            let timer = if self.primary_node != surface.render_node {
-                trace!("scheduling repaint timer immediately on {:?}", crtc);
-                Timer::immediate()
+        for device in self.devices.values_mut() {
+            let surface = if let Some(surface) = device.surfaces.get_mut(crtc) {
+                surface
             } else {
-                trace!(
-                    "scheduling repaint timer with delay {:?} on {:?}",
-                    repaint_delay, crtc
-                );
-                Timer::from_duration(repaint_delay)
+                error!("Trying to finish frame on non-existent backend surface");
+                return;
             };
 
-            loop_handle
-                .insert_source(timer, move |_, _, data| {
-                    data.backend.tty().render(
-                        node,
-                        Some(crtc),
-                        &data.workspace_manager.current_workspace().space,
-                        &data.output_manager.current_output(),
-                        next_frame_target,
-                        &data.loop_handle,
-                        &data.clock,
-                    );
-                    TimeoutAction::Drop
-                })
-                .expect("failed to schedule frame timer");
+            let tp = match meta.time {
+                smithay::backend::drm::DrmEventTime::Monotonic(tp) => Some(tp),
+                smithay::backend::drm::DrmEventTime::Realtime(_) => None,
+            };
+
+            let seq = meta.sequence;
+
+            let (clock, flags) = if let Some(tp) = tp {
+                (
+                    tp.into(),
+                    wp_presentation_feedback::Kind::Vsync
+                        | wp_presentation_feedback::Kind::HwClock
+                        | wp_presentation_feedback::Kind::HwCompletion,
+                )
+            } else {
+                (clock.now(), wp_presentation_feedback::Kind::Vsync)
+            };
+
+            let submit_result = surface
+                .drm_output
+                .frame_submitted()
+                .map_err(Into::<SwapBuffersError>::into);
+
+            let Some(frame_duration) = output
+                .current_mode()
+                .map(|mode| Duration::from_secs_f64(1_000f64 / mode.refresh as f64))
+            else {
+                return;
+            };
+
+            let _ = match submit_result {
+                Ok(user_data) => {
+                    if let Some(mut feedback) = user_data.flatten() {
+                        feedback.presented(
+                            clock,
+                            Refresh::fixed(frame_duration),
+                            seq as u64,
+                            flags,
+                        );
+                    }
+
+                    true
+                }
+                Err(err) => {
+                    warn!("Error during rendering: {:?}", err);
+                    match err {
+                        SwapBuffersError::AlreadySwapped => true,
+                        // If the device has been deactivated do not reschedule, this will be done
+                        // by session resume
+                        SwapBuffersError::TemporaryFailure(err)
+                            if matches!(
+                                err.downcast_ref::<DrmError>(),
+                                Some(&DrmError::DeviceInactive)
+                            ) =>
+                        {
+                            false
+                        }
+                        SwapBuffersError::TemporaryFailure(err) => matches!(
+                            err.downcast_ref::<DrmError>(),
+                            Some(DrmError::Access(DrmAccessError {
+                                source,
+                                ..
+                            })) if source.kind() == io::ErrorKind::PermissionDenied
+                        ),
+                        SwapBuffersError::ContextLost(err) => {
+                            panic!("Rendering loop lost: {}", err)
+                        }
+                    }
+                }
+            };
         }
     }
 
@@ -511,7 +532,6 @@ impl Tty {
         connector: connector::Info,
         crtc: crtc::Handle,
         output_manager: &mut OutputManager,
-        loop_handle: &LoopHandle<'_, GlobalData>,
     ) {
         info!("connector connected: {:?}", connector);
 
@@ -624,8 +644,8 @@ impl Tty {
             {
                 info!("Nvidia driver detected, disabling overlay planes");
                 planes.overlay = vec![];
-            }        
-            
+            }
+
             let mut renderer = self
                 .gpu_manager
                 .single_renderer(&device.render_node)
@@ -656,163 +676,69 @@ impl Tty {
             };
 
             device.surfaces.insert(crtc, surface);
-
-            loop_handle.insert_idle(move |data| {
-                data.backend.tty().render_surface(
-                    node,
-                    crtc,
-                    &data.workspace_manager.current_workspace().space,
-                    &data.output_manager.current_output(),
-                    data.clock.now(),
-                    &data.loop_handle,
-                    &data.clock,
-                );
-            });
         }
     }
 
-    // If crtc is `Some()`, render it, else render all crtcs
-    pub fn render(
+    pub fn render_output(
         &mut self,
-        node: DrmNode,
-        crtc: Option<crtc::Handle>,
-        space: &Space<Window>,
-        output: &Output,
-        frame_target: Time<Monotonic>,
-        loop_handle: &LoopHandle<'_, GlobalData>,
-        clock: &Clock<Monotonic>,
+        render_manager: &RenderManager,
+        output_manager: &OutputManager,
+        workspace_manager: &WorkspaceManager,
+        cursor_manager: &mut CursorManager,
+        input_manager: &InputManager,
     ) {
-        let device = if let Some(device) = self.devices.get_mut(&node) {
-            device
-        } else {
-            return;
-        };
-
-        if let Some(crtc) = crtc {
-            self.render_surface(
-                node,
-                crtc,
-                space,
-                output,
-                frame_target,
-                loop_handle,
-                clock,
-            );
-        } else {
+        for device in self.devices.values_mut() {
             let crtcs: Vec<_> = device.surfaces.keys().copied().collect();
+
             for crtc in crtcs {
-                self.render_surface(
-                    node,
-                    crtc,
-                    space,
-                    output,
-                    frame_target,
-                    loop_handle,
-                    clock,
+                let surface = if let Some(surface) = device.surfaces.get_mut(&crtc) {
+                    surface
+                } else {
+                    return;
+                };
+
+                let mut renderer = self
+                    .gpu_manager
+                    .single_renderer(&surface.render_node)
+                    .unwrap();
+
+                let elements = render_manager.get_render_elements(
+                    &mut renderer,
+                    output_manager,
+                    workspace_manager,
+                    cursor_manager,
+                    input_manager,
                 );
-            }
-        };
-    }
 
-    pub fn render_surface(
-        &mut self,
-        node: DrmNode,
-        crtc: crtc::Handle,
-        space: &Space<Window>,
-        output: &Output,
-        frame_target: Time<Monotonic>,
-        loop_handle: &LoopHandle<'_, GlobalData>,
-        clock: &Clock<Monotonic>,
-    ) {
-        info!("rendering surface: {:?}", crtc);
-        let device = if let Some(device) = self.devices.get_mut(&node) {
-            device
-        } else {
-            return;
-        };
+                let (rendered, states) = surface
+                    .drm_output
+                    .render_frame(
+                        &mut renderer,
+                        &elements,
+                        Color32F::new(1.0, 1.0, 0.0, 1.0),
+                        FrameFlags::DEFAULT,
+                    )
+                    .map(|render_frame_result| {
+                        (!render_frame_result.is_empty, render_frame_result.states)
+                    })
+                    .unwrap();
 
-        let surface = if let Some(surface) = device.surfaces.get_mut(&crtc) {
-            surface
-        } else {
-            return;
-        };
-
-        let mut renderer = self
-            .gpu_manager
-            .single_renderer(&surface.render_node)
-            .unwrap();
-
-        let elements = space
-            .render_elements_for_output(&mut renderer, output, 1.0)
-            .unwrap();
-
-        info!("elements: {:?}", elements);
-
-        let (rendered, states) = surface
-            .drm_output
-            .render_frame(
-                &mut renderer,
-                &elements,
-                Color32F::new(1.0, 1.0, 0.0, 1.0),
-                FrameFlags::DEFAULT,
-            )
-            .map(|render_frame_result| (!render_frame_result.is_empty, render_frame_result.states))
-            .map_err(|err| match err {
-                smithay::backend::drm::compositor::RenderFrameError::PrepareFrame(err) => {
-                    SwapBuffersError::from(err)
-                }
-                smithay::backend::drm::compositor::RenderFrameError::RenderFrame(
-                    OutputDamageTrackerError::Rendering(err),
-                ) => SwapBuffersError::from(err),
-                _ => unreachable!(),
-            })
-            .unwrap();
-
-        update_primary_scanout_output(
-            space,
-            output,
-            &states,
-        );
-        info!("rendered: {:?}", rendered);
-
-        if !self.session.is_active() {
-            error!("Session not active");
-        }
-
-        if rendered {
-            let output_presentation_feedback = take_presentation_feedback(
-                output,
-                space,
-                &states,
-            );
-            surface
-                .drm_output
-                .queue_frame(Some(output_presentation_feedback))
-                .map_err(Into::<SwapBuffersError>::into)
-                .unwrap();
-        }
-
-        if !rendered {
-            let next_frame_target = frame_target + Duration::from_millis(1000 / 60);
-            let reschedule_timeout =
-                Duration::from(next_frame_target).saturating_sub(clock.now().into());
-            let timer = Timer::from_duration(reschedule_timeout);
-            loop_handle
-                .insert_source(timer, move |_, _, state| {
-                    state.backend.tty().render(
-                        node,
-                        Some(crtc),
-                        &state.workspace_manager.current_workspace().space,
-                        &state.output_manager.current_output(),
-                        next_frame_target,
-                        &state.loop_handle,
-                        &state.clock,
+                if rendered {
+                    // need queue_frame to switch buffer
+                    let output_presentation_feedback = take_presentation_feedback(
+                        output_manager.current_output(),
+                        workspace_manager.current_space(),
+                        &states,
                     );
-                    TimeoutAction::Drop
-                })
-                .expect("failed to schedule timer");
+                    // queue_frame will arise vlbank
+                    surface
+                        .drm_output
+                        .queue_frame(Some(output_presentation_feedback))
+                        .map_err(Into::<SwapBuffersError>::into)
+                        .unwrap();
+                }
+            }
         }
-
     }
 }
 
@@ -855,4 +781,3 @@ pub fn update_primary_scanout_output(
         });
     });
 }
-

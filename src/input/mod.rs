@@ -3,17 +3,24 @@ pub mod move_grab;
 pub mod resize_grab;
 
 use smithay::{
-    backend::
-        input::{
-            AbsolutePositionEvent, ButtonState, Event, InputBackend, InputEvent, KeyState, KeyboardKeyEvent, PointerButtonEvent
-        },
-    desktop::{layer_map_for_output, WindowSurfaceType}, input::{
-        keyboard::{xkb::keysym_get_name, FilterResult}, pointer::{ButtonEvent, MotionEvent},
-    }, reexports::wayland_server::protocol::wl_surface::WlSurface, utils::{Logical, Point, SERIAL_COUNTER}, wayland::{compositor::get_parent, shell::wlr_layer::Layer as WlrLayer}
-    };
+    backend::input::{
+        AbsolutePositionEvent, ButtonState, Event, InputBackend, InputEvent, KeyState,
+        KeyboardKeyEvent, PointerButtonEvent,
+    },
+    desktop::{WindowSurfaceType, layer_map_for_output},
+    input::{
+        keyboard::{FilterResult, xkb::keysym_get_name},
+        pointer::{ButtonEvent, MotionEvent},
+    },
+    reexports::wayland_server::protocol::wl_surface::WlSurface,
+    utils::{Logical, Point, SERIAL_COUNTER},
+    wayland::{compositor::get_parent, shell::wlr_layer::Layer as WlrLayer},
+};
 
-    use crate::{
-    input::keybindings::{FunctionEnum, KeyAction}, manager::workspace::WorkspaceId, state::GlobalData
+use crate::{
+    input::keybindings::{FunctionEnum, KeyAction},
+    manager::workspace::WorkspaceId,
+    state::GlobalData,
 };
 
 impl GlobalData {
@@ -34,10 +41,10 @@ impl GlobalData {
                     Some(k) => k,
                     None => {
                         error!("get keyboard error");
-                        return
+                        return;
                     }
                 };
-    
+
                 keyboard.input::<(), _>(
                     self,
                     event.key_code(),
@@ -56,53 +63,55 @@ impl GlobalData {
                                         })
                                         .collect()
                                 });
-    
-                            pressed_keys_name
-                                .sort_by_key(|key| conf_priority_map.get(key).cloned().unwrap_or(3));
-    
+
+                            pressed_keys_name.sort_by_key(|key| {
+                                conf_priority_map.get(key).cloned().unwrap_or(3)
+                            });
+
                             let keys = pressed_keys_name.join("+");
-    
+
                             #[cfg(feature = "trace_input")]
                             tracing::info!("Keys: {:?}", keys);
-    
+
                             state.action_keys(keys);
                         }
-    
+
                         FilterResult::Forward
                     },
                 );
             }
-    
+
             InputEvent::PointerMotion { .. } => {
                 // TODO
             }
-    
+
             InputEvent::PointerMotionAbsolute { event } => {
                 let serial = SERIAL_COUNTER.next_serial();
-                
+
                 let output = self.output_manager.current_output();
                 let output_geo = match self.output_manager.output_geometry(output) {
                     Some(o) => o,
                     None => {
                         warn!("Failed to get output {:?} geometry", output);
-                        return
+                        return;
                     }
                 };
 
                 // because the absolute move, need to plus the output location
-                let position = event.position_transformed(output_geo.size) + output_geo.loc.to_f64();
-    
+                let position =
+                    event.position_transformed(output_geo.size) + output_geo.loc.to_f64();
+
                 let pointer = self.input_manager.get_pointer();
                 let pointer = match pointer {
                     Some(k) => k,
                     None => {
                         error!("get pointer error");
-                        return
+                        return;
                     }
                 };
-    
+
                 let under = self.surface_under(position);
-    
+
                 // set focus
                 self.set_focus(under.clone().map(|(surface, _)| surface));
 
@@ -117,34 +126,33 @@ impl GlobalData {
                 );
                 pointer.frame(self);
             }
-    
-            InputEvent::PointerButton { event, .. } => {
 
+            InputEvent::PointerButton { event, .. } => {
                 let pointer = self.input_manager.get_pointer();
                 let pointer = match pointer {
                     Some(k) => k,
                     None => {
                         error!("get pointer error");
-                        return
+                        return;
                     }
                 };
 
                 let serial = SERIAL_COUNTER.next_serial();
-    
+
                 let button = event.button_code();
                 let button_state = event.state();
-    
+
                 #[cfg(feature = "trace_input")]
                 tracing::info!(
                     "The PointerButton event, button: {button}, location: {:?}",
                     pointer.current_location()
                 );
-    
+
                 if button_state == ButtonState::Pressed && !pointer.is_grabbed() {
                     let position = pointer.current_location();
                     self.action_pointer_button(position);
                 }
-    
+
                 // modify pointer state
                 pointer.button(
                     self,
@@ -157,17 +165,17 @@ impl GlobalData {
                 );
                 pointer.frame(self);
             }
-    
+
             InputEvent::PointerAxis { .. } => {
                 // TODO
             }
-    
+
             InputEvent::DeviceAdded { .. } => {
                 // TODO
                 #[cfg(feature = "trace_input")]
                 tracing::info!("DeviceAdded Event, device: {:?} ", device);
             }
-    
+
             InputEvent::DeviceRemoved { .. } => {
                 // TODO
                 #[cfg(feature = "trace_input")]
@@ -176,15 +184,18 @@ impl GlobalData {
             _ => {}
         }
     }
-    
-    pub fn surface_under (&mut self, position: Point<f64, Logical>) -> Option<(WlSurface, Point<f64, Logical>)> {
+
+    pub fn surface_under(
+        &mut self,
+        position: Point<f64, Logical>,
+    ) -> Option<(WlSurface, Point<f64, Logical>)> {
         // get the surface under giving position,
         let output = self.output_manager.current_output();
         let output_geo = match self.output_manager.output_geometry(output) {
             Some(o) => o,
             None => {
                 warn!("Failed to get output {:?} geometry", output);
-                return None
+                return None;
             }
         };
 
@@ -201,10 +212,7 @@ impl GlobalData {
                     WindowSurfaceType::ALL,
                 )
                 .map(|(surface, loc)| {
-                    (
-                        surface,
-                        (loc + layer_surface_loc + output_geo.loc).to_f64(),
-                    )
+                    (surface, (loc + layer_surface_loc + output_geo.loc).to_f64())
                 })
         } else if let Some((surface, location)) = self
             .workspace_manager
@@ -216,7 +224,7 @@ impl GlobalData {
             })
         {
             Some((surface, location))
-        } else {            
+        } else {
             None
         }
     }
@@ -228,7 +236,7 @@ impl GlobalData {
             Some(g) => g,
             None => {
                 warn!("Failed to get output {:?} geometry", output);
-                return
+                return;
             }
         };
 
@@ -241,11 +249,13 @@ impl GlobalData {
         {
             if layer.can_receive_keyboard_focus() {
                 if let Some((_, _)) = layer.surface_under(
-                    position - output_geo.loc.to_f64() - layer_map.layer_geometry(layer).unwrap().loc.to_f64(), 
+                    position
+                        - output_geo.loc.to_f64()
+                        - layer_map.layer_geometry(layer).unwrap().loc.to_f64(),
                     WindowSurfaceType::ALL,
                 ) {
                     self.set_focus(Some(layer.wl_surface().clone()));
-                    return
+                    return;
                 }
             }
         } else if let Some((window, location)) = self
@@ -265,15 +275,19 @@ impl GlobalData {
             self.set_focus(surface);
         } else if let Some(layer) = layer_map
             .layer_under(WlrLayer::Bottom, position - output_geo.loc.to_f64())
-            .or_else(|| layer_map.layer_under(WlrLayer::Background, position - output_geo.loc.to_f64()))
+            .or_else(|| {
+                layer_map.layer_under(WlrLayer::Background, position - output_geo.loc.to_f64())
+            })
         {
             if layer.can_receive_keyboard_focus() {
                 if let Some((_, _)) = layer.surface_under(
-                    position - output_geo.loc.to_f64() - layer_map.layer_geometry(layer).unwrap().loc.to_f64(), 
+                    position
+                        - output_geo.loc.to_f64()
+                        - layer_map.layer_geometry(layer).unwrap().loc.to_f64(),
                     WindowSurfaceType::ALL,
                 ) {
                     self.set_focus(Some(layer.wl_surface().clone()));
-                    return
+                    return;
                 }
             }
         } else {
@@ -282,7 +296,6 @@ impl GlobalData {
     }
 
     pub fn action_keys(&mut self, keys: String) {
-
         let conf_keybindings = self
             .configs
             .conf_keybinding_manager
@@ -295,32 +308,24 @@ impl GlobalData {
                     tracing::info!("Command: {}", cmd);
                     std::process::Command::new(cmd).spawn().ok();
                 }
-                KeyAction::Internal(func) => {
-                    match func {
-                        FunctionEnum::SwitchWorkspace1 => {
-                            self.set_focus(None);
-                            self
-                                .workspace_manager
-                                .set_activated(WorkspaceId::new(1));
-                        }
-                        FunctionEnum::SwitchWorkspace2 => {
-                            self.set_focus(None);
-                            self
-                                .workspace_manager
-                                .set_activated(WorkspaceId::new(2));
-                        },
-                        FunctionEnum::InvertWindow => {
-                            let focused_surface = self.get_focus();
-                            self
-                                .workspace_manager
-                                .invert_window(focused_surface);
-                        },
-                        FunctionEnum::Quit => {
-                            tracing::info!("Quit");
-                            std::process::exit(0);
-                        }
+                KeyAction::Internal(func) => match func {
+                    FunctionEnum::SwitchWorkspace1 => {
+                        self.set_focus(None);
+                        self.workspace_manager.set_activated(WorkspaceId::new(1));
                     }
-                }
+                    FunctionEnum::SwitchWorkspace2 => {
+                        self.set_focus(None);
+                        self.workspace_manager.set_activated(WorkspaceId::new(2));
+                    }
+                    FunctionEnum::InvertWindow => {
+                        let focused_surface = self.get_focus();
+                        self.workspace_manager.invert_window(focused_surface);
+                    }
+                    FunctionEnum::Quit => {
+                        tracing::info!("Quit");
+                        std::process::exit(0);
+                    }
+                },
             }
         }
     }
@@ -341,7 +346,7 @@ impl GlobalData {
             Some(k) => k,
             None => {
                 error!("get keyboard error");
-                return
+                return;
             }
         };
 
@@ -353,17 +358,13 @@ impl GlobalData {
                 }
                 Some(root)
             }
-            None => None
+            None => None,
         };
 
         // unfocus all window
         self.modify_all_windows_state(false);
 
-        keyboard.set_focus(
-            self,
-            root,
-            serial,
-        );
+        keyboard.set_focus(self, root, serial);
 
         self.workspace_manager.set_focus(surface);
     }
@@ -374,11 +375,10 @@ impl GlobalData {
             Some(k) => k,
             None => {
                 error!("get keyboard error");
-                return None
+                return None;
             }
         };
 
         keyboard.current_focus()
     }
-
 }

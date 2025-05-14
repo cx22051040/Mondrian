@@ -5,14 +5,24 @@ use smithay::backend::renderer::ImportEgl;
 
 use smithay::{
     backend::{
-        egl::EGLDevice, renderer::{damage::OutputDamageTracker, gles::GlesRenderer, ImportDma}, winit::{self, WinitEvent, WinitGraphicsBackend}
+        egl::EGLDevice,
+        renderer::{ImportDma, damage::OutputDamageTracker, gles::GlesRenderer},
+        winit::{self, WinitEvent, WinitGraphicsBackend},
     },
     output::{Mode as OutputMode, Subpixel},
     reexports::{calloop::LoopHandle, wayland_server::DisplayHandle},
-    utils::{Rectangle, Scale, Transform}, wayland::dmabuf::{DmabufFeedback, DmabufFeedbackBuilder, DmabufGlobal, DmabufState},
+    utils::{Rectangle, Scale, Transform},
+    wayland::dmabuf::{DmabufFeedback, DmabufFeedbackBuilder, DmabufGlobal, DmabufState},
 };
 
-use crate::{manager::{input::InputManager, output::OutputManager, render::RenderManager, workspace::WorkspaceManager}, render::cursor::CursorManager, state::GlobalData};
+use crate::{
+    manager::{
+        input::InputManager, output::OutputManager, render::RenderManager,
+        workspace::WorkspaceManager,
+    },
+    render::cursor::CursorManager,
+    state::GlobalData,
+};
 
 #[derive(Debug)]
 pub struct Winit {
@@ -27,19 +37,16 @@ impl Winit {
         let (mut backend, winit) = winit::init::<GlesRenderer>()
             .map_err(|e| anyhow::anyhow!("Failed to initialize Winit backend: {}", e))?;
 
-        let render_node = EGLDevice::device_for_display(
-                backend.renderer().egl_context().display()
-            )
+        let render_node = EGLDevice::device_for_display(backend.renderer().egl_context().display())
             .and_then(|device| device.try_get_render_node());
 
         let dmabuf_default_feedback = match render_node {
             Ok(Some(node)) => {
                 let dmabuf_format = backend.renderer().dmabuf_formats();
-                let dmabuf_default_feedback = DmabufFeedbackBuilder::new(
-                        node.dev_id(), dmabuf_format
-                    )
-                    .build()
-                    .unwrap();
+                let dmabuf_default_feedback =
+                    DmabufFeedbackBuilder::new(node.dev_id(), dmabuf_format)
+                        .build()
+                        .unwrap();
                 Some(dmabuf_default_feedback)
             }
             Ok(None) => {
@@ -54,15 +61,17 @@ impl Winit {
 
         let dmabuf_state = if let Some(default_feedback) = dmabuf_default_feedback {
             let mut dmabuf_state = DmabufState::new();
-            let dmabuf_global = dmabuf_state
-                .create_global_with_default_feedback::<GlobalData>(display_handle, &default_feedback);
+            let dmabuf_global = dmabuf_state.create_global_with_default_feedback::<GlobalData>(
+                display_handle,
+                &default_feedback,
+            );
 
             (dmabuf_state, dmabuf_global, Some(default_feedback))
         } else {
             let dmabuf_formats = backend.renderer().dmabuf_formats();
             let mut dmabuf_state = DmabufState::new();
-            let dmabuf_global = dmabuf_state
-                .create_global::<GlobalData>(display_handle, dmabuf_formats);
+            let dmabuf_global =
+                dmabuf_state.create_global::<GlobalData>(display_handle, dmabuf_formats);
             (dmabuf_state, dmabuf_global, None)
         };
 
@@ -87,7 +96,8 @@ impl Winit {
                         let scale = data.output_manager.current_output().current_scale();
                         let scale = Scale::from(scale.integer_scale());
 
-                        data.workspace_manager.modify_windows(Rectangle::from_size(size.to_logical(scale)));
+                        data.workspace_manager
+                            .modify_windows(Rectangle::from_size(size.to_logical(scale)));
                     }
                     WinitEvent::Input(event) => {
                         data.process_input_event(event);
@@ -96,44 +106,40 @@ impl Winit {
                         let size = data.backend.winit().backend.window_size();
                         let damage = Rectangle::from_size(size);
 
-                        let damage_traker = &mut OutputDamageTracker::from_output(data.output_manager.current_output());
-                        data
-                            .backend
-                            .winit()
-                            .render_output(
-                                damage_traker,
-                                &data.render_manager,
-                                &data.output_manager,
-                                &data.workspace_manager,
-                                &mut data.cursor_manager,
-                                &data.input_manager,
-                            );
-    
-                        data
-                            .backend
+                        let damage_traker = &mut OutputDamageTracker::from_output(
+                            data.output_manager.current_output(),
+                        );
+                        data.backend.winit().render_output(
+                            damage_traker,
+                            &data.render_manager,
+                            &data.output_manager,
+                            &data.workspace_manager,
+                            &mut data.cursor_manager,
+                            &data.input_manager,
+                        );
+
+                        data.backend
                             .winit()
                             .backend
                             .submit(Some(&[damage]))
                             .unwrap();
-    
+
                         // For each of the windows send the frame callbacks to tell them to draw next frame.
-                        data.workspace_manager.elements().for_each(
-                            |window| {
-                                window.send_frame(
-                                    data.output_manager.current_output(),
-                                    data.start_time.elapsed(),
-                                    Some(Duration::ZERO),
-                                    |_, _| Some(data.output_manager.current_output().clone()),
-                                )
-                            },
-                        );
-    
+                        data.workspace_manager.elements().for_each(|window| {
+                            window.send_frame(
+                                data.output_manager.current_output(),
+                                data.start_time.elapsed(),
+                                Some(Duration::ZERO),
+                                |_, _| Some(data.output_manager.current_output().clone()),
+                            )
+                        });
+
                         // Refresh space nuonuo_state and handle certain events like enter/leave for outputs/windows
                         data.workspace_manager.refresh();
                         data.popups.cleanup();
                         // Flush the outgoing buffers caontaining events so the clients get them.
                         let _ = data.display_handle.flush_clients();
-    
+
                         // Ask for redraw to schedule new frame.
                         data.backend.winit().backend.window().request_redraw();
                     }
@@ -142,49 +148,47 @@ impl Winit {
                 };
             })
             .unwrap();
-    
-        Ok(Self { 
+
+        Ok(Self {
             backend,
             dmabuf_state,
-        }
-        )
+        })
     }
 
     pub fn init(&self, output_manager: &mut OutputManager) {
         output_manager.add_output(
-            "winit".to_string(), 
-            (0, 0).into(), 
-            Subpixel::Unknown, 
-            "Smithay".into(), 
+            "winit".to_string(),
+            (0, 0).into(),
+            Subpixel::Unknown,
+            "Smithay".into(),
             "Winit".into(),
             (0, 0).into(),
             true,
         );
-        
+
         let mode = OutputMode {
             size: self.backend.window_size(),
             refresh: 60_000,
         };
 
         output_manager.change_current_state(
-            Some(mode), 
-            Some(Transform::Flipped180), 
-            None, 
-            Some((0, 0).into())
+            Some(mode),
+            Some(Transform::Flipped180),
+            None,
+            Some((0, 0).into()),
         );
         output_manager.set_preferred(mode);
     }
 
     pub fn render_output(
-        &mut self, 
-        damage_tracker: &mut OutputDamageTracker, 
+        &mut self,
+        damage_tracker: &mut OutputDamageTracker,
         render_manager: &RenderManager,
         output_manager: &OutputManager,
         workspace_manager: &WorkspaceManager,
         cursor_manager: &mut CursorManager,
         input_manager: &InputManager,
     ) {
-
         let (renderer, mut framebuffer) = self.backend.bind().unwrap();
 
         let elements = render_manager.get_render_elements(
@@ -195,13 +199,13 @@ impl Winit {
             input_manager,
         );
 
-        let res = damage_tracker
-            .render_output(
-                renderer, 
-                &mut framebuffer, 
-                0, 
-                &elements, 
-                [1.0, 0.0, 0.0, 1.0],
-            );
+        let res = damage_tracker.render_output(
+            renderer,
+            &mut framebuffer,
+            0,
+            &elements,
+            [1.0, 0.0, 0.0, 1.0],
+        );
     }
 }
+

@@ -1,13 +1,18 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use smithay::{
-    desktop::{Space, Window}, output::Output, reexports::{wayland_protocols::xdg::shell::server::xdg_toplevel, wayland_server::protocol::wl_surface::WlSurface}, utils::{Logical, Point, Rectangle}
+    desktop::{Space, Window},
+    output::Output,
+    reexports::{
+        wayland_protocols::xdg::shell::server::xdg_toplevel,
+        wayland_server::protocol::wl_surface::WlSurface,
+    },
+    utils::{Logical, Point, Rectangle},
 };
 
 use crate::layout::tiled_tree::{LayoutScheme, TiledTree};
 
 use super::window::WindowExt;
-
 
 static NEXT_ID: AtomicUsize = AtomicUsize::new(1);
 const GAP: i32 = 12;
@@ -17,7 +22,7 @@ pub struct WorkspaceId(usize);
 
 impl WorkspaceId {
     // only for test
-    pub fn new (id: usize) -> Self {
+    pub fn new(id: usize) -> Self {
         Self(id)
     }
     #[inline]
@@ -37,7 +42,11 @@ pub struct Workspace {
 }
 
 impl Workspace {
-    pub fn new(output: &Output, output_geometry: Rectangle<i32, Logical>, layout: LayoutScheme) -> Self {
+    pub fn new(
+        output: &Output,
+        output_geometry: Rectangle<i32, Logical>,
+        layout: LayoutScheme,
+    ) -> Self {
         let mut space: Space<Window> = Default::default();
         space.map_output(output, output_geometry.loc);
 
@@ -69,32 +78,35 @@ impl Workspace {
 
         if self.layout_tree.is_none() {
             window.toplevel().unwrap().with_pending_state(|state| {
-                state.size = Some(self.output_geometry.size - (GAP*2, GAP*2).into())
+                state.size = Some(self.output_geometry.size - (GAP * 2, GAP * 2).into())
             });
             window.toplevel().unwrap().send_pending_configure();
-            window.set_rec(Rectangle::new((GAP, GAP).into(), (self.output_geometry.size - (GAP*2, GAP*2).into()).into()));
+            window.set_rec(Rectangle::new(
+                (GAP, GAP).into(),
+                (self.output_geometry.size - (GAP * 2, GAP * 2).into()).into(),
+            ));
             self.layout_tree = Some(TiledTree::new(window.clone()));
             self.map_element(window, (GAP, GAP).into(), activate);
             return;
         }
 
-        let focus = focused_surface.and_then(|surface| {
-            self.elements().find(|win| *win.toplevel().unwrap().wl_surface() == surface)
-        })
-        .unwrap()
-        .clone();
-
         match self.layout {
             LayoutScheme::Default => {
                 if let Some(layout_tree) = &mut self.layout_tree {
-                    layout_tree.insert_window(&focus, window.clone());
+                    layout_tree.insert_window(&self.focus, window.clone());
 
-                    #[cfg(feature="trace_layout")]
+                    #[cfg(feature = "trace_layout")]
                     layout_tree.print_tree();
-                    let loc = window.get_rec().unwrap().loc;
+                    let loc = match window.get_rec(){
+                        Some(r) => r.loc,
+                        None => {
+                            warn!("Failed to get window rectangle");
+                            return
+                        }
+                    };
                     self.map_element(window, loc, activate);
                 }
-            },
+            }
             LayoutScheme::BinaryTree => {
                 todo!()
             }
@@ -109,7 +121,7 @@ impl Workspace {
             if layout_tree.is_empty() {
                 self.layout_tree = None;
             } else {
-                #[cfg(feature="trace_layout")]
+                #[cfg(feature = "trace_layout")]
                 layout_tree.print_tree();
             }
         } else {
@@ -136,10 +148,6 @@ impl Workspace {
         self.space.element_location(window).unwrap()
     }
 
-    pub fn element_geometry(&self, window: &Window) -> Option<Rectangle<i32, Logical>> {
-        self.space.element_geometry(window)
-    }
-
     pub fn elements(&self) -> impl DoubleEndedIterator<Item = &Window> + ExactSizeIterator {
         self.space.elements()
     }
@@ -151,14 +159,13 @@ impl Workspace {
             window.toplevel().unwrap().send_pending_configure();
         }
     }
-    
-    pub fn remove_window(&mut self, surface: &WlSurface){
 
-        let window = self.elements().find(|win| {
-            win.toplevel().unwrap().wl_surface() == surface
-        })
-        .unwrap()
-        .clone();
+    pub fn remove_window(&mut self, surface: &WlSurface) {
+        let window = self
+            .elements()
+            .find(|win| win.toplevel().unwrap().wl_surface() == surface)
+            .unwrap()
+            .clone();
 
         self.space.unmap_elem(&window);
         self.unmap_tiled_element(window);
@@ -170,16 +177,18 @@ impl Workspace {
         if self.layout_tree.is_none() || focused_surface.is_none() {
             return;
         }
-        let focus = focused_surface.and_then(|surface| {
-            self.elements().find(|win| *win.toplevel().unwrap().wl_surface() == surface)
-        })
-        .unwrap()
-        .clone();
+        let focus = focused_surface
+            .and_then(|surface| {
+                self.elements()
+                    .find(|win| *win.toplevel().unwrap().wl_surface() == surface)
+            })
+            .unwrap()
+            .clone();
 
         if let Some(layout_tree) = &mut self.layout_tree {
             layout_tree.invert_window(&focus);
 
-            #[cfg(feature="trace_layout")]
+            #[cfg(feature = "trace_layout")]
             layout_tree.print_tree();
 
             self.send_pending_configure();
@@ -190,23 +199,31 @@ impl Workspace {
         self.output_geometry = rec;
         if let Some(layout_tree) = &mut self.layout_tree {
             let root_id = layout_tree.get_root().unwrap();
-            layout_tree.modify(root_id, Rectangle::new((GAP, GAP).into(), (rec.size - (GAP*2, GAP*2).into()).into()));
+            layout_tree.modify(
+                root_id,
+                Rectangle::new(
+                    (GAP, GAP).into(),
+                    (rec.size - (GAP * 2, GAP * 2).into()).into(),
+                ),
+            );
         }
         self.send_pending_configure();
     }
-    
+
     pub fn resize(&mut self, focused_surface: Option<WlSurface>, offset: (i32, i32)) {
         if self.layout_tree.is_none() || focused_surface.is_none() {
             return;
         }
-        
+
         self.send_resize_configure();
 
-        let focus = focused_surface.and_then(|surface| {
-            self.elements().find(|win| *win.toplevel().unwrap().wl_surface() == surface)
-        })
-        .unwrap()
-        .clone();
+        let focus = focused_surface
+            .and_then(|surface| {
+                self.elements()
+                    .find(|win| *win.toplevel().unwrap().wl_surface() == surface)
+            })
+            .unwrap()
+            .clone();
 
         if let Some(layout_tree) = &mut self.layout_tree {
             layout_tree.resize(&focus, offset);
@@ -217,18 +234,24 @@ impl Workspace {
 
     pub fn send_resize_configure(&mut self) {
         for win in self.elements() {
-            win.toplevel().unwrap().with_pending_state(|state| {
-                state.states.set(xdg_toplevel::State::Resizing)
-            });
+            win.toplevel()
+                .unwrap()
+                .with_pending_state(|state| state.states.set(xdg_toplevel::State::Resizing));
             win.toplevel().unwrap().send_pending_configure();
         }
     }
 
     pub fn send_unresize_configure(&mut self) {
         let e: Vec<_> = self.elements().cloned().collect();
-        
+
         for win in e {
-            let rec = win.get_rec().unwrap();
+            let rec = match win.get_rec(){
+                Some(r) => r,
+                None => {
+                    warn!("Failed to get window rectangle");
+                    return
+                }
+            };
             win.toplevel().unwrap().with_pending_state(|state| {
                 state.states.unset(xdg_toplevel::State::Resizing);
                 state.size = Some(rec.size)
@@ -237,15 +260,21 @@ impl Workspace {
             self.map_element(win, rec.loc, false);
         }
     }
-    
+
     pub fn send_pending_configure(&mut self) {
         let e: Vec<_> = self.elements().cloned().collect();
-        
+
         for win in e {
-            let rec = win.get_rec().unwrap();
-            win.toplevel().unwrap().with_pending_state(|state| {
-                state.size = Some(rec.size)
-            });
+            let rec = match win.get_rec(){
+                Some(r) => r,
+                None => {
+                    warn!("Failed to get window rectangle");
+                    return
+                }
+            };
+            win.toplevel()
+                .unwrap()
+                .with_pending_state(|state| state.size = Some(rec.size));
             win.toplevel().unwrap().send_pending_configure();
             self.map_element(win, rec.loc, false);
         }
@@ -254,8 +283,8 @@ impl Workspace {
     pub fn set_focus(&mut self, surface: Option<WlSurface>) {
         if let Some(surface) = surface {
             let focus_window = self
-            .elements()
-            .find(|w| *w.toplevel().unwrap().wl_surface() == surface);
+                .elements()
+                .find(|w| *w.toplevel().unwrap().wl_surface() == surface);
 
             if let Some(window) = focus_window {
                 self.focus = Some(window.clone())
@@ -269,6 +298,9 @@ impl Workspace {
         &self.focus
     }
 
+    pub fn current_space(&self) -> &Space<Window> {
+        &self.space
+    }
 }
 
 #[derive(Debug)]
@@ -345,7 +377,8 @@ impl WorkspaceManager {
         focused_surface: Option<WlSurface>,
         activate: bool,
     ) {
-        self.current_workspace_mut().map_tiled_element(window, focused_surface, activate);
+        self.current_workspace_mut()
+            .map_tiled_element(window, focused_surface, activate);
     }
 
     pub fn raise_element(&mut self, window: &Window, activate: bool) {
@@ -369,10 +402,6 @@ impl WorkspaceManager {
         self.current_workspace().element_location(window)
     }
 
-    pub fn element_geometry(&self, window: &Window) -> Option<Rectangle<i32, Logical>> {
-        self.current_workspace().element_geometry(window)
-    }
-
     pub fn elements(&self) -> impl DoubleEndedIterator<Item = &Window> + ExactSizeIterator {
         self.current_workspace().elements()
     }
@@ -387,7 +416,7 @@ impl WorkspaceManager {
     pub fn _workspaces_counts(&self) -> usize {
         self.workspaces.iter().count()
     }
- 
+
     pub fn remove_window(&mut self, surface: &WlSurface) {
         self.current_workspace_mut().remove_window(surface);
     }
@@ -412,4 +441,7 @@ impl WorkspaceManager {
         &self.current_workspace().get_focus()
     }
 
+    pub fn current_space(&self) -> &Space<Window> {
+        self.current_workspace().current_space()
+    }
 }

@@ -1,8 +1,14 @@
 use std::{
-    cell::RefCell, collections::HashMap, sync::atomic::{AtomicUsize, Ordering}
+    cell::RefCell,
+    collections::HashMap,
+    sync::atomic::{AtomicUsize, Ordering},
 };
 
-use smithay::{desktop::Window, reexports::wayland_server::protocol::wl_surface::WlSurface, utils::{Logical, Rectangle}};
+use smithay::{
+    desktop::Window,
+    reexports::wayland_server::protocol::wl_surface::WlSurface,
+    utils::{Logical, Rectangle},
+};
 
 use super::workspace::WorkspaceId;
 
@@ -33,29 +39,29 @@ pub trait WindowExt {
 impl WindowExt for Window {
     fn set_id(&self) -> WindowID {
         let id = WindowID::next();
-        self.user_data().insert_if_missing(|| RefCell::new(WindowExtElements {id, rec: Rectangle::default()}));
+        self.user_data().insert_if_missing(|| {
+            RefCell::new(WindowExtElements {
+                id,
+                rec: Rectangle::default(),
+            })
+        });
         id
     }
 
     fn get_id(&self) -> Option<WindowID> {
-        self
-            .user_data()
+        self.user_data()
             .get::<RefCell<WindowExtElements>>()
             .and_then(|e| Some(e.borrow().id.clone()))
     }
 
     fn set_rec(&self, new_rec: Rectangle<i32, Logical>) {
-        if let Some(e) = self
-            .user_data()
-            .get::<RefCell<WindowExtElements>>() 
-        {
+        if let Some(e) = self.user_data().get::<RefCell<WindowExtElements>>() {
             e.borrow_mut().rec = new_rec;
         }
     }
 
     fn get_rec(&self) -> Option<Rectangle<i32, Logical>> {
-        self.
-            user_data()
+        self.user_data()
             .get::<RefCell<WindowExtElements>>()
             .and_then(|e| Some(e.borrow().rec.clone()))
     }
@@ -96,7 +102,7 @@ impl WindowManager {
 
     pub fn remove_window(&mut self, surface: &WlSurface) -> Option<Window> {
         let window = self.get_window(surface).unwrap().clone();
-    
+
         if let Some(window_id) = self.get_window_id(&window) {
             self.window_workspace.remove(&window_id);
         }
@@ -107,6 +113,4 @@ impl WindowManager {
 
         None
     }
-    
 }
-

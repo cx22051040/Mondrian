@@ -1,12 +1,11 @@
 use smithay::{
     input::{
-        keyboard::KeyboardHandle, pointer::PointerHandle, touch::TouchHandle, Seat, SeatState
-    }, 
-    reexports::wayland_server::DisplayHandle, 
+        Seat, SeatState, keyboard::KeyboardHandle, pointer::PointerHandle, touch::TouchHandle,
+    },
+    reexports::wayland_server::DisplayHandle,
 };
 
 use crate::state::GlobalData;
-
 
 pub struct InputManager {
     pub seat_state: SeatState<GlobalData>,
@@ -14,12 +13,11 @@ pub struct InputManager {
 }
 
 impl InputManager {
-
     pub fn new(seat_name: String, display_handle: &DisplayHandle) -> Self {
         let mut seat_state = SeatState::new();
         let seat_name = seat_name;
         info!("seat_name: {:?}", seat_name);
-        let mut seat= seat_state.new_wl_seat(display_handle, seat_name);
+        let mut seat = seat_state.new_wl_seat(display_handle, seat_name);
 
         // TODO: finish device added
         // Notify clients that we have a keyboard, for the sake of the example we assume that keyboard is always present.
@@ -30,10 +28,7 @@ impl InputManager {
         // Here we assume that there is always pointer plugged in
         seat.add_pointer();
 
-        Self {
-            seat_state,
-            seat,
-        }
+        Self { seat_state, seat }
     }
 
     pub fn get_keyboard(&self) -> Option<KeyboardHandle<GlobalData>> {
@@ -48,3 +43,4 @@ impl InputManager {
         self.seat.get_touch()
     }
 }
+

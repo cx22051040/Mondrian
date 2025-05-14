@@ -1,7 +1,7 @@
-pub mod winit;
 pub mod tty;
+pub mod winit;
 
-use smithay::{backend::renderer::{ImportAll, ImportMem, Renderer}, reexports::calloop::LoopHandle};
+use smithay::reexports::calloop::LoopHandle;
 
 use tty::Tty;
 use winit::Winit;
@@ -30,7 +30,11 @@ impl Backend {
         }
     }
 
-    pub fn init(&mut self, output_manager: &mut OutputManager, loop_handle: &LoopHandle<'_, GlobalData>) {
+    pub fn init(
+        &mut self,
+        output_manager: &mut OutputManager,
+        loop_handle: &LoopHandle<'_, GlobalData>,
+    ) {
         if let Self::Winit(v) = self {
             v.init(output_manager);
         } else if let Self::Tty(v) = self {
@@ -50,3 +54,4 @@ impl Backend {
         }
     }
 }
+

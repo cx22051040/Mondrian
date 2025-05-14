@@ -3,7 +3,6 @@ use std::{collections::HashMap, fs};
 use itertools::Itertools;
 use regex::Regex;
 
-// 定义所有的内部可执行函数
 #[derive(Debug, Clone)]
 pub enum FunctionEnum {
     SwitchWorkspace1,
@@ -124,6 +123,4 @@ impl KeybindingsManager {
 
         bindings
     }
-
 }
-

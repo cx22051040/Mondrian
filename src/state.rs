@@ -1,47 +1,49 @@
 use anyhow::Context;
 use smithay::{
-    backend::{allocator::dmabuf::Dmabuf, renderer::ImportDma}, 
-    delegate_data_device, delegate_dmabuf, delegate_output, delegate_seat, delegate_shm, delegate_viewporter, 
-    desktop::PopupManager, 
-    input::{Seat, SeatHandler, SeatState}, 
+    backend::{allocator::dmabuf::Dmabuf, renderer::ImportDma},
+    delegate_data_device, delegate_dmabuf, delegate_output, delegate_seat, delegate_shm,
+    delegate_viewporter,
+    desktop::PopupManager,
+    input::{Seat, SeatHandler, SeatState},
     reexports::{
         calloop::LoopHandle,
         wayland_server::{
-            backend::ClientData, protocol::{wl_buffer, wl_shm, wl_surface::WlSurface}, DisplayHandle, Resource
+            DisplayHandle, Resource,
+            backend::ClientData,
+            protocol::{wl_buffer, wl_shm, wl_surface::WlSurface},
         },
-    }, utils::{Clock, Monotonic}, wayland::{
+    },
+    utils::{Clock, Monotonic, Time},
+    wayland::{
         buffer::BufferHandler,
         compositor::{CompositorClientState, CompositorState},
         dmabuf::{DmabufGlobal, DmabufHandler, DmabufState, ImportNotifier},
         output::OutputHandler,
         security_context::SecurityContext,
         selection::{
+            SelectionHandler,
             data_device::{
-                set_data_device_focus, ClientDndGrabHandler, DataDeviceHandler, DataDeviceState, ServerDndGrabHandler
-            }, SelectionHandler
+                ClientDndGrabHandler, DataDeviceHandler, DataDeviceState, ServerDndGrabHandler,
+                set_data_device_focus,
+            },
         },
         shell::{wlr_layer::WlrLayerShellState, xdg::XdgShellState},
         shm::{ShmHandler, ShmState},
         viewporter::ViewporterState,
-    }
+    },
 };
 
 #[cfg(feature = "tty")]
 use crate::backend::tty::Tty;
 
 use crate::{
-    backend::{
-        winit::Winit, Backend
-    }, 
-    config::Configs, 
+    backend::{Backend, winit::Winit},
+    config::Configs,
     manager::{
-        input::InputManager, 
-        output::OutputManager, 
-        render::RenderManager, 
-        window::WindowManager, 
-        workspace::WorkspaceManager
-    }, 
-    render::cursor::CursorManager
+        input::InputManager, output::OutputManager, render::RenderManager, window::WindowManager,
+        workspace::WorkspaceManager,
+    },
+    render::cursor::CursorManager,
 };
 
 #[derive(Default)]
@@ -67,7 +69,7 @@ impl ClientData for ClientState {
     }
 }
 
-pub struct GlobalData{
+pub struct GlobalData {
     pub backend: Backend,
     pub state: State,
 
@@ -90,22 +92,26 @@ pub struct GlobalData{
     // global data
     pub start_time: std::time::Instant,
     pub clock: Clock<Monotonic>,
-
+    pub next_frame_target: Time<Monotonic>,
 }
 
 impl GlobalData {
-    pub fn new(loop_handle: LoopHandle<'static, GlobalData>, display_handle: DisplayHandle) -> Self {
-
+    pub fn new(
+        loop_handle: LoopHandle<'static, GlobalData>,
+        display_handle: DisplayHandle,
+    ) -> Self {
         // judge the backend type, create base config
         let has_display = std::env::var_os("WAYLAND_DISPLAY").is_some()
             || std::env::var_os("WAYLAND_SOCKET").is_some()
             || std::env::var_os("DISPLAY").is_some();
-    
+
         let mut backend = if has_display {
             let winit = Winit::new(&loop_handle, &display_handle).unwrap();
             Backend::Winit(winit)
         } else {
-            let tty = Tty::new(&loop_handle).context("error get tty backend").unwrap();
+            let tty = Tty::new(&loop_handle)
+                .context("error get tty backend")
+                .unwrap();
             Backend::Tty(tty)
         };
 
@@ -126,15 +132,18 @@ impl GlobalData {
 
         // TODO: just easy for test workspace exchange
         let output = output_manager.current_output();
-        let output_geo = output_manager.output_geometry(output).expect("workspace add test error");
+        let output_geo = output_manager
+            .output_geometry(output)
+            .expect("workspace add test error");
         workspace_manager.add_workspace(output, output_geo, None, true);
         workspace_manager.add_workspace(output, output_geo, None, false);
-        
+
         // load configs
         let configs = Configs::new("src/config/keybindings.conf");
 
         let start_time = std::time::Instant::now();
         let clock = Clock::new();
+        let next_frame_target = clock.now();
 
         Self {
             backend,
@@ -155,6 +164,7 @@ impl GlobalData {
 
             start_time,
             clock,
+            next_frame_target,
         }
     }
 }
@@ -174,10 +184,10 @@ impl State {
         // init smithay state
         let compositor_state = CompositorState::new::<GlobalData>(display_handle);
         let data_device_state = DataDeviceState::new::<GlobalData>(display_handle);
-        let shm_state = ShmState::new::<GlobalData>(display_handle, vec![    
-            wl_shm::Format::Argb8888,
-            wl_shm::Format::Xrgb8888,
-        ]);
+        let shm_state = ShmState::new::<GlobalData>(
+            display_handle,
+            vec![wl_shm::Format::Argb8888, wl_shm::Format::Xrgb8888],
+        );
         let xdg_shell_state = XdgShellState::new::<GlobalData>(display_handle);
         let layer_shell_state = WlrLayerShellState::new::<GlobalData>(display_handle);
         let viewporter_state = ViewporterState::new::<GlobalData>(display_handle);
@@ -274,3 +284,4 @@ impl DmabufHandler for GlobalData {
 delegate_dmabuf!(GlobalData);
 
 delegate_viewporter!(GlobalData);
+
