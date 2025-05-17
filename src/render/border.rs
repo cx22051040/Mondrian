@@ -1,26 +1,78 @@
 use smithay::{
     backend::renderer::{
-        ImportAll, Renderer,
-        element::{Element, Id, Kind, RenderElement, UnderlyingStorage},
-        utils::{CommitCounter, OpaqueRegions},
+        element::{
+            Element, Id, Kind, RenderElement, UnderlyingStorage
+        }, 
+        gles::{
+            GlesError, GlesFrame, GlesPixelProgram, GlesRenderer, Uniform
+        }, 
+        utils::{CommitCounter, OpaqueRegions}, 
     },
-    utils::{Buffer, Logical, Physical, Rectangle, Scale, Size},
+    utils::{Buffer, Logical, Physical, Rectangle, Scale, Size, Transform},
 };
 
+use crate::backend::tty::{TtyFrame, TtyRenderer, TtyRendererError};
+
+use super::AsGlesFrame;
+
 #[derive(Debug)]
-pub struct BorderRenderElement<R: Renderer> {
+pub struct BorderRenderElement{
     id: Id,
+    shader: GlesPixelProgram,
     commit_counter: CommitCounter,
-    rec: Rectangle<f64, Logical>,
-    opaque_regions: Vec<Rectangle<f64, Logical>>,
+    area: Rectangle<i32, Logical>,
+    opaque_regions: Vec<Rectangle<i32, Logical>>,
     alpha: f32,
+    additional_uniforms: Vec<Uniform<'static>>,
     kind: Kind,
-    texture: R,
 }
 
-impl<R: Renderer> BorderRenderElement<R> {}
+impl BorderRenderElement {
+    pub fn new(
+        shader: GlesPixelProgram,
+        area: Rectangle<i32, Logical>,
+        opaque_regions: Option<Vec<Rectangle<i32, Logical>>>,
+        alpha: f32,
+        additional_uniforms: Vec<Uniform<'_>>,
+        kind: Kind,
+    ) -> Self {
+        Self {
+            id: Id::new(),
+            shader,
+            commit_counter: CommitCounter::default(),
+            area,
+            opaque_regions: opaque_regions.unwrap_or_default(),
+            alpha,
+            additional_uniforms: additional_uniforms.into_iter().map(|u| u.into_owned()).collect(),
+            kind,
+        }
+    }
 
-impl<R: Renderer + ImportAll> Element for BorderRenderElement<R> {
+    /// Resize the canvas area
+    pub fn resize(
+        &mut self,
+        area: Rectangle<i32, Logical>,
+        opaque_regions: Option<Vec<Rectangle<i32, Logical>>>,
+    ) {
+        let opaque_regions = opaque_regions.unwrap_or_default();
+        if self.area != area || self.opaque_regions != opaque_regions {
+            self.area = area;
+            self.opaque_regions = opaque_regions;
+            self.commit_counter.increment();
+        }
+    }
+
+    /// Update the additional uniforms
+    /// (see [`GlesRenderer::compile_custom_pixel_shader`] and [`GlesFrame::render_pixel_shader_to`]).
+    ///
+    /// This replaces the stored uniforms, you have to update all of them, partial updates are not possible.
+    pub fn update_uniforms(&mut self, additional_uniforms: Vec<Uniform<'_>>) {
+        self.additional_uniforms = additional_uniforms.into_iter().map(|u| u.into_owned()).collect();
+        self.commit_counter.increment();
+    }
+}
+
+impl Element for BorderRenderElement {
     fn id(&self) -> &Id {
         &self.id
     }
@@ -30,11 +82,11 @@ impl<R: Renderer + ImportAll> Element for BorderRenderElement<R> {
     }
 
     fn src(&self) -> Rectangle<f64, Buffer> {
-        Rectangle::from_size(Size::from((1., 1.)))
+        Rectangle::from_size(self.area.size.to_f64().to_buffer(1.0, Transform::Normal))
     }
 
     fn geometry(&self, scale: Scale<f64>) -> Rectangle<i32, Physical> {
-        self.rec.to_physical_precise_round(scale)
+        self.area.to_physical_precise_round(scale)
     }
 
     fn opaque_regions(&self, scale: Scale<f64>) -> OpaqueRegions<i32, Physical> {
@@ -53,22 +105,50 @@ impl<R: Renderer + ImportAll> Element for BorderRenderElement<R> {
     }
 }
 
-impl<R: Renderer + ImportAll> RenderElement<R> for BorderRenderElement<R> {
+impl RenderElement<GlesRenderer> for BorderRenderElement {
     fn draw(
         &self,
-        frame: &mut R::Frame<'_, '_>,
+        frame: &mut GlesFrame<'_, '_>,
         src: Rectangle<f64, Buffer>,
         dst: Rectangle<i32, Physical>,
         damage: &[Rectangle<i32, Physical>],
-        opaque_regions: &[Rectangle<i32, Physical>],
-    ) -> Result<(), R::Error> {
-        todo!()
+        _opaque_regions: &[Rectangle<i32, Physical>],
+    ) -> Result<(), GlesError> {
+
+        frame.render_pixel_shader_to(
+            &self.shader,
+            src,
+            dst,
+            self.area.size.to_buffer(1, Transform::Flipped180),
+            Some(damage),
+            self.alpha,
+            &self.additional_uniforms,
+        )
     }
 
-    fn underlying_storage(&self, _renderer: &mut R) -> Option<UnderlyingStorage> {
+    fn underlying_storage(&self, _renderer: &mut GlesRenderer) -> Option<UnderlyingStorage> {
         // If scanout for things other than Wayland buffers is implemented, this will need to take
         // the target GPU into account.
         None
     }
 }
 
+impl<'render> RenderElement<TtyRenderer<'render>> for BorderRenderElement {
+    fn draw(
+        &self,
+        frame: &mut TtyFrame<'_, '_, '_>,
+        src: Rectangle<f64, Buffer>,
+        dst: Rectangle<i32, Physical>,
+        damage: &[Rectangle<i32, Physical>],
+        opaque_regions: &[Rectangle<i32, Physical>],
+    ) -> Result<(), TtyRendererError<'_>> {
+        frame.as_gles_frame();
+        RenderElement::<TtyRenderer<'_>>::draw(&self, frame, src, dst, damage, opaque_regions)
+    }
+
+    fn underlying_storage(&self, _renderer: &mut TtyRenderer<'render>) -> Option<UnderlyingStorage> {
+        // If scanout for things other than Wayland buffers is implemented, this will need to take
+        // the target GPU into account.
+        None
+    }
+}

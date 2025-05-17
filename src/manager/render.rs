@@ -2,87 +2,56 @@ use std::time::Instant;
 
 use smithay::{
     backend::renderer::{
-        ExportMem, ImportAll, ImportMem, ImportMemWl, Renderer, RendererSuper, Texture,
         element::{
-            Kind,
-            memory::MemoryRenderBufferRenderElement,
-            surface::{WaylandSurfaceRenderElement, render_elements_from_surface_tree},
-        },
-        gles::GlesRenderer,
+            memory::MemoryRenderBufferRenderElement, 
+            surface::{render_elements_from_surface_tree, WaylandSurfaceRenderElement}, 
+            Kind
+        }, gles::{GlesPixelProgram, GlesRenderer, Uniform, UniformName, UniformType}, Color32F
     },
     desktop::space::SpaceRenderElements,
     utils::Scale,
 };
 
-use crate::{
-    backend::tty::TtyRenderer,
-    render::{
-        border::BorderRenderElement,
-        cursor::{CursorManager, RenderCursor, XCursor},
-        elements::{CustomRenderElements, OutputRenderElements},
-    },
-};
+use crate::render::{
+        border::BorderRenderElement, cursor::{CursorManager, RenderCursor, XCursor}, elements::{CustomRenderElements, OutputRenderElements}, NuonuoRenderer
+    };
 
 use super::{
     input::InputManager, output::OutputManager, window::WindowExt, workspace::WorkspaceManager,
 };
-
-/// Trait with our main renderer requirements to save on the typing.
-pub trait NuonuoRenderer:
-    ImportAll
-    + ImportMem
-    + ExportMem
-    + ImportMemWl
-    + Renderer<TextureId = Self::NuonuoTextureId, Error = Self::NuonuoError>
-    + AsGlesRenderer
-{
-    // Associated types to work around the instability of associated type bounds.
-    type NuonuoTextureId: Texture + Clone + Send + 'static;
-    type NuonuoError: std::error::Error
-        + Send
-        + Sync
-        + From<<GlesRenderer as RendererSuper>::Error>
-        + 'static;
-}
-
-impl<R> NuonuoRenderer for R
-where
-    R: ImportAll + ImportMem + ImportMemWl + ExportMem + AsGlesRenderer,
-    R::TextureId: Texture + Clone + Send + 'static,
-    R::Error:
-        std::error::Error + Send + Sync + From<<GlesRenderer as RendererSuper>::Error> + 'static,
-{
-    type NuonuoTextureId = R::TextureId;
-    type NuonuoError = R::Error;
-}
-
-/// Trait for getting the underlying `GlesRenderer`.
-pub trait AsGlesRenderer {
-    fn as_gles_renderer(&mut self) -> &mut GlesRenderer;
-}
-
-impl AsGlesRenderer for GlesRenderer {
-    fn as_gles_renderer(&mut self) -> &mut GlesRenderer {
-        self
-    }
-}
-
-impl AsGlesRenderer for TtyRenderer<'_> {
-    fn as_gles_renderer(&mut self) -> &mut GlesRenderer {
-        self.as_mut()
-    }
-}
 
 pub struct RenderManager {
     // no need now
     pub start_time: Instant,
 }
 
+pub struct BorderShader(pub GlesPixelProgram);
+
 impl RenderManager {
     pub fn new() -> Self {
         Self {
             start_time: Instant::now(),
         }
+    }
+
+    pub fn compile_shaders(&self, renderer: &mut GlesRenderer) {
+        // Compile GLSL file into pixel shader.
+        let border_shader = renderer
+        .compile_custom_pixel_shader(
+            include_str!("../render/shaders/border.frag"),
+            &[
+                UniformName::new("u_resolution", UniformType::_2f),
+                UniformName::new("border_color", UniformType::_3f),
+                UniformName::new("border_thickness", UniformType::_1f),
+            ],
+        )
+        .unwrap();
+
+        // Save pixel shader in EGL rendering context.
+        renderer
+            .egl_context()
+            .user_data()
+            .insert_if_missing(|| BorderShader(border_shader));
     }
 
     pub fn get_render_elements<R: NuonuoRenderer>(
@@ -92,7 +61,7 @@ impl RenderManager {
         workspace_manager: &WorkspaceManager,
         cursor_manager: &mut CursorManager,
         input_manager: &InputManager,
-    ) -> Vec<OutputRenderElements<R, WaylandSurfaceRenderElement<R>>> {
+    ) -> Vec<OutputRenderElements<R>> {
         let mut output_elements = vec![];
 
         // First is Cursor
@@ -115,6 +84,13 @@ impl RenderManager {
         // Then LayerShell Overlay and Top
         // TODO:
 
+        // Then Border
+        output_elements.extend(
+            self.get_border_render_elements(renderer, workspace_manager)
+                .into_iter()
+                .map(OutputRenderElements::Custom),
+        );
+
         // Then common Windows
         output_elements.extend(
             self.get_windows_render_elements(renderer, output_manager, workspace_manager)
@@ -123,11 +99,6 @@ impl RenderManager {
         );
 
         // Then Shader and CustomRenderElements
-        output_elements.extend(
-            self.get_border_render_elements(renderer, workspace_manager)
-                .into_iter()
-                .map(OutputRenderElements::Custom),
-        );
 
         // Then LayerShell Bottom and Background
         // TODO:
@@ -261,13 +232,39 @@ impl RenderManager {
                 }
             };
 
-            let a = renderer.as_gles_renderer();
+            let program = renderer.as_gles_renderer()
+                .egl_context()
+                .user_data()
+                .get::<BorderShader>()
+                .unwrap()
+                .0
+                .clone();
 
-            // elements.push(CustomRenderElements::Border(BorderRenderElement::element(
-            //     renderer,
-            //     window_geo,
-            //     1.0,
-            // )));
+            let point = window_geo.size.to_point();
+
+            // Colors are 24 bits with 8 bits for each red, green, blue value.
+            // To get each color, shift the bits over by the offset and zero
+            // out the other colors. The bitwise AND 255 does this because it will
+            // zero out everything but the last 8 bits. This is where the color
+            // has been shifted to.
+
+            let border_color: Color32F = Color32F::from([0.0, 0.0, 1.0, 1.0]);
+            let border_thickness = 5.0;
+
+            elements.push(CustomRenderElements::Border(
+                BorderRenderElement::new(
+                    program,
+                    window_geo,
+                    None,
+                    1.0,
+                    vec![
+                        Uniform::new("u_resolution", (point.x as f32, point.y as f32)),
+                        Uniform::new("border_color", (border_color.r(), border_color.g(), border_color.b())), 
+                        Uniform::new("border_thickness", border_thickness),
+                    ],
+                    Kind::Unspecified,
+                )
+            ));
         }
 
         elements

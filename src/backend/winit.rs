@@ -155,7 +155,7 @@ impl Winit {
         })
     }
 
-    pub fn init(&self, output_manager: &mut OutputManager) {
+    pub fn init(&mut self, output_manager: &mut OutputManager, render_manager: &RenderManager) {
         output_manager.add_output(
             "winit".to_string(),
             (0, 0).into(),
@@ -178,6 +178,8 @@ impl Winit {
             Some((0, 0).into()),
         );
         output_manager.set_preferred(mode);
+
+        render_manager.compile_shaders(self.backend.renderer());
     }
 
     pub fn render_output(

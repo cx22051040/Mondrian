@@ -128,7 +128,7 @@ impl GlobalData {
         let render_manager = RenderManager::new();
 
         // initial backend
-        backend.init(&mut output_manager, &loop_handle);
+        backend.init(&loop_handle, &mut output_manager, &render_manager);
 
         // TODO: just easy for test workspace exchange
         let output = output_manager.current_output();

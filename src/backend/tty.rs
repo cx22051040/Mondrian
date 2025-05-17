@@ -1,4 +1,6 @@
 use anyhow::Context;
+use smithay::backend::renderer::multigpu::MultiFrame;
+use smithay::backend::renderer::RendererSuper;
 use smithay::reexports::drm::Device;
 use smithay::{
     backend::drm::output::DrmOutputManager,
@@ -62,6 +64,7 @@ use std::{
 use crate::manager::input::InputManager;
 use crate::manager::render::RenderManager;
 use crate::render::cursor::CursorManager;
+use crate::render::AsGlesRenderer;
 use crate::state::GlobalData;
 use crate::{
     manager::{output::OutputManager, workspace::WorkspaceManager},
@@ -89,6 +92,17 @@ pub type TtyRenderer<'render> = MultiRenderer<
     GbmGlesBackend<GlesRenderer, DrmDeviceFd>,
     GbmGlesBackend<GlesRenderer, DrmDeviceFd>,
 >;
+
+pub type TtyFrame<'render, 'frame, 'buffer> = MultiFrame<
+    'render,
+    'render,
+    'frame,
+    'buffer,
+    GbmGlesBackend<GlesRenderer, DrmDeviceFd>,
+    GbmGlesBackend<GlesRenderer, DrmDeviceFd>,
+>;
+
+pub type TtyRendererError<'render> = <TtyRenderer<'render> as RendererSuper>::Error;
 
 pub struct Tty {
     pub session: LibSeatSession,
@@ -208,15 +222,16 @@ impl Tty {
 
     pub fn init(
         &mut self,
-        output_manager: &mut OutputManager,
         loop_handle: &LoopHandle<'_, GlobalData>,
+        output_manager: &mut OutputManager,
+        render_manager: &RenderManager,
     ) {
         let udev_backend = UdevBackend::new(&self.seat_name).unwrap();
 
         // gpu device
         for (device_id, path) in udev_backend.device_list() {
             if let Ok(node) = DrmNode::from_dev_id(device_id) {
-                if let Err(err) = self.device_added(node, &path, output_manager, loop_handle) {
+                if let Err(err) = self.device_added(loop_handle, node, &path, output_manager, render_manager) {
                     warn!("erro adding device: {:?}", err);
                 }
             }
@@ -227,10 +242,11 @@ impl Tty {
                 UdevEvent::Added { device_id, path } => {
                     if let Ok(node) = DrmNode::from_dev_id(device_id) {
                         if let Err(err) = data.backend.tty().device_added(
+                            &data.loop_handle,
                             node,
                             &path,
                             &mut data.output_manager,
-                            &data.loop_handle,
+                            &data.render_manager,
                         ) {
                             warn!("erro adding device: {:?}", err);
                         }
@@ -265,11 +281,11 @@ impl Tty {
 
             data.loop_handle
                 .insert_source(timer, move |_, _, data| {
-                    info!(
-                        "render event, time: {:?}, next_frame_target: {:?}",
-                        data.clock.now().as_millis(),
-                        data.next_frame_target.as_millis()
-                    );
+                    // info!(
+                    //     "render event, time: {:?}, next_frame_target: {:?}",
+                    //     data.clock.now().as_millis(),
+                    //     data.next_frame_target.as_millis()
+                    // );
                     if data.clock.now() > data.next_frame_target + MINIMIZE {
                         // drop current frame, render next frame
                         info!("jump the frame");
@@ -316,10 +332,11 @@ impl Tty {
 
     pub fn device_added(
         &mut self,
+        loop_handle: &LoopHandle<'_, GlobalData>,
         node: DrmNode,
         path: &Path,
         output_manager: &mut OutputManager,
-        loop_handle: &LoopHandle<'_, GlobalData>,
+        render_manager: &RenderManager,
     ) -> anyhow::Result<()> {
         info!("device added: {:?}", node);
         let fd = self.session.open(
@@ -366,6 +383,9 @@ impl Tty {
             .egl_context()
             .dmabuf_render_formats()
             .clone();
+
+        // initial shader
+        render_manager.compile_shaders(&mut renderer.as_gles_renderer());
 
         let drm_output_manager = DrmOutputManager::new(
             drm,

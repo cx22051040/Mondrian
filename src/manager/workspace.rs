@@ -167,6 +167,12 @@ impl Workspace {
             .unwrap()
             .clone();
 
+        if let Some(focus) = &self.focus {
+            if focus == &window {
+                self.focus = None;
+            }
+        }
+
         self.space.unmap_elem(&window);
         self.unmap_tiled_element(window);
 
