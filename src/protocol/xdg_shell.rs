@@ -79,9 +79,8 @@ impl XdgShellHandler for GlobalData {
             self.workspace_manager.current_workspace().id(),
         );
 
-        let focus = self.get_focus();
         self.workspace_manager
-            .map_tiled_element(window, focus, true);
+            .map_tiled_element(window, true);
     }
 
     fn new_popup(&mut self, surface: PopupSurface, _positioner: PositionerState) {
@@ -117,7 +116,13 @@ impl XdgShellHandler for GlobalData {
         if let Some(start_data) = check_grab(&seat, wl_surface, serial) {
             let pointer = seat.get_pointer().unwrap();
 
-            let window = self.workspace_manager.find_window(wl_surface).clone();
+            let window = match self.workspace_manager.find_window(wl_surface) {
+                Some(w) => w.clone(),
+                None => {
+                    warn!("Failed to find window for move request");
+                    return;
+                }
+            };
 
             let initial_window_location = self.workspace_manager.element_location(&window);
             let grab = PointerMoveSurfaceGrab {
@@ -145,8 +150,14 @@ impl XdgShellHandler for GlobalData {
         if let Some(start_data) = check_grab(&seat, wl_surface, serial) {
             let pointer = seat.get_pointer().unwrap();
 
-            let window = self.workspace_manager.find_window(wl_surface).clone();
-
+            let window = match self.workspace_manager.find_window(wl_surface) {
+                Some(w) => w.clone(),
+                None => {
+                    warn!("Failed to find window for move request");
+                    return;
+                }
+            };
+            
             let initial_window_location = self.workspace_manager.element_location(&window);
             let initial_window_size = window.geometry().size;
 

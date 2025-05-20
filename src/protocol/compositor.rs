@@ -22,6 +22,7 @@ impl CompositorHandler for GlobalData {
 
     fn commit(&mut self, surface: &WlSurface) {
         on_commit_buffer_handler::<Self>(surface);
+        self.backend.early_import(surface);
         if !is_sync_subsurface(surface) {
             let mut root = surface.clone();
             while let Some(parent) = get_parent(&root) {
@@ -34,9 +35,7 @@ impl CompositorHandler for GlobalData {
 
             if let Some(window) = self
                 .workspace_manager
-                .current_workspace()
-                .elements()
-                .find(|w| w.toplevel().unwrap().wl_surface() == &root)
+                .find_window(&root)
             {
                 window.on_commit();
             }

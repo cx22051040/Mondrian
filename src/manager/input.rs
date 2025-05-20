@@ -19,13 +19,7 @@ impl InputManager {
         info!("seat_name: {:?}", seat_name);
         let mut seat = seat_state.new_wl_seat(display_handle, seat_name);
 
-        // TODO: finish device added
-        // Notify clients that we have a keyboard, for the sake of the example we assume that keyboard is always present.
-        // You may want to track keyboard hot-plug in real compositor.
         seat.add_keyboard(Default::default(), 200, 25).unwrap();
-
-        // Notify clients that we have a pointer (mouse)
-        // Here we assume that there is always pointer plugged in
         seat.add_pointer();
 
         Self { seat_state, seat }
@@ -39,7 +33,7 @@ impl InputManager {
         self.seat.get_pointer()
     }
 
-    pub fn get_touch(&self) -> Option<TouchHandle<GlobalData>> {
+    pub fn _get_touch(&self) -> Option<TouchHandle<GlobalData>> {
         self.seat.get_touch()
     }
 }

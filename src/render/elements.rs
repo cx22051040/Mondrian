@@ -4,7 +4,6 @@ use smithay::{
             memory::MemoryRenderBufferRenderElement, 
             surface::WaylandSurfaceRenderElement
         },
-        gles::element::PixelShaderElement,
     },
     desktop::space::SpaceRenderElements,
 };

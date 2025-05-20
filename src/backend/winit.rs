@@ -5,14 +5,12 @@ use smithay::backend::renderer::ImportEgl;
 
 use smithay::{
     backend::{
-        egl::EGLDevice,
-        renderer::{ImportDma, damage::OutputDamageTracker, gles::GlesRenderer},
-        winit::{self, WinitEvent, WinitGraphicsBackend},
+        allocator::dmabuf::Dmabuf, egl::EGLDevice, renderer::{damage::OutputDamageTracker, gles::GlesRenderer, ImportDma}, winit::{self, WinitEvent, WinitGraphicsBackend}
     },
     output::{Mode as OutputMode, Subpixel},
     reexports::{calloop::LoopHandle, wayland_server::DisplayHandle},
     utils::{Rectangle, Scale, Transform},
-    wayland::dmabuf::{DmabufFeedback, DmabufFeedbackBuilder, DmabufGlobal, DmabufState},
+    wayland::dmabuf::DmabufFeedbackBuilder,
 };
 
 use crate::{
@@ -21,64 +19,19 @@ use crate::{
         workspace::WorkspaceManager,
     },
     render::cursor::CursorManager,
-    state::GlobalData,
+    state::{GlobalData, State},
 };
 
 #[derive(Debug)]
 pub struct Winit {
     pub backend: WinitGraphicsBackend<GlesRenderer>,
-    pub dmabuf_state: (DmabufState, DmabufGlobal, Option<DmabufFeedback>),
 }
 impl Winit {
     pub fn new(
         loop_handle: &LoopHandle<'_, GlobalData>,
-        display_handle: &DisplayHandle,
     ) -> anyhow::Result<Self> {
-        let (mut backend, winit) = winit::init::<GlesRenderer>()
+        let (backend, winit) = winit::init::<GlesRenderer>()
             .map_err(|e| anyhow::anyhow!("Failed to initialize Winit backend: {}", e))?;
-
-        let render_node = EGLDevice::device_for_display(backend.renderer().egl_context().display())
-            .and_then(|device| device.try_get_render_node());
-
-        let dmabuf_default_feedback = match render_node {
-            Ok(Some(node)) => {
-                let dmabuf_format = backend.renderer().dmabuf_formats();
-                let dmabuf_default_feedback =
-                    DmabufFeedbackBuilder::new(node.dev_id(), dmabuf_format)
-                        .build()
-                        .unwrap();
-                Some(dmabuf_default_feedback)
-            }
-            Ok(None) => {
-                warn!("Failed to query render node, dmabuf will use v3");
-                None
-            }
-            Err(err) => {
-                warn!(?err, "Failed to egl device for display, dmabuf will use v3");
-                None
-            }
-        };
-
-        let dmabuf_state = if let Some(default_feedback) = dmabuf_default_feedback {
-            let mut dmabuf_state = DmabufState::new();
-            let dmabuf_global = dmabuf_state.create_global_with_default_feedback::<GlobalData>(
-                display_handle,
-                &default_feedback,
-            );
-
-            (dmabuf_state, dmabuf_global, Some(default_feedback))
-        } else {
-            let dmabuf_formats = backend.renderer().dmabuf_formats();
-            let mut dmabuf_state = DmabufState::new();
-            let dmabuf_global =
-                dmabuf_state.create_global::<GlobalData>(display_handle, dmabuf_formats);
-            (dmabuf_state, dmabuf_global, None)
-        };
-
-        #[cfg(feature = "egl")]
-        if backend.renderer().bind_wl_display(&display_handle).is_ok() {
-            tracing::info!("EGL hardware-acceleration enabled");
-        };
 
         loop_handle
             .insert_source(winit, move |event, _, data| {
@@ -151,11 +104,17 @@ impl Winit {
 
         Ok(Self {
             backend,
-            dmabuf_state,
         })
     }
 
-    pub fn init(&mut self, output_manager: &mut OutputManager, render_manager: &RenderManager) {
+    pub fn init(
+        &mut self, 
+        display_handle: &DisplayHandle, 
+        output_manager: &mut OutputManager, 
+        render_manager: &RenderManager,
+        state: &mut State,
+    ) {
+        // add output
         output_manager.add_output(
             "winit".to_string(),
             (0, 0).into(),
@@ -164,6 +123,7 @@ impl Winit {
             "Winit".into(),
             (0, 0).into(),
             true,
+            display_handle,
         );
 
         let mode = OutputMode {
@@ -179,6 +139,49 @@ impl Winit {
         );
         output_manager.set_preferred(mode);
 
+        // initial dmabuf
+        #[cfg(feature = "egl")]
+        if self.backend.renderer().bind_wl_display(display_handle).is_ok() {
+            tracing::info!("EGL hardware-acceleration enabled");
+        };
+
+        let render_node = EGLDevice::device_for_display(self.backend.renderer().egl_context().display())
+            .and_then(|device| device.try_get_render_node());
+
+        let dmabuf_default_feedback = match render_node {
+            Ok(Some(node)) => {
+                let dmabuf_format = self.backend.renderer().dmabuf_formats();
+                let dmabuf_default_feedback =
+                    DmabufFeedbackBuilder::new(node.dev_id(), dmabuf_format)
+                        .build()
+                        .unwrap();
+                Some(dmabuf_default_feedback)
+            }
+            Ok(None) => {
+                warn!("Failed to query render node, dmabuf will use v3");
+                None
+            }
+            Err(err) => {
+                warn!(?err, "Failed to egl device for display, dmabuf will use v3");
+                None
+            }
+        };
+
+        if let Some(default_feedback) = dmabuf_default_feedback {
+            let _dmabuf_global = state.dmabuf_state.create_global_with_default_feedback::<GlobalData>(
+                display_handle,
+                &default_feedback,
+            );
+        } else {
+            let dmabuf_formats = self.backend.renderer().dmabuf_formats();
+            let _dmabuf_global =
+                state.dmabuf_state.create_global::<GlobalData>(
+                    display_handle, 
+                    dmabuf_formats
+                );
+        };
+
+        // compile shaders
         render_manager.compile_shaders(self.backend.renderer());
     }
 
@@ -201,13 +204,24 @@ impl Winit {
             input_manager,
         );
 
-        let res = damage_tracker.render_output(
+        let _ = damage_tracker.render_output(
             renderer,
             &mut framebuffer,
             0,
             &elements,
             [1.0, 0.0, 0.0, 1.0],
         );
+        
+    }
+
+    pub fn dmabuf_imported(&mut self, dmabuf: &Dmabuf) -> bool {
+        match self.backend.renderer().import_dmabuf(dmabuf, None) {
+            Ok(_) => true,
+            Err(err) => {
+                warn!("error importing dmabuf: {:?}", err);
+                false
+            }
+        }
     }
 }
 

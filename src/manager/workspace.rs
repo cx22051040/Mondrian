@@ -71,7 +71,6 @@ impl Workspace {
     pub fn map_tiled_element(
         &mut self,
         window: Window,
-        focused_surface: Option<WlSurface>,
         activate: bool,
     ) {
         self.refresh();
@@ -179,25 +178,16 @@ impl Workspace {
         self.send_pending_configure();
     }
 
-    pub fn invert_window(&mut self, focused_surface: Option<WlSurface>) {
-        if self.layout_tree.is_none() || focused_surface.is_none() {
-            return;
-        }
-        let focus = focused_surface
-            .and_then(|surface| {
-                self.elements()
-                    .find(|win| *win.toplevel().unwrap().wl_surface() == surface)
-            })
-            .unwrap()
-            .clone();
-
+    pub fn invert_window(&mut self) {
         if let Some(layout_tree) = &mut self.layout_tree {
-            layout_tree.invert_window(&focus);
-
-            #[cfg(feature = "trace_layout")]
-            layout_tree.print_tree();
-
-            self.send_pending_configure();
+            if let Some(focus) = &self.focus {
+                layout_tree.invert_window(focus);
+        
+                #[cfg(feature = "trace_layout")]
+                layout_tree.print_tree();
+        
+                self.send_pending_configure();
+            }
         }
     }
 
@@ -216,23 +206,13 @@ impl Workspace {
         self.send_pending_configure();
     }
 
-    pub fn resize(&mut self, focused_surface: Option<WlSurface>, offset: (i32, i32)) {
-        if self.layout_tree.is_none() || focused_surface.is_none() {
-            return;
-        }
-
+    pub fn resize(&mut self, offset: (i32, i32)) {
         self.send_resize_configure();
 
-        let focus = focused_surface
-            .and_then(|surface| {
-                self.elements()
-                    .find(|win| *win.toplevel().unwrap().wl_surface() == surface)
-            })
-            .unwrap()
-            .clone();
-
         if let Some(layout_tree) = &mut self.layout_tree {
-            layout_tree.resize(&focus, offset);
+            if let Some(focus) = &self.focus {
+                layout_tree.resize(focus, offset);
+            }
         }
 
         self.send_unresize_configure();
@@ -380,11 +360,10 @@ impl WorkspaceManager {
     pub fn map_tiled_element(
         &mut self,
         window: Window,
-        focused_surface: Option<WlSurface>,
         activate: bool,
     ) {
         self.current_workspace_mut()
-            .map_tiled_element(window, focused_surface, activate);
+            .map_tiled_element(window, activate);
     }
 
     pub fn raise_element(&mut self, window: &Window, activate: bool) {
@@ -412,11 +391,10 @@ impl WorkspaceManager {
         self.current_workspace().elements()
     }
 
-    pub fn find_window(&self, wl_surface: &WlSurface) -> &Window {
+    pub fn find_window(&self, surface: &WlSurface) -> Option<&Window> {
         // TODO: maybe can use hashmap to store the surface
         self.elements()
-            .find(|w| w.toplevel().unwrap().wl_surface() == wl_surface)
-            .unwrap()
+            .find(|w| w.toplevel().unwrap().wl_surface() == surface)
     }
 
     pub fn _workspaces_counts(&self) -> usize {
@@ -427,16 +405,16 @@ impl WorkspaceManager {
         self.current_workspace_mut().remove_window(surface);
     }
 
-    pub fn invert_window(&mut self, focused_surface: Option<WlSurface>) {
-        self.current_workspace_mut().invert_window(focused_surface);
+    pub fn invert_window(&mut self) {
+        self.current_workspace_mut().invert_window();
     }
 
     pub fn modify_windows(&mut self, rec: Rectangle<i32, Logical>) {
         self.current_workspace_mut().modify_windows(rec);
     }
 
-    pub fn resize(&mut self, focused_surface: Option<WlSurface>, offset: (i32, i32)) {
-        self.current_workspace_mut().resize(focused_surface, offset);
+    pub fn resize(&mut self, offset: (i32, i32)) {
+        self.current_workspace_mut().resize(offset);
     }
 
     pub fn set_focus(&mut self, surface: Option<WlSurface>) {

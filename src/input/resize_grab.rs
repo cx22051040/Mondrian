@@ -146,9 +146,8 @@ impl PointerGrab<GlobalData> for ResizeSurfaceGrab {
         handle.motion(data, None, event);
 
         let delta = event.location - self.last_position;
-        let focus = data.get_focus();
         data.workspace_manager
-            .resize(focus, (delta.x as i32, delta.y as i32));
+            .resize((delta.x as i32, delta.y as i32));
 
         self.last_position = event.location;
 
@@ -331,12 +330,14 @@ impl PointerGrab<GlobalData> for ResizeSurfaceGrab {
 }
 
 pub fn handle_commit(workspace_manager: &mut WorkspaceManager, surface: &WlSurface) -> Option<()> {
-    let window = workspace_manager
-        .elements()
-        .find(|w| w.toplevel().unwrap().wl_surface() == surface)
-        .cloned()?;
+    let window = match workspace_manager.find_window(surface) {
+        Some(window) => window,
+        None => {
+            return None;
+        }
+    };
 
-    let mut window_loc = workspace_manager.element_location(&window);
+    let mut window_loc = workspace_manager.element_location(window);
     let geometry = window.geometry();
 
     let new_loc: Point<Option<i32>, Logical> = ResizeSurfaceState::with(surface, |state| {
@@ -367,7 +368,7 @@ pub fn handle_commit(workspace_manager: &mut WorkspaceManager, surface: &WlSurfa
 
     if new_loc.x.is_some() || new_loc.y.is_some() {
         // If TOP or LEFT side of the window got resized, we have to move it
-        workspace_manager.map_element(window, window_loc, false);
+        workspace_manager.map_element(window.clone(), window_loc, false);
     }
     Some(())
 }

@@ -9,7 +9,7 @@ use smithay::{
         }, gles::{GlesPixelProgram, GlesRenderer, Uniform, UniformName, UniformType}, Color32F
     },
     desktop::space::SpaceRenderElements,
-    utils::Scale,
+    utils::{Rectangle, Scale},
 };
 
 use crate::render::{
@@ -149,7 +149,6 @@ impl RenderManager {
         let pointer = match pointer {
             Some(k) => k,
             None => {
-                error!("get pointer error");
                 return vec![];
             }
         };
@@ -269,4 +268,5 @@ impl RenderManager {
 
         elements
     }
+
 }

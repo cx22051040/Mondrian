@@ -42,22 +42,20 @@ impl OutputElement {
 pub struct OutputManager {
     pub outputs: Vec<OutputElement>,
     pub output_manager_state: OutputManagerState,
-    pub display_handle: DisplayHandle,
     // This space does not actually contain any windows, but all outputs are
     // mapped into it
     pub output_space: Space<Window>,
 }
 
 impl OutputManager {
-    pub fn new(display_handle: DisplayHandle) -> Self {
+    pub fn new(display_handle: &DisplayHandle) -> Self {
         let output_manager_state =
-            OutputManagerState::new_with_xdg_output::<GlobalData>(&display_handle);
+            OutputManagerState::new_with_xdg_output::<GlobalData>(display_handle);
         let output_space: Space<Window> = Default::default();
 
         Self {
             outputs: Vec::new(),
             output_manager_state,
-            display_handle,
             output_space,
         }
     }
@@ -71,6 +69,7 @@ impl OutputManager {
         model: String,
         location: Point<i32, Logical>,
         activate: bool,
+        display_handle: &DisplayHandle
     ) {
         let output = Output::new(
             name,
@@ -81,15 +80,24 @@ impl OutputManager {
                 model,
             },
         );
-        let _ = output.create_global::<GlobalData>(&self.get_display_handle());
+        let _ = output.create_global::<GlobalData>(display_handle);
 
         self.output_space.map_output(&output, location);
 
         self.outputs.push(OutputElement::new(output, activate));
     }
 
-    pub fn _remove_output() {
-        todo!()
+    pub fn remove_output(&mut self, output: &Output) {
+        if let Some(pos) = self.outputs
+            .iter()
+            .position(|o| o.output == *output) 
+        {
+            self.output_space.unmap_output(output);
+            self.outputs.remove(pos);
+        } else {
+            warn!("Failed to remove output: Output not found in the list");
+            return;
+        }
     }
 
     pub fn set_preferred(&mut self, mode: Mode) {
@@ -116,10 +124,6 @@ impl OutputManager {
             .find(|o| o.activate)
             .unwrap()
             .change_current_state(mode, transform, scale, location);
-    }
-
-    pub fn get_display_handle(&self) -> &DisplayHandle {
-        &self.display_handle
     }
 
     pub fn output_geometry(&self, output: &Output) -> Option<Rectangle<i32, Logical>> {

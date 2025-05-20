@@ -8,7 +8,7 @@ use smithay::{
         }, 
         utils::{CommitCounter, OpaqueRegions}, 
     },
-    utils::{Buffer, Logical, Physical, Rectangle, Scale, Size, Transform},
+    utils::{Buffer, Logical, Physical, Rectangle, Scale, Transform},
 };
 
 use crate::backend::tty::{TtyFrame, TtyRenderer, TtyRendererError};
@@ -49,7 +49,7 @@ impl BorderRenderElement {
     }
 
     /// Resize the canvas area
-    pub fn resize(
+    pub fn _resize(
         &mut self,
         area: Rectangle<i32, Logical>,
         opaque_regions: Option<Vec<Rectangle<i32, Logical>>>,
@@ -66,7 +66,7 @@ impl BorderRenderElement {
     /// (see [`GlesRenderer::compile_custom_pixel_shader`] and [`GlesFrame::render_pixel_shader_to`]).
     ///
     /// This replaces the stored uniforms, you have to update all of them, partial updates are not possible.
-    pub fn update_uniforms(&mut self, additional_uniforms: Vec<Uniform<'_>>) {
+    pub fn _update_uniforms(&mut self, additional_uniforms: Vec<Uniform<'_>>) {
         self.additional_uniforms = additional_uniforms.into_iter().map(|u| u.into_owned()).collect();
         self.commit_counter.increment();
     }
@@ -114,7 +114,6 @@ impl RenderElement<GlesRenderer> for BorderRenderElement {
         damage: &[Rectangle<i32, Physical>],
         _opaque_regions: &[Rectangle<i32, Physical>],
     ) -> Result<(), GlesError> {
-
         frame.render_pixel_shader_to(
             &self.shader,
             src,
@@ -142,8 +141,9 @@ impl<'render> RenderElement<TtyRenderer<'render>> for BorderRenderElement {
         damage: &[Rectangle<i32, Physical>],
         opaque_regions: &[Rectangle<i32, Physical>],
     ) -> Result<(), TtyRendererError<'_>> {
-        frame.as_gles_frame();
-        RenderElement::<TtyRenderer<'_>>::draw(&self, frame, src, dst, damage, opaque_regions)
+        let frame = frame.as_gles_frame();
+        RenderElement::<GlesRenderer>::draw(&self, frame, src, dst, damage, opaque_regions)?;
+        Ok(())
     }
 
     fn underlying_storage(&self, _renderer: &mut TtyRenderer<'render>) -> Option<UnderlyingStorage> {

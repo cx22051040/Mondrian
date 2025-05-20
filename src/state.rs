@@ -106,7 +106,7 @@ impl GlobalData {
             || std::env::var_os("DISPLAY").is_some();
 
         let mut backend = if has_display {
-            let winit = Winit::new(&loop_handle, &display_handle).unwrap();
+            let winit = Winit::new(&loop_handle).unwrap();
             Backend::Winit(winit)
         } else {
             let tty = Tty::new(&loop_handle)
@@ -116,10 +116,10 @@ impl GlobalData {
         };
 
         // initial global state
-        let nuonuo_state = State::new(&display_handle).expect("cannot make global state");
+        let mut nuonuo_state = State::new(&display_handle).expect("cannot make global state");
 
         // initial managers
-        let mut output_manager = OutputManager::new(display_handle.clone());
+        let mut output_manager = OutputManager::new(&display_handle);
         let mut workspace_manager = WorkspaceManager::new();
         let window_manager = WindowManager::new();
         let cursor_manager = CursorManager::new("default", 24);
@@ -128,7 +128,7 @@ impl GlobalData {
         let render_manager = RenderManager::new();
 
         // initial backend
-        backend.init(&loop_handle, &mut output_manager, &render_manager);
+        backend.init(&loop_handle, &display_handle, &mut output_manager, &render_manager, &mut nuonuo_state);
 
         // TODO: just easy for test workspace exchange
         let output = output_manager.current_output();
@@ -174,6 +174,9 @@ pub struct State {
     pub compositor_state: CompositorState,
     pub data_device_state: DataDeviceState,
     pub shm_state: ShmState,
+    pub dmabuf_state: DmabufState,
+
+    // protocol state
     pub xdg_shell_state: XdgShellState,
     pub layer_shell_state: WlrLayerShellState,
     pub viewporter_state: ViewporterState,
@@ -188,6 +191,8 @@ impl State {
             display_handle,
             vec![wl_shm::Format::Argb8888, wl_shm::Format::Xrgb8888],
         );
+        let dmabuf_state = DmabufState::new();
+
         let xdg_shell_state = XdgShellState::new::<GlobalData>(display_handle);
         let layer_shell_state = WlrLayerShellState::new::<GlobalData>(display_handle);
         let viewporter_state = ViewporterState::new::<GlobalData>(display_handle);
@@ -196,6 +201,8 @@ impl State {
             compositor_state,
             data_device_state,
             shm_state,
+            dmabuf_state,
+
             xdg_shell_state,
             layer_shell_state,
             viewporter_state,
@@ -242,6 +249,10 @@ impl SeatHandler for GlobalData {
         let client = focused.and_then(|s| display_handle.get_client(s.id()).ok());
         set_data_device_focus(display_handle, seat, client);
     }
+
+    fn led_state_changed(&mut self, _seat: &Seat<Self>, _led_state: smithay::input::keyboard::LedState) {
+        info!("led state changed");
+    }
 }
 delegate_seat!(GlobalData);
 
@@ -258,7 +269,7 @@ delegate_shm!(GlobalData);
 
 impl DmabufHandler for GlobalData {
     fn dmabuf_state(&mut self) -> &mut DmabufState {
-        &mut self.backend.winit().dmabuf_state.0
+        &mut self.state.dmabuf_state
     }
 
     fn dmabuf_imported(
@@ -267,14 +278,7 @@ impl DmabufHandler for GlobalData {
         dmabuf: Dmabuf,
         notifier: ImportNotifier,
     ) {
-        if self
-            .backend
-            .winit()
-            .backend
-            .renderer()
-            .import_dmabuf(&dmabuf, None)
-            .is_ok()
-        {
+        if self.backend.dmabuf_imported(&dmabuf) {
             let _ = notifier.successful::<GlobalData>();
         } else {
             notifier.failed();
