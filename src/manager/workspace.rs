@@ -106,9 +106,6 @@ impl Workspace {
                     self.map_element(window, loc, activate);
                 }
             }
-            LayoutScheme::BinaryTree => {
-                todo!()
-            }
         }
         self.send_pending_configure();
     }
@@ -136,7 +133,7 @@ impl Workspace {
         self.space.refresh();
     }
 
-    pub fn element_under(
+    pub fn window_under(
         &self,
         position: Point<f64, Logical>,
     ) -> Option<(&Window, Point<i32, Logical>)> {
@@ -266,17 +263,19 @@ impl Workspace {
         }
     }
 
-    pub fn set_focus(&mut self, surface: Option<WlSurface>) {
-        if let Some(surface) = surface {
-            let focus_window = self
-                .elements()
-                .find(|w| *w.toplevel().unwrap().wl_surface() == surface);
-
-            if let Some(window) = focus_window {
-                self.focus = Some(window.clone())
+    pub fn set_focus(&mut self, window: Option<Window>) {
+        match window {
+            Some(window) => {
+                self.raise_element(&window, true);
+                self.focus = Some(window);
             }
-        } else {
-            self.focus = None;
+            None => {
+                if let Some(focus) = &self.focus {
+                    focus.set_activated(false);
+                    focus.toplevel().unwrap().send_pending_configure();
+                }
+                self.focus = None;
+            }
         }
     }
 
@@ -366,21 +365,17 @@ impl WorkspaceManager {
             .map_tiled_element(window, activate);
     }
 
-    pub fn raise_element(&mut self, window: &Window, activate: bool) {
-        self.current_workspace_mut().raise_element(window, activate);
-    }
-
     pub fn refresh(&mut self) {
         self.current_workspace_mut().refresh();
     }
 
-    pub fn element_under(
+    pub fn window_under(
         &self,
         position: Point<f64, Logical>,
-    ) -> Option<(&Window, Point<i32, Logical>)> {
+    ) -> Option<(Window, Point<i32, Logical>)> {
         self.current_workspace()
-            .element_under(position)
-            .map(|(w, p)| (w, p))
+            .window_under(position)
+            .map(|(w, p)| (w.clone(), p))
     }
 
     pub fn element_location(&self, window: &Window) -> Point<i32, Logical> {
@@ -417,8 +412,8 @@ impl WorkspaceManager {
         self.current_workspace_mut().resize(offset);
     }
 
-    pub fn set_focus(&mut self, surface: Option<WlSurface>) {
-        self.current_workspace_mut().set_focus(surface);
+    pub fn set_focus(&mut self, window: Option<Window>) {
+        self.current_workspace_mut().set_focus(window);
     }
 
     pub fn get_focus(&self) -> &Option<Window> {

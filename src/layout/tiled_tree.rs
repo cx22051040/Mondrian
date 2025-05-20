@@ -9,7 +9,6 @@ const GAP: i32 = 12;
 #[derive(Debug, Clone)]
 pub enum LayoutScheme {
     Default,
-    BinaryTree,
 }
 
 #[derive(Debug, Clone, Copy)]

@@ -38,9 +38,9 @@ impl OutputElement {
         &self.output
     }
 }
-
 pub struct OutputManager {
     pub outputs: Vec<OutputElement>,
+    #[allow(dead_code)]
     pub output_manager_state: OutputManagerState,
     // This space does not actually contain any windows, but all outputs are
     // mapped into it

@@ -1,6 +1,6 @@
 use anyhow::Context;
 use smithay::{
-    backend::{allocator::dmabuf::Dmabuf, renderer::ImportDma},
+    backend::allocator::dmabuf::Dmabuf,
     delegate_data_device, delegate_dmabuf, delegate_output, delegate_seat, delegate_shm,
     delegate_viewporter,
     desktop::PopupManager,
@@ -179,6 +179,7 @@ pub struct State {
     // protocol state
     pub xdg_shell_state: XdgShellState,
     pub layer_shell_state: WlrLayerShellState,
+    #[allow(dead_code)]
     pub viewporter_state: ViewporterState,
 }
 

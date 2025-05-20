@@ -9,7 +9,7 @@ use smithay::{
         }, gles::{GlesPixelProgram, GlesRenderer, Uniform, UniformName, UniformType}, Color32F
     },
     desktop::space::SpaceRenderElements,
-    utils::{Rectangle, Scale},
+    utils::Scale,
 };
 
 use crate::render::{

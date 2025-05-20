@@ -2,11 +2,8 @@ use anyhow::Context;
 use smithay::backend::allocator::dmabuf::Dmabuf;
 use smithay::backend::allocator::format::FormatSet;
 use smithay::backend::drm::compositor::DrmCompositor;
-use smithay::backend::renderer::element::default_primary_scanout_output_compare;
 use smithay::backend::renderer::multigpu::MultiFrame;
 use smithay::backend::renderer::{ImportDma, ImportEgl, ImportMemWl, RendererSuper};
-use smithay::desktop::utils::{update_surface_primary_scanout_output, with_surfaces_surface_tree};
-use smithay::input::pointer::CursorImageStatus;
 use smithay::output::OutputModeSource;
 use smithay::reexports::calloop::RegistrationToken;
 use smithay::reexports::drm::Device;
@@ -132,6 +129,7 @@ pub struct OutputDevice {
     render_node: DrmNode,
     drm_scanner: DrmScanner,
     surfaces: HashMap<crtc::Handle, Surface>,
+    #[allow(dead_code)]
     active_leases: Vec<DrmLease>,
     drm: DrmDevice,
     gbm: GbmDevice<DrmDeviceFd>,
@@ -143,6 +141,7 @@ pub struct OutputDevice {
 
 pub struct Surface {
     output: Output,
+    #[allow(dead_code)]
     device_id: DrmNode,
     render_node: DrmNode,
     compositor: GbmDrmCompositor,
@@ -1112,6 +1111,7 @@ impl Tty {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct SurfaceDmabufFeedback {
     pub render: DmabufFeedback,
