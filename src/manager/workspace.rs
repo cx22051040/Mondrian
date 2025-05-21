@@ -157,11 +157,16 @@ impl Workspace {
     }
 
     pub fn remove_window(&mut self, surface: &WlSurface) {
-        let window = self
+        let window = match self
             .elements()
             .find(|win| win.toplevel().unwrap().wl_surface() == surface)
-            .unwrap()
-            .clone();
+            {
+                Some(w) => w.clone(),
+                None => {
+                    warn!("Failed to find window");
+                    return;
+                }
+            };
 
         if let Some(focus) = &self.focus {
             if focus == &window {

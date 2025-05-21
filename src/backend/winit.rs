@@ -71,11 +71,15 @@ impl Winit {
                             &data.input_manager,
                         );
 
-                        data.backend
+                        match data.backend
                             .winit()
                             .backend
-                            .submit(Some(&[damage]))
-                            .unwrap();
+                            .submit(Some(&[damage])) {
+                                Ok(_) => {}
+                                Err(err) => {
+                                    warn!("Winit: Failed to submit frame: {:?}", err);
+                                }
+                            }
 
                         // For each of the windows send the frame callbacks to tell them to draw next frame.
                         data.workspace_manager.elements().for_each(|window| {
@@ -141,16 +145,16 @@ impl Winit {
 
         // initial dmabuf
         #[cfg(feature = "egl")]
-        if self.backend.renderer().bind_wl_display(display_handle).is_ok() {
+        if self.get_renderer().bind_wl_display(display_handle).is_ok() {
             tracing::info!("EGL hardware-acceleration enabled");
         };
 
-        let render_node = EGLDevice::device_for_display(self.backend.renderer().egl_context().display())
+        let render_node = EGLDevice::device_for_display(self.get_renderer().egl_context().display())
             .and_then(|device| device.try_get_render_node());
 
         let dmabuf_default_feedback = match render_node {
             Ok(Some(node)) => {
-                let dmabuf_format = self.backend.renderer().dmabuf_formats();
+                let dmabuf_format = self.get_renderer().dmabuf_formats();
                 let dmabuf_default_feedback =
                     DmabufFeedbackBuilder::new(node.dev_id(), dmabuf_format)
                         .build()
@@ -173,7 +177,7 @@ impl Winit {
                 &default_feedback,
             );
         } else {
-            let dmabuf_formats = self.backend.renderer().dmabuf_formats();
+            let dmabuf_formats = self.get_renderer().dmabuf_formats();
             let _dmabuf_global =
                 state.dmabuf_state.create_global::<GlobalData>(
                     display_handle, 
@@ -182,7 +186,7 @@ impl Winit {
         };
 
         // compile shaders
-        render_manager.compile_shaders(self.backend.renderer());
+        render_manager.compile_shaders(self.get_renderer());
     }
 
     pub fn render_output(
@@ -194,28 +198,34 @@ impl Winit {
         cursor_manager: &mut CursorManager,
         input_manager: &InputManager,
     ) {
-        let (renderer, mut framebuffer) = self.backend.bind().unwrap();
+        if let Ok((renderer, mut framebuffer)) = self.backend.bind() {
+            let elements = render_manager.get_render_elements(
+                renderer,
+                output_manager,
+                workspace_manager,
+                cursor_manager,
+                input_manager,
+            );
+    
+            let _ = damage_tracker.render_output(
+                renderer,
+                &mut framebuffer,
+                0,
+                &elements,
+                Color32F::from([0.0; 4]),
+            );
+        } else {
+            warn!("Winit: Failed to get renderer & framebuffer");
+            return
+        }
+    }
 
-        let elements = render_manager.get_render_elements(
-            renderer,
-            output_manager,
-            workspace_manager,
-            cursor_manager,
-            input_manager,
-        );
-
-        let _ = damage_tracker.render_output(
-            renderer,
-            &mut framebuffer,
-            0,
-            &elements,
-            Color32F::from([0.0; 4]),
-        );
-        
+    fn get_renderer(&mut self) -> &mut GlesRenderer {
+        self.backend.renderer()
     }
 
     pub fn dmabuf_imported(&mut self, dmabuf: &Dmabuf) -> bool {
-        match self.backend.renderer().import_dmabuf(dmabuf, None) {
+        match self.get_renderer().import_dmabuf(dmabuf, None) {
             Ok(_) => true,
             Err(err) => {
                 warn!("error importing dmabuf: {:?}", err);

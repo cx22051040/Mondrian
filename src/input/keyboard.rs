@@ -6,20 +6,14 @@ use smithay::{
     }, reexports::wayland_server::protocol::wl_surface::WlSurface, utils::{Serial, SERIAL_COUNTER}
 };
 
-use crate::{manager::workspace::WorkspaceId, state::GlobalData};
-
-use super::keybindings::{FunctionEnum, KeyAction};
+use crate::{manager::{input::{FunctionEnum, KeyAction}, workspace::WorkspaceId}, state::GlobalData};
 
 impl GlobalData {
     pub fn on_keyboard_key_event<I: InputBackend>(&mut self, event: I::KeyboardKeyEvent) {
         let serial = SERIAL_COUNTER.next_serial();
         let time = Event::time_msec(&event);
         let event_state = event.state();
-        let conf_priority_map = self
-            .configs
-            .conf_keybinding_manager
-            .conf_priority_map
-            .clone();
+        let priority_map = self.input_manager.get_priority_map().clone();
 
         let keyboard = self.input_manager.get_keyboard();
         let keyboard = match keyboard {
@@ -50,7 +44,7 @@ impl GlobalData {
                         });
 
                     pressed_keys_name.sort_by_key(|key| {
-                        conf_priority_map.get(key).cloned().unwrap_or(3)
+                        priority_map.get(key).cloned().unwrap_or(3)
                     });
 
                     let keys = pressed_keys_name.join("+");
@@ -67,13 +61,9 @@ impl GlobalData {
     }
 
     pub fn action_keys(&mut self, keys: String, serial: Serial) {
-        let conf_keybindings = self
-            .configs
-            .conf_keybinding_manager
-            .conf_keybindings
-            .clone();
+        let keybindings = self.input_manager.get_keybindings();
 
-        if let Some(command) = conf_keybindings.get(&keys) {
+        if let Some(command) = keybindings.get(&keys) {
             match command {
                 KeyAction::Command(cmd) => {
                     #[cfg(feature = "trace_input")]

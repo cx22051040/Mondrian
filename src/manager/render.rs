@@ -6,14 +6,14 @@ use smithay::{
             memory::MemoryRenderBufferRenderElement, 
             surface::{render_elements_from_surface_tree, WaylandSurfaceRenderElement}, 
             Kind
-        }, gles::{GlesPixelProgram, GlesRenderer, Uniform, UniformName, UniformType}, Color32F
+        }, gles::{GlesRenderer, Uniform}, Color32F
     },
     desktop::space::SpaceRenderElements,
     utils::Scale,
 };
 
 use crate::render::{
-        background::BackgroundRenderElement, border::BorderRenderElement, elements::{CustomRenderElements, OutputRenderElements}, NuonuoRenderer
+        background::{Background, BackgroundRenderElement}, border::{BorderRenderElement, BorderShader}, elements::{CustomRenderElements, OutputRenderElements, ShaderRenderElement}, NuonuoRenderer
     };
 
 use super::{
@@ -25,8 +25,6 @@ pub struct RenderManager {
     pub start_time: Instant,
 }
 
-pub struct BorderShader(pub GlesPixelProgram);
-pub struct Background(pub GlesPixelProgram);
 
 impl RenderManager {
     pub fn new() -> Self {
@@ -36,38 +34,8 @@ impl RenderManager {
     }
 
     pub fn compile_shaders(&self, renderer: &mut GlesRenderer) {
-        // Compile GLSL file into pixel shader.
-        let border_shader = renderer
-            .compile_custom_pixel_shader(
-                include_str!("../render/shaders/border.frag"),
-                &[
-                    UniformName::new("u_resolution", UniformType::_2f),
-                    UniformName::new("border_color", UniformType::_3f),
-                    UniformName::new("border_thickness", UniformType::_1f),
-                ],
-            )
-            .unwrap();
-
-        let background = renderer
-            .compile_custom_pixel_shader(
-                include_str!("../render/shaders/background.frag"),
-                &[
-                    UniformName::new("u_resolution", UniformType::_2f),
-                    UniformName::new("u_time", UniformType::_1f),
-                ],
-            )
-            .unwrap();
-
-        // Save pixel shader in EGL rendering context.
-        renderer
-            .egl_context()
-            .user_data()
-            .insert_if_missing(|| BorderShader(border_shader));
-        renderer
-            .egl_context()
-            .user_data()
-            .insert_if_missing(|| Background(background));
-
+        BorderRenderElement::complie_shaders(renderer);
+        BackgroundRenderElement::complie_shaders(renderer);
     }
 
     pub fn get_render_elements<R: NuonuoRenderer>(
@@ -272,18 +240,20 @@ impl RenderManager {
             let border_color: Color32F = Color32F::from([0.0, 0.0, 1.0, 1.0]);
             let border_thickness = 5.0;
 
-            elements.push(CustomRenderElements::Border(
-                BorderRenderElement::new(
-                    program,
-                    window_geo,
-                    None,
-                    1.0,
-                    vec![
-                        Uniform::new("u_resolution", (point.x as f32, point.y as f32)),
-                        Uniform::new("border_color", (border_color.r(), border_color.g(), border_color.b())), 
-                        Uniform::new("border_thickness", border_thickness),
-                    ],
-                    Kind::Unspecified,
+            elements.push(CustomRenderElements::Shader(
+                ShaderRenderElement::Border(
+                    BorderRenderElement::new(
+                        program,
+                        window_geo,
+                        None,
+                        1.0,
+                        vec![
+                            Uniform::new("u_resolution", (point.x as f32, point.y as f32)),
+                            Uniform::new("border_color", (border_color.r(), border_color.g(), border_color.b())), 
+                            Uniform::new("border_thickness", border_thickness),
+                        ],
+                        Kind::Unspecified,
+                    )
                 )
             ));
         }
@@ -309,17 +279,19 @@ impl RenderManager {
         let output_geo = output_manager.output_geometry(output_manager.current_output()).unwrap();
         let point = output_geo.size.to_point();
 
-        elements.push(CustomRenderElements::Background(
-            BackgroundRenderElement::new(
-                program,
-                output_geo,
-                None,
-                1.0,
-                vec![
-                    Uniform::new("u_resolution", (point.x as f32, point.y as f32)),
-                    Uniform::new("u_time", self.start_time.elapsed().as_secs_f32()),
-                ],
-                Kind::Unspecified,
+        elements.push(CustomRenderElements::Shader(
+            ShaderRenderElement::Background(
+                BackgroundRenderElement::new(
+                    program,
+                    output_geo,
+                    None,
+                    1.0,
+                    vec![
+                        Uniform::new("u_resolution", (point.x as f32, point.y as f32)),
+                        Uniform::new("u_time", self.start_time.elapsed().as_secs_f32() % (2.0 * 3.1415926)), // TODO: just a test
+                    ],
+                    Kind::Unspecified,
+                )
             )
         ));
     

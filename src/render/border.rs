@@ -4,7 +4,7 @@ use smithay::{
             Element, Id, Kind, RenderElement, UnderlyingStorage
         }, 
         gles::{
-            GlesError, GlesFrame, GlesPixelProgram, GlesRenderer, Uniform
+            GlesError, GlesFrame, GlesPixelProgram, GlesRenderer, Uniform, UniformName, UniformType
         }, 
         utils::{CommitCounter, OpaqueRegions}, 
     },
@@ -14,6 +14,8 @@ use smithay::{
 use crate::backend::tty::{TtyFrame, TtyRenderer, TtyRendererError};
 
 use super::AsGlesFrame;
+
+pub struct BorderShader(pub GlesPixelProgram);
 
 #[derive(Debug)]
 pub struct BorderRenderElement{
@@ -46,6 +48,25 @@ impl BorderRenderElement {
             additional_uniforms: additional_uniforms.into_iter().map(|u| u.into_owned()).collect(),
             kind,
         }
+    }
+
+    pub fn complie_shaders(renderer: &mut GlesRenderer) {
+        let border_shader = renderer
+            .compile_custom_pixel_shader(
+                include_str!("../render/shaders/border.frag"),
+                &[
+                    UniformName::new("u_resolution", UniformType::_2f),
+                    UniformName::new("border_color", UniformType::_3f),
+                    UniformName::new("border_thickness", UniformType::_1f),
+                ],
+            )
+            .unwrap();
+
+        // Save pixel shader in EGL rendering context.
+        renderer
+            .egl_context()
+            .user_data()
+            .insert_if_missing(|| BorderShader(border_shader));
     }
 
     /// Resize the canvas area

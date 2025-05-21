@@ -11,7 +11,7 @@ use crate::{
         output::OutputManager, 
         render::RenderManager
     }, 
-    state::{GlobalData, State}
+    state::{GlobalData, State}, utils::errors::AnyHowErr
 };
 
 pub enum Backend {
@@ -20,6 +20,28 @@ pub enum Backend {
 }
 
 impl Backend {
+    pub fn new(loop_handle: &LoopHandle<'_, GlobalData>) -> anyhow::Result<Self> {
+        // judge the backend type, create base config
+        let has_display = std::env::var_os("WAYLAND_DISPLAY").is_some()
+            || std::env::var_os("WAYLAND_SOCKET").is_some()
+            || std::env::var_os("DISPLAY").is_some();
+
+        // initial backend
+        if has_display {
+            info!("Using winit backend");
+
+            let winit = Winit::new(loop_handle)
+                .anyhow_err("Failed to create winit backend")?;
+            Ok(Backend::Winit(winit))
+        } else {
+            info!("Using tty backend");
+
+            let tty = Tty::new(loop_handle)
+                .anyhow_err("Failed to create tty backend")?;
+            Ok(Backend::Tty(tty))
+        }
+    }
+
     pub fn tty(&mut self) -> &mut Tty {
         if let Self::Tty(v) = self {
             v

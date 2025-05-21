@@ -33,15 +33,11 @@ use smithay::{
     },
 };
 
-#[cfg(feature = "tty")]
-use crate::backend::tty::Tty;
-
 use crate::{
-    backend::{Backend, winit::Winit},
+    backend::Backend,
     config::Configs,
     manager::{
-        input::InputManager, output::OutputManager, render::RenderManager, window::WindowManager,
-        workspace::WorkspaceManager, cursor::CursorManager
+        cursor::CursorManager, input::InputManager, output::OutputManager, render::RenderManager, window::WindowManager, workspace::WorkspaceManager
     },
 };
 
@@ -69,6 +65,10 @@ impl ClientData for ClientState {
 }
 
 pub struct GlobalData {
+    // config
+    #[allow(dead_code)]
+    pub configs: Configs,
+
     pub backend: Backend,
     pub state: State,
 
@@ -85,9 +85,6 @@ pub struct GlobalData {
     pub loop_handle: LoopHandle<'static, GlobalData>,
     pub display_handle: DisplayHandle,
 
-    // config
-    pub configs: Configs,
-
     // global data
     pub start_time: std::time::Instant,
     pub clock: Clock<Monotonic>,
@@ -95,34 +92,25 @@ pub struct GlobalData {
 }
 
 impl GlobalData {
-    pub fn new(
+    pub fn new (
         loop_handle: LoopHandle<'static, GlobalData>,
         display_handle: DisplayHandle,
-    ) -> Self {
-        // judge the backend type, create base config
-        let has_display = std::env::var_os("WAYLAND_DISPLAY").is_some()
-            || std::env::var_os("WAYLAND_SOCKET").is_some()
-            || std::env::var_os("DISPLAY").is_some();
-
-        let mut backend = if has_display {
-            let winit = Winit::new(&loop_handle).unwrap();
-            Backend::Winit(winit)
-        } else {
-            let tty = Tty::new(&loop_handle)
-                .context("error get tty backend")
-                .unwrap();
-            Backend::Tty(tty)
-        };
+    ) -> anyhow::Result<Self> {
+        // load configs
+        let configs = Configs::new();
+        
+        // init backend
+        let mut backend = Backend::new(&loop_handle).context("Failed to create backend")?;
 
         // initial global state
-        let mut nuonuo_state = State::new(&display_handle).expect("cannot make global state");
+        let mut nuonuo_state = State::new(&display_handle).context("Failed to create global state")?;
 
         // initial managers
         let mut output_manager = OutputManager::new(&display_handle);
         let mut workspace_manager = WorkspaceManager::new();
         let window_manager = WindowManager::new();
         let cursor_manager = CursorManager::new("default", 24);
-        let input_manager = InputManager::new(backend.seat_name(), &display_handle);
+        let input_manager = InputManager::new(backend.seat_name(), &display_handle, "src/config/keybindings.conf").context("Failed to create input_manager")?;
         let popups = PopupManager::default();
         let render_manager = RenderManager::new();
 
@@ -133,38 +121,38 @@ impl GlobalData {
         let output = output_manager.current_output();
         let output_geo = output_manager
             .output_geometry(output)
-            .expect("workspace add test error");
+            .context("workspace add test error")?;
+        
         workspace_manager.add_workspace(output, output_geo, None, true);
         workspace_manager.add_workspace(output, output_geo, None, false);
-
-        // load configs
-        let configs = Configs::new("src/config/keybindings.conf");
 
         let start_time = std::time::Instant::now();
         let clock = Clock::new();
         let next_frame_target = clock.now();
 
-        Self {
-            backend,
-            state: nuonuo_state,
-
-            output_manager,
-            workspace_manager,
-            window_manager,
-            cursor_manager,
-            input_manager,
-            popups,
-            render_manager,
-
-            loop_handle,
-            display_handle,
-
-            configs,
-
-            start_time,
-            clock,
-            next_frame_target,
-        }
+        Ok(
+            Self {
+                backend,
+                state: nuonuo_state,
+    
+                output_manager,
+                workspace_manager,
+                window_manager,
+                cursor_manager,
+                input_manager,
+                popups,
+                render_manager,
+    
+                loop_handle,
+                display_handle,
+    
+                configs,
+    
+                start_time,
+                clock,
+                next_frame_target,
+            }
+        )
     }
 }
 

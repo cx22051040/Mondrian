@@ -4,7 +4,7 @@ use smithay::{
             Element, Id, Kind, RenderElement, UnderlyingStorage
         }, 
         gles::{
-            GlesError, GlesFrame, GlesPixelProgram, GlesRenderer, Uniform
+            GlesError, GlesFrame, GlesPixelProgram, GlesRenderer, Uniform, UniformName, UniformType
         }, 
         utils::{CommitCounter, OpaqueRegions}, 
     },
@@ -14,6 +14,8 @@ use smithay::{
 use crate::backend::tty::{TtyFrame, TtyRenderer, TtyRendererError};
 
 use super::AsGlesFrame;
+
+pub struct Background(pub GlesPixelProgram);
 
 #[derive(Debug)]
 pub struct BackgroundRenderElement{
@@ -46,6 +48,23 @@ impl BackgroundRenderElement {
             additional_uniforms: additional_uniforms.into_iter().map(|u| u.into_owned()).collect(),
             kind,
         }
+    }
+
+    pub fn complie_shaders(renderer: &mut GlesRenderer) {
+        let background = renderer
+            .compile_custom_pixel_shader(
+                include_str!("../render/shaders/background.frag"),
+                &[
+                    UniformName::new("u_resolution", UniformType::_2f),
+                    UniformName::new("u_time", UniformType::_1f),
+                ],
+            )
+            .unwrap();
+
+        renderer
+            .egl_context()
+            .user_data()
+            .insert_if_missing(|| Background(background));
     }
 
     /// Resize the canvas area
