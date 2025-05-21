@@ -103,7 +103,6 @@ fn init_trace() {
         .finish()
         .with(fmt_layer);
 
-    // 设置全局默认日志记录器
     tracing::subscriber::set_global_default(subscriber).expect("Failed to set global subscriber");
 }
 

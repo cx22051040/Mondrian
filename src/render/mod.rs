@@ -3,10 +3,10 @@ use smithay::backend::renderer::{gles::{GlesFrame, GlesRenderer}, ExportMem, Imp
 use crate::backend::tty::{TtyFrame, TtyRenderer};
 
 pub mod border;
-pub mod cursor;
 pub mod elements;
 pub mod shader;
 pub mod render_elements;
+pub mod background;
 
 /// Trait with our main renderer requirements to save on the typing.
 pub trait NuonuoRenderer:

@@ -5,7 +5,7 @@ use smithay::backend::renderer::ImportEgl;
 
 use smithay::{
     backend::{
-        allocator::dmabuf::Dmabuf, egl::EGLDevice, renderer::{damage::OutputDamageTracker, gles::GlesRenderer, ImportDma}, winit::{self, WinitEvent, WinitGraphicsBackend}
+        allocator::dmabuf::Dmabuf, egl::EGLDevice, renderer::{damage::OutputDamageTracker, gles::GlesRenderer, Color32F, ImportDma}, winit::{self, WinitEvent, WinitGraphicsBackend}
     },
     output::{Mode as OutputMode, Subpixel},
     reexports::{calloop::LoopHandle, wayland_server::DisplayHandle},
@@ -17,8 +17,8 @@ use crate::{
     manager::{
         input::InputManager, output::OutputManager, render::RenderManager,
         workspace::WorkspaceManager,
+        cursor::CursorManager,
     },
-    render::cursor::CursorManager,
     state::{GlobalData, State},
 };
 
@@ -209,7 +209,7 @@ impl Winit {
             &mut framebuffer,
             0,
             &elements,
-            [1.0, 0.0, 0.0, 1.0],
+            Color32F::from([0.0; 4]),
         );
         
     }

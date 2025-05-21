@@ -41,9 +41,8 @@ use crate::{
     config::Configs,
     manager::{
         input::InputManager, output::OutputManager, render::RenderManager, window::WindowManager,
-        workspace::WorkspaceManager,
+        workspace::WorkspaceManager, cursor::CursorManager
     },
-    render::cursor::CursorManager,
 };
 
 #[derive(Default)]

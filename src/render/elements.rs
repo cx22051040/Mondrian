@@ -10,13 +10,14 @@ use smithay::{
 
 use crate::niri_render_elements;
 
-use super::border::BorderRenderElement;
+use super::{border::BorderRenderElement, background::BackgroundRenderElement};
 
 niri_render_elements! {
     CustomRenderElements<R> => {
         Surface=WaylandSurfaceRenderElement<R>,
         NamedPointer=MemoryRenderBufferRenderElement<R>,
         Border=BorderRenderElement,
+        Background=BackgroundRenderElement,
     }
 }
 

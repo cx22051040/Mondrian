@@ -13,11 +13,11 @@ use smithay::{
 };
 
 use crate::render::{
-        border::BorderRenderElement, cursor::{CursorManager, RenderCursor, XCursor}, elements::{CustomRenderElements, OutputRenderElements}, NuonuoRenderer
+        background::BackgroundRenderElement, border::BorderRenderElement, elements::{CustomRenderElements, OutputRenderElements}, NuonuoRenderer
     };
 
 use super::{
-    input::InputManager, output::OutputManager, window::WindowExt, workspace::WorkspaceManager,
+    input::InputManager, output::OutputManager, window::WindowExt, workspace::WorkspaceManager, cursor::{CursorManager, RenderCursor, XCursor}
 };
 
 pub struct RenderManager {
@@ -26,6 +26,7 @@ pub struct RenderManager {
 }
 
 pub struct BorderShader(pub GlesPixelProgram);
+pub struct Background(pub GlesPixelProgram);
 
 impl RenderManager {
     pub fn new() -> Self {
@@ -37,21 +38,36 @@ impl RenderManager {
     pub fn compile_shaders(&self, renderer: &mut GlesRenderer) {
         // Compile GLSL file into pixel shader.
         let border_shader = renderer
-        .compile_custom_pixel_shader(
-            include_str!("../render/shaders/border.frag"),
-            &[
-                UniformName::new("u_resolution", UniformType::_2f),
-                UniformName::new("border_color", UniformType::_3f),
-                UniformName::new("border_thickness", UniformType::_1f),
-            ],
-        )
-        .unwrap();
+            .compile_custom_pixel_shader(
+                include_str!("../render/shaders/border.frag"),
+                &[
+                    UniformName::new("u_resolution", UniformType::_2f),
+                    UniformName::new("border_color", UniformType::_3f),
+                    UniformName::new("border_thickness", UniformType::_1f),
+                ],
+            )
+            .unwrap();
+
+        let background = renderer
+            .compile_custom_pixel_shader(
+                include_str!("../render/shaders/background.frag"),
+                &[
+                    UniformName::new("u_resolution", UniformType::_2f),
+                    UniformName::new("u_time", UniformType::_1f),
+                ],
+            )
+            .unwrap();
 
         // Save pixel shader in EGL rendering context.
         renderer
             .egl_context()
             .user_data()
             .insert_if_missing(|| BorderShader(border_shader));
+        renderer
+            .egl_context()
+            .user_data()
+            .insert_if_missing(|| Background(background));
+
     }
 
     pub fn get_render_elements<R: NuonuoRenderer>(
@@ -102,6 +118,12 @@ impl RenderManager {
 
         // Then LayerShell Bottom and Background
         // TODO:
+
+        output_elements.extend(
+            self.get_background_render_elements(renderer, output_manager)
+                .into_iter()
+                .map(OutputRenderElements::Custom),
+        );
 
         output_elements
     }
@@ -266,6 +288,41 @@ impl RenderManager {
             ));
         }
 
+        elements
+    }
+    
+    pub fn get_background_render_elements<R: NuonuoRenderer>(
+        &self,
+        renderer: &mut R,
+        output_manager: &OutputManager,
+    ) -> Vec<CustomRenderElements<R>> {
+        let mut elements: Vec<CustomRenderElements<R>> = vec![];
+
+        let program = renderer.as_gles_renderer()
+            .egl_context()
+            .user_data()
+            .get::<Background>()
+            .unwrap()
+            .0
+            .clone();
+
+        let output_geo = output_manager.output_geometry(output_manager.current_output()).unwrap();
+        let point = output_geo.size.to_point();
+
+        elements.push(CustomRenderElements::Background(
+            BackgroundRenderElement::new(
+                program,
+                output_geo,
+                None,
+                1.0,
+                vec![
+                    Uniform::new("u_resolution", (point.x as f32, point.y as f32)),
+                    Uniform::new("u_time", self.start_time.elapsed().as_secs_f32()),
+                ],
+                Kind::Unspecified,
+            )
+        ));
+    
         elements
     }
 

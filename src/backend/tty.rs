@@ -73,11 +73,10 @@ use std::{
 
 use crate::manager::input::InputManager;
 use crate::manager::render::RenderManager;
-use crate::render::cursor::CursorManager;
 use crate::render::AsGlesRenderer;
 use crate::state::{GlobalData, State};
 use crate::{
-    manager::{output::OutputManager, workspace::WorkspaceManager},
+    manager::{output::OutputManager, workspace::WorkspaceManager, cursor::CursorManager},
 };
 
 // we cannot simply pick the first supported format of the intersection of *all* formats, because:
