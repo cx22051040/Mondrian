@@ -1,5 +1,5 @@
 use slotmap::{new_key_type, SlotMap};
-use smithay::{desktop::Window, utils::{Logical, Rectangle}};
+use smithay::{desktop::{Space, Window}, utils::{Logical, Rectangle}};
 
 use crate::manager::window::WindowExt;
 
@@ -7,7 +7,7 @@ const RATE: f32 = 2.0;
 const GAP: i32 = 12;
 
 #[derive(Debug, Clone)]
-pub enum LayoutScheme {
+pub enum TiledScheme {
     Default,
 }
 
@@ -84,7 +84,7 @@ impl TiledTree {
         get_window(&self.nodes, root_id)
     }
 
-    pub fn insert_window(&mut self, focus: &Option<Window>, new_window: Window) -> bool {
+    pub fn insert_window(&mut self, focus: &Option<Window>, new_window: Window, space: &mut Space<Window>) -> bool {
         let target = match focus {
             Some(r) => r,
             None => {
@@ -100,7 +100,7 @@ impl TiledTree {
 
         if let Some(target_id) = self.find_node(target) {
             // resize
-            let rec = match target.get_rec(){
+            let rec = match space.element_geometry(target){
                 Some(r) => r,
                 None => {
                     warn!("Failed to get window rectangle");
@@ -108,8 +108,12 @@ impl TiledTree {
                 }
             };
             let (direction, l_rec, r_rec) = get_new_rec(&rec);
-            target.set_rec(l_rec);
-            new_window.set_rec(r_rec);
+            
+            target.set_rec(l_rec.size);
+            new_window.set_rec(r_rec.size);
+            
+            space.map_element(target.clone(), l_rec.loc, true);
+            space.map_element(new_window.clone(), r_rec.loc, false);
 
             // adjust tree
             let original = self.nodes[target_id].clone();
@@ -132,7 +136,7 @@ impl TiledTree {
         }
     }
 
-    pub fn remove(&mut self, target: &Window) -> bool {
+    pub fn remove(&mut self, target: &Window, space: &mut Space<Window>) -> bool {
         let target_id = match self.find_node(target) {
             Some(r) => {
                 r
@@ -173,7 +177,9 @@ impl TiledTree {
 
                 match sibling_data {
                     NodeData::Leaf { window } => {
-                        window.set_rec(rec.clone());
+                        window.set_rec(rec.size);
+                        space.map_element(window.clone(), rec.loc, false);
+
                         self.nodes[parent_id] = NodeData::Leaf { window };
                     },
                     NodeData::Split { direction, left, right, .. } => {
@@ -184,7 +190,7 @@ impl TiledTree {
                             left, 
                             right,
                         };
-                        self.modify(parent_id, rec);
+                        self.modify(parent_id, rec, space);
                     }
                 }
 
@@ -198,11 +204,12 @@ impl TiledTree {
         }
     }
 
-    pub fn modify(&mut self, node_id: NodeId, rec: Rectangle<i32, Logical>) {
+    pub fn modify(&mut self, node_id: NodeId, rec: Rectangle<i32, Logical>, space: &mut Space<Window>) {
         // modify the child tree with new rec with direction
         match &mut self.nodes[node_id] {
             NodeData::Leaf { window } => {
-                window.set_rec(rec);
+                window.set_rec(rec.size);
+                space.map_element(window.clone(), rec.loc, false);
             },
             NodeData::Split { left, right, direction, rec: current_rec, offset } => {
                 let (l_rec, r_rec) = recover_new_rec(rec, direction, offset.clone());
@@ -212,8 +219,8 @@ impl TiledTree {
                 let left_id = *left;
                 let right_id = *right;
 
-                self.modify(left_id, l_rec);
-                self.modify(right_id, r_rec);
+                self.modify(left_id, l_rec, space);
+                self.modify(right_id, r_rec, space);
             }
         }
     }
@@ -233,7 +240,7 @@ impl TiledTree {
         })
     }
 
-    pub fn invert_window(&mut self, target: &Window){
+    pub fn invert_window(&mut self, target: &Window, space: &mut Space<Window>){
         let target_id = match self.find_node(target) {
             Some(r) => {
                 r
@@ -261,7 +268,7 @@ impl TiledTree {
             NodeData::Split { direction, rec , .. } => {
                 *direction = invert_direction(direction);
                 let rec = *rec;
-                self.modify(parent_id, rec);
+                self.modify(parent_id, rec, space);
             },
             NodeData::Leaf { .. } => { }
         }
@@ -271,7 +278,7 @@ impl TiledTree {
         self.root
     }
 
-    pub fn resize(&mut self, target: &Window, offset: (i32, i32)) {
+    pub fn resize(&mut self, target: &Window, offset: (i32, i32), space: &mut Space<Window>) {
         let target_id = match self.find_node(target) {
             Some(r) => {
                 r
@@ -300,7 +307,7 @@ impl TiledTree {
                 current_offset.0 += offset.0;
                 current_offset.1 += offset.1;
                 let rec = *rec;
-                self.modify(parent_id, rec);
+                self.modify(parent_id, rec, space);
             },
             NodeData::Leaf { .. } => { }
         }
@@ -321,7 +328,7 @@ impl TiledTree {
         fn print(nodes: &SlotMap<NodeId, NodeData>, id: NodeId, depth: usize) {
             let indent = "  ".repeat(depth);
             match &nodes[id] {
-                NodeData::Leaf { window } => tracing::info!("{indent}- Leaf: {:?}", window.get_id()),
+                NodeData::Leaf { window } => tracing::info!("{indent}- Leaf: {:?}", window),
                 NodeData::Split { left, right, .. } => {
                     tracing::info!("{indent}- Split:");
                     print(nodes, *left, depth + 1);

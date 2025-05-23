@@ -113,3 +113,11 @@ TODO: 完善渲染部分代码
 ### 2025.5.18-20
 
 修复致命 shader 渲染死循环bug，实现 tty 模式下的项目启动
+
+### 2025.5.21-5.23
+
+优化 workspace manager 对于 windows 的管理，优化布局设置过程的管理。
+
+引入 tiled 与 floating 两种 windows 布局情况，为后期平铺式堆叠式多支持做基础。
+
+TODO：完善 resize 部分的代码

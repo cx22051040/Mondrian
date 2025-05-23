@@ -17,7 +17,7 @@ use crate::render::{
     };
 
 use super::{
-    input::InputManager, output::OutputManager, window::WindowExt, workspace::WorkspaceManager, cursor::{CursorManager, RenderCursor, XCursor}
+    input::InputManager, output::OutputManager, workspace::WorkspaceManager, cursor::{CursorManager, RenderCursor, XCursor}
 };
 
 pub struct RenderManager {
@@ -102,16 +102,29 @@ impl RenderManager {
         output_manager: &OutputManager,
         workspace_manager: &WorkspaceManager,
     ) -> Vec<SpaceRenderElements<R, WaylandSurfaceRenderElement<R>>> {
-        let space = &workspace_manager.current_workspace().space;
+        let mut elements: Vec::<SpaceRenderElements<R, WaylandSurfaceRenderElement<R>>> = vec![];
+
+        let tiled = &workspace_manager.current_workspace().tiled;
+        let floating = &workspace_manager.current_workspace().floating;
         let output = output_manager.current_output();
 
-        match space.render_elements_for_output(renderer, output, 1.0) {
-            Ok(r) => r,
+        match floating.render_elements_for_output(renderer, output, 0.85) {
+            Ok(r) => elements.extend(r),
             Err(err) => {
                 warn!("Failed to get windows render elements: {:?}", err);
                 return vec![];
             }
         }
+
+        match tiled.render_elements_for_output(renderer, output, 0.85) {
+            Ok(r) => elements.extend(r),
+            Err(err) => {
+                warn!("Failed to get windows render elements: {:?}", err);
+                return vec![];
+            }
+        }
+
+        elements
     }
 
     pub fn get_cursor_render_elements<R: NuonuoRenderer>(
@@ -213,7 +226,7 @@ impl RenderManager {
 
         let focus = workspace_manager.get_focus();
         if let Some(window) = focus {
-            let window_geo = match window.get_rec() {
+            let window_geo = match workspace_manager.element_geometry(window) {
                 Some(g) => g,
                 None => {
                     warn!("Failed to get window {:?} geometry", window);

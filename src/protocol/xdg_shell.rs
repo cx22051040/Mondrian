@@ -1,7 +1,5 @@
 use crate::{
-    input::{move_grab::PointerMoveSurfaceGrab, resize_grab::ResizeSurfaceGrab},
-    manager::window::WindowExt,
-    state::GlobalData,
+    input::{move_grab::PointerMoveSurfaceGrab, resize_grab::ResizeSurfaceGrab}, manager::workspace::WindowLayout, state::GlobalData
 };
 use smithay::{
     delegate_xdg_shell,
@@ -80,7 +78,7 @@ impl XdgShellHandler for GlobalData {
         );
 
         self.workspace_manager
-            .map_tiled_element(window, true);
+            .map_element(window, (0, 0).into(), Some(WindowLayout::Floating), true);
     }
 
     fn new_popup(&mut self, surface: PopupSurface, _positioner: PositionerState) {
@@ -105,8 +103,14 @@ impl XdgShellHandler for GlobalData {
 
     fn toplevel_destroyed(&mut self, surface: ToplevelSurface) {
         let wl_surface = surface.wl_surface();
-        self.window_manager.remove_window(wl_surface);
-        self.workspace_manager.remove_window(wl_surface);
+        match self.window_manager.remove_window(wl_surface) {
+            Some(window) => {
+                self.workspace_manager.unmap_element(&window);
+            }
+            None => {
+                warn!("Failed to find window for toplevel destroy");
+            }
+        }
     }
 
     fn move_request(&mut self, surface: ToplevelSurface, seat: wl_seat::WlSeat, serial: Serial) {
@@ -124,7 +128,14 @@ impl XdgShellHandler for GlobalData {
                 }
             };
 
-            let initial_window_location = self.workspace_manager.element_location(&window);
+            let initial_window_location = match self.workspace_manager.element_location(&window) {
+                Some(location) => location,
+                None => {
+                    warn!("Failed to get location from window: {:?}", window);
+                    return;
+                }
+            };
+
             let grab = PointerMoveSurfaceGrab {
                 start_data,
                 window,
@@ -158,7 +169,14 @@ impl XdgShellHandler for GlobalData {
                 }
             };
             
-            let initial_window_location = self.workspace_manager.element_location(&window);
+            let initial_window_location = match self.workspace_manager.element_location(&window) {
+                Some(location) => location,
+                None => {
+                    warn!("Failed to get location from window: {:?}", window);
+                    return;
+                }
+            };
+
             let initial_window_size = window.geometry().size;
 
             surface.with_pending_state(|state| {
@@ -228,7 +246,7 @@ impl GlobalData {
             }
         };
 
-        let window_geo = match window.get_rec() {
+        let window_geo = match self.workspace_manager.element_geometry(window) {
             Some(g) => g,
             None => {
                 warn!("Failed to get window {:?} geometry", window);

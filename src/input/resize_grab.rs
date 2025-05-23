@@ -337,7 +337,14 @@ pub fn handle_commit(workspace_manager: &mut WorkspaceManager, surface: &WlSurfa
         }
     };
 
-    let mut window_loc = workspace_manager.element_location(window);
+    let mut window_loc = match workspace_manager.element_location(&window) {
+        Some(location) => location,
+        None => {
+            warn!("Failed to get location from window: {:?}", window);
+            return None;
+        }
+    };
+
     let geometry = window.geometry();
 
     let new_loc: Point<Option<i32>, Logical> = ResizeSurfaceState::with(surface, |state| {
@@ -368,7 +375,7 @@ pub fn handle_commit(workspace_manager: &mut WorkspaceManager, surface: &WlSurfa
 
     if new_loc.x.is_some() || new_loc.y.is_some() {
         // If TOP or LEFT side of the window got resized, we have to move it
-        workspace_manager.map_element(window.clone(), window_loc, false);
+        workspace_manager.map_element(window.clone(), window_loc, None, false);
     }
     Some(())
 }

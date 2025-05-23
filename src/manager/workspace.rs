@@ -1,21 +1,30 @@
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::{collections::HashMap, hash::Hash, sync::atomic::{AtomicUsize, Ordering}};
 
 use smithay::{
     desktop::{Space, Window},
     output::Output,
-    reexports::{
-        wayland_protocols::xdg::shell::server::xdg_toplevel,
-        wayland_server::protocol::wl_surface::WlSurface,
-    },
-    utils::{Logical, Point, Rectangle},
+    reexports::wayland_server::protocol::wl_surface::WlSurface,
+    utils::{Logical, Point, Rectangle, Size},
 };
 
-use crate::layout::tiled_tree::{LayoutScheme, TiledTree};
+use crate::layout::tiled_tree::{TiledScheme, TiledTree};
 
 use super::window::WindowExt;
 
 static NEXT_ID: AtomicUsize = AtomicUsize::new(1);
 const GAP: i32 = 12;
+
+#[derive(Debug, Clone)]
+pub enum WindowLayout {
+    Tiled,
+    Floating,
+}
+
+impl WindowLayout {
+    pub fn default() -> Self {
+        Self::Tiled
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct WorkspaceId(usize);
@@ -34,9 +43,13 @@ impl WorkspaceId {
 #[derive(Debug)]
 pub struct Workspace {
     pub id: WorkspaceId,
-    pub space: Space<Window>,
-    pub layout: LayoutScheme,
-    pub layout_tree: Option<TiledTree>,
+
+    pub tiled: Space<Window>,
+    pub floating: Space<Window>,
+    pub layout: HashMap<Window, WindowLayout>,
+
+    pub scheme: TiledScheme,
+    pub tiled_tree: Option<TiledTree>,
     pub focus: Option<Window>,
     pub output_geometry: Rectangle<i32, Logical>,
 }
@@ -45,16 +58,21 @@ impl Workspace {
     pub fn new(
         output: &Output,
         output_geometry: Rectangle<i32, Logical>,
-        layout: LayoutScheme,
+        scheme: TiledScheme,
     ) -> Self {
-        let mut space: Space<Window> = Default::default();
-        space.map_output(output, output_geometry.loc);
+        let mut tiled: Space<Window> = Default::default();
+        let mut floating: Space<Window> = Default::default();
+        tiled.map_output(output, output_geometry.loc);
+        floating.map_output(output, output_geometry.loc);
 
         Self {
             id: WorkspaceId::next(),
-            space,
-            layout,
-            layout_tree: None,
+            tiled,
+            floating,
+            layout: HashMap::new(),
+
+            scheme,
+            tiled_tree: None,
             focus: None,
             output_geometry,
         }
@@ -64,138 +82,193 @@ impl Workspace {
         self.id
     }
 
-    pub fn map_element(&mut self, window: Window, location: Point<i32, Logical>, activate: bool) {
-        self.space.map_element(window, location, activate);
+    pub fn map_element(&mut self, window: Window, location: Point<i32, Logical>, layout: Option<WindowLayout>, activate: bool) {
+        let layout = layout.unwrap_or_else(|| {
+            match self.layout.get(&window) {
+                Some(layout) => layout.clone(),
+                None => WindowLayout::default()
+            }
+        });
+
+        match layout {
+            WindowLayout::Tiled => {
+                match self.layout.insert(window.clone(), WindowLayout::Tiled) {
+                    Some(_) => {
+                        self.tiled.map_element(window, location, activate);
+                    }
+                    None => {
+                        self.map_tiled_element(window, activate);
+                    }
+                }
+            }
+            WindowLayout::Floating => {
+                self.layout.insert(window.clone(), WindowLayout::Floating);
+                self.map_floating_element(window, location, activate);
+            }
+        }
     }
 
-    pub fn map_tiled_element(
+    pub fn unmap_element(&mut self, window: &Window) {
+        if let Some(layout) = self.layout.remove(window) {
+            match layout {
+                WindowLayout::Tiled => {
+                    self.unmap_tiled_element(window);
+                }
+                WindowLayout::Floating => {
+                    self.unmap_floating_element(window);
+                }
+            }
+        }
+    }
+
+    fn map_floating_element (
+        &mut self,
+        window: Window,
+        location: Point<i32, Logical>,
+        activate: bool,
+    ) {
+        window.toplevel().unwrap().with_pending_state(|state| {
+            state.bounds = Some(self.output_geometry.size)
+        });
+
+        window.set_rec(Size::from((500, 500)));
+
+        self.floating.map_element(window, location, activate);
+    }
+
+    fn map_tiled_element(
         &mut self,
         window: Window,
         activate: bool,
     ) {
         self.refresh();
 
-        if self.layout_tree.is_none() {
-            window.toplevel().unwrap().with_pending_state(|state| {
-                state.size = Some(self.output_geometry.size - (GAP * 2, GAP * 2).into())
-            });
-            window.toplevel().unwrap().send_pending_configure();
-            window.set_rec(Rectangle::new(
-                (GAP, GAP).into(),
+        if self.tiled_tree.is_none() {
+            window.set_rec(
                 (self.output_geometry.size - (GAP * 2, GAP * 2).into()).into(),
-            ));
-            self.layout_tree = Some(TiledTree::new(window.clone()));
-            self.map_element(window, (GAP, GAP).into(), activate);
+            );
+            self.tiled_tree = Some(TiledTree::new(window.clone()));
+            self.tiled.map_element(window, (GAP, GAP), activate);
             return;
         }
 
-        match self.layout {
-            LayoutScheme::Default => {
-                if let Some(layout_tree) = &mut self.layout_tree {
-                    layout_tree.insert_window(&self.focus, window.clone());
+        match self.scheme {
+            TiledScheme::Default => {
+                if let Some(layout_tree) = &mut self.tiled_tree {
+                    layout_tree.insert_window(&self.focus, window.clone(), &mut self.tiled);
 
                     #[cfg(feature = "trace_layout")]
                     layout_tree.print_tree();
-                    let loc = match window.get_rec(){
-                        Some(r) => r.loc,
-                        None => {
-                            warn!("Failed to get window rectangle");
-                            return
-                        }
-                    };
-                    self.map_element(window, loc, activate);
                 }
             }
         }
-        self.send_pending_configure();
     }
 
-    pub fn unmap_tiled_element(&mut self, window: Window) {
-        if let Some(layout_tree) = &mut self.layout_tree {
-            layout_tree.remove(&window);
+    fn unmap_tiled_element(&mut self, window: &Window) {
+        if let Some(layout_tree) = &mut self.tiled_tree {
+            layout_tree.remove(window, &mut self.tiled);
 
             if layout_tree.is_empty() {
-                self.layout_tree = None;
+                self.tiled_tree = None;
             } else {
                 #[cfg(feature = "trace_layout")]
                 layout_tree.print_tree();
             }
         } else {
-            panic!("empty layout tree!");
+            error!("empty layout tree!");
+            return;
         }
+
+        if let Some(focus) = &self.focus {
+            if focus == window {
+                self.focus = None;
+            }
+        }
+
+        self.tiled.unmap_elem(window);
+    }
+
+    fn unmap_floating_element(&mut self, window: &Window) {
+        self.floating.unmap_elem(window);
     }
 
     pub fn raise_element(&mut self, window: &Window, activate: bool) {
-        self.space.raise_element(window, activate);
+        match self.layout.get(window) {
+            Some(layout) => {
+                match layout {
+                    WindowLayout::Tiled => {
+                        self.tiled.raise_element(window, activate)
+                    }
+                    WindowLayout::Floating => {
+                        self.floating.raise_element(window, activate)
+                    }
+                }
+            }
+            None => {
+                warn!("Failed to get window's layout type");
+            }
+        }
     }
 
     pub fn refresh(&mut self) {
-        self.space.refresh();
+        self.tiled.refresh();
+        self.floating.refresh();
     }
 
     pub fn window_under(
         &self,
         position: Point<f64, Logical>,
     ) -> Option<(&Window, Point<i32, Logical>)> {
-        self.space.element_under(position).map(|(w, p)| (w, p))
+        self.tiled.element_under(position).map(|(w, p)| (w, p)).or_else(|| {
+            self.floating.element_under(position).map(|(w, p)| (w, p))
+        })
     }
 
-    pub fn element_location(&self, window: &Window) -> Point<i32, Logical> {
-        self.space.element_location(window).unwrap()
+    pub fn element_location(&self, window: &Window) -> Option<Point<i32, Logical>> {
+        match self.layout.get(window) {
+            Some(layout) => {
+                match layout {
+                    WindowLayout::Tiled => {
+                        self.tiled.element_location(window)
+                    }
+                    WindowLayout::Floating => {
+                        self.floating.element_location(window)
+                    }
+                }
+            }
+            None => {
+                warn!("Failed to get window's layout type");
+                None
+            }
+        }
     }
 
-    pub fn elements(&self) -> impl DoubleEndedIterator<Item = &Window> + ExactSizeIterator {
-        self.space.elements()
+    pub fn elements(&self) -> impl DoubleEndedIterator<Item = &Window> {
+        self.tiled.elements().chain(self.floating.elements())
     }
 
     // deactivate all window
     pub fn deactivate(&mut self) {
-        for window in self.space.elements() {
+        for window in self.tiled.elements() {
             window.set_activated(false);
             window.toplevel().unwrap().send_pending_configure();
         }
     }
 
-    pub fn remove_window(&mut self, surface: &WlSurface) {
-        let window = match self
-            .elements()
-            .find(|win| win.toplevel().unwrap().wl_surface() == surface)
-            {
-                Some(w) => w.clone(),
-                None => {
-                    warn!("Failed to find window");
-                    return;
-                }
-            };
-
-        if let Some(focus) = &self.focus {
-            if focus == &window {
-                self.focus = None;
-            }
-        }
-
-        self.space.unmap_elem(&window);
-        self.unmap_tiled_element(window);
-
-        self.send_pending_configure();
-    }
-
     pub fn invert_window(&mut self) {
-        if let Some(layout_tree) = &mut self.layout_tree {
+        if let Some(layout_tree) = &mut self.tiled_tree {
             if let Some(focus) = &self.focus {
-                layout_tree.invert_window(focus);
+                layout_tree.invert_window(focus, &mut self.tiled);
         
                 #[cfg(feature = "trace_layout")]
                 layout_tree.print_tree();
-        
-                self.send_pending_configure();
             }
         }
     }
 
     pub fn modify_windows(&mut self, rec: Rectangle<i32, Logical>) {
         self.output_geometry = rec;
-        if let Some(layout_tree) = &mut self.layout_tree {
+        if let Some(layout_tree) = &mut self.tiled_tree {
             let root_id = layout_tree.get_root().unwrap();
             layout_tree.modify(
                 root_id,
@@ -203,68 +276,30 @@ impl Workspace {
                     (GAP, GAP).into(),
                     (rec.size - (GAP * 2, GAP * 2).into()).into(),
                 ),
+                &mut self.tiled
             );
         }
-        self.send_pending_configure();
     }
 
     pub fn resize(&mut self, offset: (i32, i32)) {
-        self.send_resize_configure();
-
-        if let Some(layout_tree) = &mut self.layout_tree {
-            if let Some(focus) = &self.focus {
-                layout_tree.resize(focus, offset);
+        if let Some(focus) = &self.focus {
+            match self.layout.get(focus) {
+                Some(layout) => {
+                    match layout {
+                        WindowLayout::Tiled => {
+                            if let Some(layout_tree) = &mut self.tiled_tree {
+                                layout_tree.resize(focus, offset, &mut self.tiled);
+                            }
+                        }
+                        WindowLayout::Floating => {
+                            todo!()
+                        }
+                    }
+                }
+                None => {
+                    warn!("Failed to get window's layout type");
+                }
             }
-        }
-
-        self.send_unresize_configure();
-    }
-
-    pub fn send_resize_configure(&mut self) {
-        for win in self.elements() {
-            win.toplevel()
-                .unwrap()
-                .with_pending_state(|state| state.states.set(xdg_toplevel::State::Resizing));
-            win.toplevel().unwrap().send_pending_configure();
-        }
-    }
-
-    pub fn send_unresize_configure(&mut self) {
-        let e: Vec<_> = self.elements().cloned().collect();
-
-        for win in e {
-            let rec = match win.get_rec(){
-                Some(r) => r,
-                None => {
-                    warn!("Failed to get window rectangle");
-                    return
-                }
-            };
-            win.toplevel().unwrap().with_pending_state(|state| {
-                state.states.unset(xdg_toplevel::State::Resizing);
-                state.size = Some(rec.size)
-            });
-            win.toplevel().unwrap().send_pending_configure();
-            self.map_element(win, rec.loc, false);
-        }
-    }
-
-    pub fn send_pending_configure(&mut self) {
-        let e: Vec<_> = self.elements().cloned().collect();
-
-        for win in e {
-            let rec = match win.get_rec(){
-                Some(r) => r,
-                None => {
-                    warn!("Failed to get window rectangle");
-                    return
-                }
-            };
-            win.toplevel()
-                .unwrap()
-                .with_pending_state(|state| state.size = Some(rec.size));
-            win.toplevel().unwrap().send_pending_configure();
-            self.map_element(win, rec.loc, false);
         }
     }
 
@@ -289,7 +324,26 @@ impl Workspace {
     }
 
     pub fn current_space(&self) -> &Space<Window> {
-        &self.space
+        &self.tiled
+    }
+
+    pub fn element_geometry(&self, window: &Window) -> Option<Rectangle<i32, Logical>> {
+        match self.layout.get(window) {
+            Some(layout) => {
+                match layout {
+                    WindowLayout::Tiled => {
+                        self.tiled.element_geometry(window)
+                    }
+                    WindowLayout::Floating => {
+                        self.floating.element_geometry(window)
+                    }
+                }
+            }
+            None => {
+                warn!("Failed to get window's layout type");
+                None
+            }
+        }
     }
 }
 
@@ -312,13 +366,13 @@ impl WorkspaceManager {
         &mut self,
         output: &Output,
         output_geometry: Rectangle<i32, Logical>,
-        layout: Option<LayoutScheme>,
+        scheme: Option<TiledScheme>,
         activate: bool,
     ) {
         let workspace = Workspace::new(
             output,
             output_geometry,
-            layout.unwrap_or_else(|| LayoutScheme::Default),
+            scheme.unwrap_or_else(|| TiledScheme::Default),
         );
 
         if activate {
@@ -356,18 +410,9 @@ impl WorkspaceManager {
             .expect("no current_workspace")
     }
 
-    pub fn map_element(&mut self, window: Window, location: Point<i32, Logical>, activate: bool) {
+    pub fn map_element(&mut self, window: Window, location: Point<i32, Logical>, layout: Option<WindowLayout>, activate: bool) {
         self.current_workspace_mut()
-            .map_element(window, location, activate);
-    }
-
-    pub fn map_tiled_element(
-        &mut self,
-        window: Window,
-        activate: bool,
-    ) {
-        self.current_workspace_mut()
-            .map_tiled_element(window, activate);
+            .map_element(window, location, layout, activate);
     }
 
     pub fn refresh(&mut self) {
@@ -383,11 +428,11 @@ impl WorkspaceManager {
             .map(|(w, p)| (w.clone(), p))
     }
 
-    pub fn element_location(&self, window: &Window) -> Point<i32, Logical> {
+    pub fn element_location(&self, window: &Window) -> Option<Point<i32, Logical>> {
         self.current_workspace().element_location(window)
     }
 
-    pub fn elements(&self) -> impl DoubleEndedIterator<Item = &Window> + ExactSizeIterator {
+    pub fn elements(&self) -> impl DoubleEndedIterator<Item = &Window> {
         self.current_workspace().elements()
     }
 
@@ -401,8 +446,8 @@ impl WorkspaceManager {
         self.workspaces.iter().count()
     }
 
-    pub fn remove_window(&mut self, surface: &WlSurface) {
-        self.current_workspace_mut().remove_window(surface);
+    pub fn unmap_element(&mut self, window: &Window) {
+        self.current_workspace_mut().unmap_element(window);
     }
 
     pub fn invert_window(&mut self) {
@@ -427,5 +472,9 @@ impl WorkspaceManager {
 
     pub fn current_space(&self) -> &Space<Window> {
         self.current_workspace().current_space()
+    }
+
+    pub fn element_geometry(&self, window: &Window) -> Option<Rectangle<i32, Logical>> {
+        self.current_workspace().element_geometry(window)
     }
 }

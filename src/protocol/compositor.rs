@@ -42,7 +42,7 @@ impl CompositorHandler for GlobalData {
 
             xdg_shell::handle_commit(
                 &mut self.popups,
-                &self.workspace_manager.current_workspace().space,
+                &self.workspace_manager.current_workspace().tiled,
                 surface,
             );
             resize_grab::handle_commit(&mut self.workspace_manager, surface);
