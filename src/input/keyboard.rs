@@ -30,37 +30,55 @@ impl GlobalData {
             event_state,
             serial,
             time,
-            |data, _modifiers, _keysym_handle| {
-                if event_state == KeyState::Pressed {
-                    let mut pressed_keys_name: Vec<String> =
-                        keyboard.with_pressed_keysyms(|keysym_handles| {
-                            keysym_handles
-                                .iter()
-                                .map(|keysym_handle| {
-                                    let keysym_value = keysym_handle.modified_sym();
-                                    keysym_get_name(keysym_value)
-                                })
-                                .collect()
+            |data, _modifiers, keysym_handle| {
+                match event_state {
+                    KeyState::Pressed => {
+                        let mut pressed_keys_name: Vec<String> =
+                            keyboard.with_pressed_keysyms(|keysym_handles| {
+                                keysym_handles
+                                    .iter()
+                                    .map(|keysym_handle| {
+                                        let keysym_value = keysym_handle.modified_sym();
+                                        let name = keysym_get_name(keysym_value);
+                                        if name == "Control_L" {
+                                            #[cfg(feature = "trace_input")]
+                                            info!("mainmod_pressed: true");
+                                            
+                                            data.input_manager.is_mainmod_pressed = true;
+                                        }
+                                        name
+                                    })
+                                    .collect()
+                            });
+
+                        pressed_keys_name.sort_by_key(|key| {
+                            priority_map.get(key).cloned().unwrap_or(3)
                         });
 
-                    pressed_keys_name.sort_by_key(|key| {
-                        priority_map.get(key).cloned().unwrap_or(3)
-                    });
+                        let keys = pressed_keys_name.join("+");
 
-                    let keys = pressed_keys_name.join("+");
+                        #[cfg(feature = "trace_input")]
+                        info!("Keys: {:?}", keys);
 
-                    #[cfg(feature = "trace_input")]
-                    tracing::info!("Keys: {:?}", keys);
+                        data.action_keys(keys, serial);
+                    }
+                    KeyState::Released => {
+                        let keysym_value = keysym_handle.modified_sym();
+                        let name = keysym_get_name(keysym_value);
+                        if name == "Control_L" {
+                            #[cfg(feature = "trace_input")]
+                            info!("mainmod_pressed: false");
 
-                    data.action_keys(keys, serial);
+                            data.input_manager.is_mainmod_pressed = false;
+                        }
+                    }
                 }
-
                 FilterResult::Forward
             },
         );
     }
 
-    pub fn action_keys(&mut self, keys: String, serial: Serial) {
+    pub fn action_keys(&mut self, keys: String, serial: Serial) {     
         let keybindings = self.input_manager.get_keybindings();
 
         if let Some(command) = keybindings.get(&keys) {

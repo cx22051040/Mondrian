@@ -4,15 +4,14 @@ use crate::{
 use smithay::{
     delegate_xdg_shell,
     desktop::{PopupKind, PopupManager, Space, Window},
-    input::{Seat, pointer::Focus},
+    input::{pointer::{Focus, PointerHandle}, Seat},
     reexports::{
         wayland_protocols::xdg::shell::server::xdg_toplevel,
         wayland_server::{
-            Resource,
-            protocol::{wl_seat, wl_surface::WlSurface},
+            protocol::{wl_seat, wl_surface::WlSurface}, Resource
         },
     },
-    utils::{Rectangle, Serial},
+    utils::{Coordinate, Point, Rectangle, Serial},
     wayland::{
         compositor::with_states,
         shell::xdg::{
@@ -78,7 +77,7 @@ impl XdgShellHandler for GlobalData {
         );
 
         self.workspace_manager
-            .map_element(window, (0, 0).into(), Some(WindowLayout::Floating), true);
+            .map_element(None, window, (0, 0).into(), Some(WindowLayout::Tiled), true);
     }
 
     fn new_popup(&mut self, surface: PopupSurface, _positioner: PositionerState) {
@@ -114,39 +113,23 @@ impl XdgShellHandler for GlobalData {
     }
 
     fn move_request(&mut self, surface: ToplevelSurface, seat: wl_seat::WlSeat, serial: Serial) {
-        let seat: Seat<GlobalData> = Seat::from_resource(&seat).unwrap();
+        let pointer: PointerHandle<Self> = match Seat::from_resource(&seat) {
+            Some(seat) => {
+                match seat.get_pointer() {
+                    Some(pointer) => pointer,
+                    None => {
+                        warn!("Failed to get pointer from {:?}", seat);
+                        return
+                    }
+                }
+            }
+            None => {
+                warn!("Failed to get seat from {:?}", seat);
+                return
+            }
+        };
         let wl_surface: &WlSurface = surface.wl_surface();
-
-        if let Some(start_data) = check_grab(&seat, wl_surface, serial) {
-            let pointer = seat.get_pointer().unwrap();
-
-            let window = match self.workspace_manager.find_window(wl_surface) {
-                Some(w) => w.clone(),
-                None => {
-                    warn!("Failed to find window for move request");
-                    return;
-                }
-            };
-
-            let initial_window_location = match self.workspace_manager.element_location(&window) {
-                Some(location) => location,
-                None => {
-                    warn!("Failed to get location from window: {:?}", window);
-                    return;
-                }
-            };
-
-            let grab = PointerMoveSurfaceGrab {
-                start_data,
-                window,
-                initial_window_location,
-            };
-
-            pointer.set_grab(self, grab, serial, Focus::Clear);
-
-            self.cursor_manager
-                .set_cursor_image(CursorImageStatus::Named(CursorIcon::Grabbing));
-        }
+        self.grab_request(wl_surface, &pointer, serial);
     }
 
     fn resize_request(
@@ -156,10 +139,23 @@ impl XdgShellHandler for GlobalData {
         serial: Serial,
         edges: xdg_toplevel::ResizeEdge,
     ) {
-        let seat = Seat::from_resource(&seat).unwrap();
+        let pointer: PointerHandle<Self> = match Seat::from_resource(&seat) {
+            Some(seat) => {
+                match seat.get_pointer() {
+                    Some(pointer) => pointer,
+                    None => {
+                        warn!("Failed to get pointer from {:?}", seat);
+                        return
+                    }
+                }
+            }
+            None => {
+                warn!("Failed to get seat from {:?}", seat);
+                return
+            }
+        };
         let wl_surface = surface.wl_surface();
-        if let Some(start_data) = check_grab(&seat, wl_surface, serial) {
-            let pointer = seat.get_pointer().unwrap();
+        if let Some(start_data) = check_grab(wl_surface, &pointer, serial) {
 
             let window = match self.workspace_manager.find_window(wl_surface) {
                 Some(w) => w.clone(),
@@ -201,12 +197,10 @@ impl XdgShellHandler for GlobalData {
 delegate_xdg_shell!(GlobalData);
 
 fn check_grab(
-    seat: &Seat<GlobalData>,
     surface: &WlSurface,
+    pointer: &PointerHandle<GlobalData>,
     serial: Serial,
 ) -> Option<PointerGrabStartData<GlobalData>> {
-    // return start_data if grabing
-    let pointer = seat.get_pointer()?;
 
     // Check that this surface has a click grab.
     if !pointer.has_grab(serial) {
@@ -231,8 +225,7 @@ impl GlobalData {
         };
         let Some(window) = self
             .workspace_manager
-            .elements()
-            .find(|w| w.toplevel().unwrap().wl_surface() == &root)
+            .find_window(&root)
         else {
             return;
         };
@@ -246,7 +239,7 @@ impl GlobalData {
             }
         };
 
-        let window_geo = match self.workspace_manager.element_geometry(window) {
+        let window_geo = match self.workspace_manager.window_geometry(window) {
             Some(g) => g,
             None => {
                 warn!("Failed to get window {:?} geometry", window);
@@ -259,10 +252,47 @@ impl GlobalData {
         let mut target = output_geo;
         target.loc -= get_popup_toplevel_coords(&PopupKind::Xdg(popup.clone()));
         target.loc -= window_geo.loc;
-
+        
         popup.with_pending_state(|state| {
             state.geometry = state.positioner.get_unconstrained_geometry(target);
         });
+    }
+
+    pub fn grab_request(&mut self, wl_surface: &WlSurface, pointer: &PointerHandle<GlobalData>, serial: Serial) {
+        if self.input_manager.is_mainmod_pressed {
+            if let Some(start_data) = check_grab(wl_surface, pointer, serial) {
+                if let Some((window, mut window_rec)) = self.workspace_manager.check_grab(wl_surface) {
+                    let window = window.clone();
+                    let pointer_loc = start_data.location;
+
+                    window_rec.size.w = window_rec.size.w * 8 / 10;
+                    window_rec.size.h = window_rec.size.h * 8 / 10;
+
+                    let initial_window_location = Point::from(
+                        (
+                            pointer_loc.x - (window_rec.size.w.to_f64() / 2.0), 
+                            pointer_loc.y - (window_rec.size.h.to_f64() / 2.0)
+                        ))
+                        .to_i32_round();
+
+                    // if window is tiled, change it to floating
+                    self.workspace_manager.grab_request(&window, Rectangle { loc: initial_window_location, size: window_rec.size });
+
+                    // set pointer state
+                    let grab = PointerMoveSurfaceGrab {
+                        start_data,
+                        window,
+                        initial_window_location,
+                    };
+
+                    pointer.set_grab(self, grab, serial, Focus::Keep);
+        
+                    // change cursor image
+                    self.cursor_manager
+                        .set_cursor_image(CursorImageStatus::Named(CursorIcon::Grabbing));
+                }
+            }
+        }
     }
 }
 

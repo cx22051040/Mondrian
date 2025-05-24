@@ -226,7 +226,7 @@ impl RenderManager {
 
         let focus = workspace_manager.get_focus();
         if let Some(window) = focus {
-            let window_geo = match workspace_manager.element_geometry(window) {
+            let window_geo = match workspace_manager.window_geometry(window) {
                 Some(g) => g,
                 None => {
                     warn!("Failed to get window {:?} geometry", window);

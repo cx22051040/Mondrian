@@ -12,6 +12,7 @@ use smithay::{
 
 use crate::{state::GlobalData, utils::errors::AnyHowErr};
 
+#[derive(Debug)]
 pub enum FunctionEnum {
     SwitchWorkspace1,
     SwitchWorkspace2,
@@ -19,6 +20,7 @@ pub enum FunctionEnum {
     Quit,
 }
 
+#[derive(Debug)]
 pub enum KeyAction {
     Command(String),
     Internal(FunctionEnum),
@@ -31,6 +33,9 @@ pub struct InputManager {
     // keyboard
     pub keybindings: HashMap<String, KeyAction>,
     pub priority_map: HashMap<String, i32>,
+
+    // global data
+    pub is_mainmod_pressed: bool
 }
 
 impl InputManager {
@@ -58,7 +63,7 @@ impl InputManager {
         .map(|(k, v)| (k.to_string(), v))
         .collect();
 
-        Ok ( Self { seat_state, seat, keybindings, priority_map } )
+        Ok ( Self { seat_state, seat, keybindings, priority_map, is_mainmod_pressed: false } )
     }
 
     pub fn get_keybindings(&self) -> &HashMap<String, KeyAction> {
@@ -141,8 +146,10 @@ impl InputManager {
         }
 
         #[cfg(feature = "trace_input")]
-        tracing::info!("Keybindings: {:?}", bindings);
-
+        for (key, action) in &bindings {
+            tracing::info!(%key, action = ?action, "Keybinding registered");
+        }
+        
         Ok(bindings)
     }
 

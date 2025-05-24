@@ -375,7 +375,7 @@ pub fn handle_commit(workspace_manager: &mut WorkspaceManager, surface: &WlSurfa
 
     if new_loc.x.is_some() || new_loc.y.is_some() {
         // If TOP or LEFT side of the window got resized, we have to move it
-        workspace_manager.map_element(window.clone(), window_loc, None, false);
+        workspace_manager.map_element(None, window.clone(), window_loc, None, false);
     }
     Some(())
 }

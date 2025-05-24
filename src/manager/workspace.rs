@@ -4,7 +4,7 @@ use smithay::{
     desktop::{Space, Window},
     output::Output,
     reexports::wayland_server::protocol::wl_surface::WlSurface,
-    utils::{Logical, Point, Rectangle, Size},
+    utils::{Logical, Point, Rectangle},
 };
 
 use crate::layout::tiled_tree::{TiledScheme, TiledTree};
@@ -82,7 +82,7 @@ impl Workspace {
         self.id
     }
 
-    pub fn map_element(&mut self, window: Window, location: Point<i32, Logical>, layout: Option<WindowLayout>, activate: bool) {
+    pub fn map_element(&mut self, target: Option<Window>, window: Window, location: Point<i32, Logical>, layout: Option<WindowLayout>, activate: bool) {
         let layout = layout.unwrap_or_else(|| {
             match self.layout.get(&window) {
                 Some(layout) => layout.clone(),
@@ -97,7 +97,7 @@ impl Workspace {
                         self.tiled.map_element(window, location, activate);
                     }
                     None => {
-                        self.map_tiled_element(window, activate);
+                        self.map_tiled_element(target, window, activate);
                     }
                 }
             }
@@ -131,13 +131,12 @@ impl Workspace {
             state.bounds = Some(self.output_geometry.size)
         });
 
-        window.set_rec(Size::from((500, 500)));
-
         self.floating.map_element(window, location, activate);
     }
 
     fn map_tiled_element(
         &mut self,
+        target: Option<Window>,
         window: Window,
         activate: bool,
     ) {
@@ -152,27 +151,39 @@ impl Workspace {
             return;
         }
 
-        match self.scheme {
-            TiledScheme::Default => {
+        match target {
+            Some(target) => {
                 if let Some(layout_tree) = &mut self.tiled_tree {
-                    layout_tree.insert_window(&self.focus, window.clone(), &mut self.tiled);
+                    layout_tree.insert_window(&Some(target), window.clone(), &mut self.tiled);
 
                     #[cfg(feature = "trace_layout")]
                     layout_tree.print_tree();
+                }
+            }
+            None => {
+                match self.scheme {
+                    TiledScheme::Default => {
+                        if let Some(layout_tree) = &mut self.tiled_tree {
+                            layout_tree.insert_window(&self.focus, window.clone(), &mut self.tiled);
+        
+                            #[cfg(feature = "trace_layout")]
+                            layout_tree.print_tree();
+                        }
+                    }
                 }
             }
         }
     }
 
     fn unmap_tiled_element(&mut self, window: &Window) {
-        if let Some(layout_tree) = &mut self.tiled_tree {
-            layout_tree.remove(window, &mut self.tiled);
+        if let Some(tiled_tree) = &mut self.tiled_tree {
+            tiled_tree.remove(window, &mut self.tiled);
 
-            if layout_tree.is_empty() {
+            if tiled_tree.is_empty() {
                 self.tiled_tree = None;
             } else {
                 #[cfg(feature = "trace_layout")]
-                layout_tree.print_tree();
+                tiled_tree.print_tree();
             }
         } else {
             error!("empty layout tree!");
@@ -189,6 +200,11 @@ impl Workspace {
     }
 
     fn unmap_floating_element(&mut self, window: &Window) {
+        if let Some(focus) = &self.focus {
+            if focus == window {
+                self.focus = None;
+            }
+        }
         self.floating.unmap_elem(window);
     }
 
@@ -218,10 +234,21 @@ impl Workspace {
     pub fn window_under(
         &self,
         position: Point<f64, Logical>,
+        extra: Option<WindowLayout>,
     ) -> Option<(&Window, Point<i32, Logical>)> {
-        self.tiled.element_under(position).map(|(w, p)| (w, p)).or_else(|| {
-            self.floating.element_under(position).map(|(w, p)| (w, p))
-        })
+        match extra {
+            Some(layout) => {
+                match layout {
+                    WindowLayout::Floating => self.floating.element_under(position),
+                    WindowLayout::Tiled => self.tiled.element_under(position),
+                }
+            }
+            None => {
+                self.floating.element_under(position).or_else(|| {
+                    self.tiled.element_under(position)
+                })
+            }
+        }
     }
 
     pub fn element_location(&self, window: &Window) -> Option<Point<i32, Logical>> {
@@ -327,7 +354,7 @@ impl Workspace {
         &self.tiled
     }
 
-    pub fn element_geometry(&self, window: &Window) -> Option<Rectangle<i32, Logical>> {
+    pub fn window_geometry(&self, window: &Window) -> Option<Rectangle<i32, Logical>> {
         match self.layout.get(window) {
             Some(layout) => {
                 match layout {
@@ -339,12 +366,76 @@ impl Workspace {
                     }
                 }
             }
+            None => None
+        }
+    }
+
+    pub fn find_window(&self, surface: &WlSurface) ->Option<&Window> {
+        self.elements()
+            .find(|w| w.toplevel().unwrap().wl_surface() == surface)
+    }
+
+    pub fn check_grab(&mut self, surface: &WlSurface) -> Option<(&Window, Rectangle<i32, Logical>)> {
+        match self.find_window(surface) {
+            Some(window) => {
+                match self.window_geometry(window) {
+                    Some(rec) => {
+                        Some((window, rec))
+                    }
+                    None => {
+                        warn!("Failed to get window's layout type");
+                        None
+                    }
+                }
+            }
             None => {
-                warn!("Failed to get window's layout type");
+                warn!("Failed to get window from surface: {:?}", surface);
                 None
             }
         }
     }
+
+    pub fn grab_request(&mut self, window: &Window, rec: Rectangle<i32, Logical>) {
+        match self.layout.get_mut(window) {
+            Some(layout) => {
+                match layout {
+                    WindowLayout::Tiled => {
+                        *layout = WindowLayout::Floating;
+                        self.unmap_tiled_element(window);
+
+                        window.set_rec(rec.size);
+                        self.map_floating_element(window.clone(), rec.loc, true);
+                    }
+                    _ => { }
+                }
+            }
+            None => {
+                warn!("Failed to get layout from window: {:?}", window);
+                return
+            }
+        }
+    }
+
+    pub fn grab_release(&mut self, target: Option<Window>, window: &Window) {
+        match self.layout.get_mut(window) {
+            Some(layout) => {
+                match layout {
+                    WindowLayout::Floating => {
+                        *layout = WindowLayout::Tiled;
+                        self.unmap_floating_element(window);
+                        // TODO: set location let cursor in the middle
+                        self.map_tiled_element(target, window.clone(), true);
+                    }
+                    _ => { }
+                }
+            }
+            None => {
+                warn!("Failed to get layout from window: {:?}", window);
+                return
+            }
+        }
+    }
+
 }
 
 #[derive(Debug)]
@@ -410,9 +501,9 @@ impl WorkspaceManager {
             .expect("no current_workspace")
     }
 
-    pub fn map_element(&mut self, window: Window, location: Point<i32, Logical>, layout: Option<WindowLayout>, activate: bool) {
+    pub fn map_element(&mut self, target: Option<Window>, window: Window, location: Point<i32, Logical>, layout: Option<WindowLayout>, activate: bool) {
         self.current_workspace_mut()
-            .map_element(window, location, layout, activate);
+            .map_element(target, window, location, layout, activate);
     }
 
     pub fn refresh(&mut self) {
@@ -422,10 +513,10 @@ impl WorkspaceManager {
     pub fn window_under(
         &self,
         position: Point<f64, Logical>,
-    ) -> Option<(Window, Point<i32, Logical>)> {
+        extra: Option<WindowLayout>,
+    ) -> Option<(&Window, Point<i32, Logical>)> {
         self.current_workspace()
-            .window_under(position)
-            .map(|(w, p)| (w.clone(), p))
+            .window_under(position, extra)
     }
 
     pub fn element_location(&self, window: &Window) -> Option<Point<i32, Logical>> {
@@ -438,8 +529,7 @@ impl WorkspaceManager {
 
     pub fn find_window(&self, surface: &WlSurface) -> Option<&Window> {
         // TODO: maybe can use hashmap to store the surface
-        self.elements()
-            .find(|w| w.toplevel().unwrap().wl_surface() == surface)
+         self.current_workspace().find_window(surface)
     }
 
     pub fn _workspaces_counts(&self) -> usize {
@@ -474,7 +564,19 @@ impl WorkspaceManager {
         self.current_workspace().current_space()
     }
 
-    pub fn element_geometry(&self, window: &Window) -> Option<Rectangle<i32, Logical>> {
-        self.current_workspace().element_geometry(window)
+    pub fn window_geometry(&self, window: &Window) -> Option<Rectangle<i32, Logical>> {
+        self.current_workspace().window_geometry(window)
+    }
+
+    pub fn check_grab(&mut self, surface: &WlSurface) -> Option<(&Window, Rectangle<i32, Logical>)> {
+        self.current_workspace_mut().check_grab(surface)
+    }
+
+    pub fn grab_request(&mut self, window: &Window, rec: Rectangle<i32, Logical>) {
+        self.current_workspace_mut().grab_request(window, rec);
+    }
+
+    pub fn grab_release(&mut self, target: Option<Window>, window: &Window) {
+        self.current_workspace_mut().grab_release(target, window);
     }
 }

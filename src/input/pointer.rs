@@ -191,15 +191,10 @@ impl GlobalData {
         let button_state = event.state();
 
         #[cfg(feature = "trace_input")]
-        tracing::info!(
+        info!(
             "The PointerButton event, button: {button}, location: {:?}",
             pointer.current_location()
         );
-
-        if button_state == ButtonState::Pressed && !pointer.is_grabbed() {
-            let position = pointer.current_location();
-            self.surface_under(position, serial);
-        }
 
         // modify pointer state
         pointer.button(
@@ -211,6 +206,17 @@ impl GlobalData {
                 time: event.time_msec(),
             },
         );
+
+        if button_state == ButtonState::Pressed {
+            let position = pointer.current_location();
+            let wl_surface = match self.surface_under(position, serial) {
+                Some((wl_surface, _)) => wl_surface,
+                None => return
+            };
+
+            self.grab_request(&wl_surface, &pointer, serial);
+        }
+
         pointer.frame(self);
     }
 
@@ -253,7 +259,8 @@ impl GlobalData {
         // The window
         else if let Some((window, location)) = self
             .workspace_manager
-            .window_under(position)
+            .window_under(position, None)
+            .map(|(w, p)| (w.clone(), p))
         {
             if let Some(surface) = window
                 .surface_under(position - location.to_f64(), WindowSurfaceType::ALL)

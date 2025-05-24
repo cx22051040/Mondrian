@@ -4,7 +4,7 @@ use smithay::{
     utils::{Logical, Point},
 };
 
-use crate::state::GlobalData;
+use crate::{manager::workspace::WindowLayout, state::GlobalData};
 
 pub struct PointerMoveSurfaceGrab {
     // TODO: can use smaller struct such as InputState
@@ -18,10 +18,17 @@ impl PointerGrab<GlobalData> for PointerMoveSurfaceGrab {
         &self.start_data
     }
 
-    fn unset(&mut self, state: &mut GlobalData) {
-        state
+    fn unset(&mut self, data: &mut GlobalData) {
+        data
             .cursor_manager
             .set_cursor_image(CursorImageStatus::default_named());
+
+        let target = match data.workspace_manager.window_under(self.start_data.location, Some(WindowLayout::Tiled)) {
+            Some((window, _)) => Some(window.clone()),
+            None => None
+        };
+
+        data.workspace_manager.grab_release(target, &self.window);
     }
 
     fn frame(
@@ -64,9 +71,11 @@ impl PointerGrab<GlobalData> for PointerMoveSurfaceGrab {
         handle.motion(data, None, event);
 
         let delta = event.location - self.start_data.location;
-        let new_location = self.initial_window_location.to_f64() + delta;
+        self.initial_window_location += delta.to_i32_round();
+        
         data.workspace_manager
-            .map_element(self.window.clone(), new_location.to_i32_round(), None, true);
+            .map_element(None, self.window.clone(), self.initial_window_location, None, true);
+        self.start_data.location = event.location;
     }
 
     fn relative_motion(
