@@ -2,23 +2,18 @@ use crate::{
     input::{move_grab::PointerMoveSurfaceGrab, resize_grab::ResizeSurfaceGrab}, manager::workspace::WindowLayout, state::GlobalData
 };
 use smithay::{
-    delegate_xdg_shell,
-    desktop::{PopupKind, PopupManager, Space, Window},
-    input::{pointer::{Focus, PointerHandle}, Seat},
-    reexports::{
+    delegate_xdg_shell, desktop::{PopupKind, PopupManager, Space, Window}, input::{pointer::{Focus, PointerHandle}, Seat}, reexports::{
         wayland_protocols::xdg::shell::server::xdg_toplevel,
         wayland_server::{
             protocol::{wl_seat, wl_surface::WlSurface}, Resource
         },
-    },
-    utils::{Coordinate, Point, Rectangle, Serial},
-    wayland::{
+    }, utils::{Coordinate, Point, Rectangle, Serial, SERIAL_COUNTER}, wayland::{
         compositor::with_states,
         shell::xdg::{
             PopupSurface, PositionerState, ToplevelSurface, XdgShellHandler, XdgShellState,
             XdgToplevelSurfaceData,
         },
-    },
+    }
 };
 use smithay::{
     desktop::{find_popup_root_surface, get_popup_toplevel_coords},
@@ -77,7 +72,9 @@ impl XdgShellHandler for GlobalData {
         );
 
         self.workspace_manager
-            .map_element(None, window, (0, 0).into(), Some(WindowLayout::Tiled), true);
+            .map_element(None, window.clone(), (0, 0).into(), Some(WindowLayout::Tiled), true);
+
+        self.set_keyboard_focus(Some(surface.wl_surface().clone()), SERIAL_COUNTER.next_serial());
     }
 
     fn new_popup(&mut self, surface: PopupSurface, _positioner: PositionerState) {
@@ -284,9 +281,9 @@ impl GlobalData {
                         window,
                         initial_window_location,
                     };
-
+                    
                     pointer.set_grab(self, grab, serial, Focus::Keep);
-        
+
                     // change cursor image
                     self.cursor_manager
                         .set_cursor_image(CursorImageStatus::Named(CursorIcon::Grabbing));

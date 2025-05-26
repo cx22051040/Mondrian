@@ -68,13 +68,15 @@ impl PointerGrab<GlobalData> for PointerMoveSurfaceGrab {
         event: &smithay::input::pointer::MotionEvent,
     ) {
         // While the grab is active, no client has pointer focus
+        // TODO: this drop the surface focus, so when release the button
+        // client can't get the release info
         handle.motion(data, None, event);
 
         let delta = event.location - self.start_data.location;
         self.initial_window_location += delta.to_i32_round();
         
         data.workspace_manager
-            .map_element(None, self.window.clone(), self.initial_window_location, None, true);
+            .map_element(None, self.window.clone(), self.initial_window_location, None, false);
         self.start_data.location = event.location;
     }
 

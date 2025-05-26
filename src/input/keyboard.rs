@@ -101,7 +101,14 @@ impl GlobalData {
                         self.workspace_manager.invert_window();
                     }
                     FunctionEnum::Quit => {
-                        info!("Quit");
+                        if let Some(focus) = &self.workspace_manager.current_workspace().focus {
+                            info!("quit");
+                            let toplevel = focus.toplevel().unwrap();
+                            toplevel.send_close();
+                        }
+                    }
+                    FunctionEnum::Kill => {
+                        info!("Kill the full compositor");
                         std::process::exit(0);
                     }
                 },

@@ -112,8 +112,8 @@ impl TiledTree {
             target.set_rec(l_rec.size);
             new_window.set_rec(r_rec.size);
             
-            space.map_element(target.clone(), l_rec.loc, true);
-            space.map_element(new_window.clone(), r_rec.loc, false);
+            space.map_element(target.clone(), l_rec.loc, false);
+            space.map_element(new_window.clone(), r_rec.loc, true);
 
             // adjust tree
             let original = self.nodes[target_id].clone();

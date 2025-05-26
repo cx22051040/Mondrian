@@ -5,7 +5,7 @@ use regex::Regex;
 
 use smithay::{
     input::{
-        Seat, SeatState, keyboard::KeyboardHandle, pointer::PointerHandle, touch::TouchHandle,
+        keyboard::KeyboardHandle, pointer::PointerHandle, touch::TouchHandle, Seat, SeatState
     },
     reexports::wayland_server::DisplayHandle,
 };
@@ -18,6 +18,7 @@ pub enum FunctionEnum {
     SwitchWorkspace2,
     InvertWindow,
     Quit,
+    Kill,
 }
 
 #[derive(Debug)]
@@ -128,6 +129,7 @@ impl InputManager {
                             "workspace-2" => FunctionEnum::SwitchWorkspace2,
                             "invert" => FunctionEnum::InvertWindow,
                             "quit" => FunctionEnum::Quit,
+                            "kill" => FunctionEnum::Kill,
                             _ => {
                                 tracing::info!(
                                     "Warning: No registered function for exec '{}'",

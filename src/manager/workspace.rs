@@ -110,6 +110,13 @@ impl Workspace {
 
     pub fn unmap_element(&mut self, window: &Window) {
         if let Some(layout) = self.layout.remove(window) {
+            // unset focus
+            if let Some(focus) = &self.focus {
+                if focus == window {
+                    self.focus = None;
+                }
+            }
+
             match layout {
                 WindowLayout::Tiled => {
                     self.unmap_tiled_element(window);
@@ -127,11 +134,18 @@ impl Workspace {
         location: Point<i32, Logical>,
         activate: bool,
     ) {
+        self.refresh();
+        
         window.toplevel().unwrap().with_pending_state(|state| {
             state.bounds = Some(self.output_geometry.size)
         });
 
-        self.floating.map_element(window, location, activate);
+        self.floating.map_element(window.clone(), location, activate);
+
+        // set focus
+        if activate {
+            self.focus = Some(window);
+        }
     }
 
     fn map_tiled_element(
@@ -147,31 +161,35 @@ impl Workspace {
                 (self.output_geometry.size - (GAP * 2, GAP * 2).into()).into(),
             );
             self.tiled_tree = Some(TiledTree::new(window.clone()));
-            self.tiled.map_element(window, (GAP, GAP), activate);
-            return;
-        }
-
-        match target {
-            Some(target) => {
-                if let Some(layout_tree) = &mut self.tiled_tree {
-                    layout_tree.insert_window(&Some(target), window.clone(), &mut self.tiled);
-
-                    #[cfg(feature = "trace_layout")]
-                    layout_tree.print_tree();
+            self.tiled.map_element(window.clone(), (GAP, GAP), activate);
+        } else {
+            match target {
+                Some(target) => {
+                    if let Some(layout_tree) = &mut self.tiled_tree {
+                        layout_tree.insert_window(&Some(target), window.clone(), &mut self.tiled);
+    
+                        #[cfg(feature = "trace_layout")]
+                        layout_tree.print_tree();
+                    }
                 }
-            }
-            None => {
-                match self.scheme {
-                    TiledScheme::Default => {
-                        if let Some(layout_tree) = &mut self.tiled_tree {
-                            layout_tree.insert_window(&self.focus, window.clone(), &mut self.tiled);
-        
-                            #[cfg(feature = "trace_layout")]
-                            layout_tree.print_tree();
+                None => {
+                    match self.scheme {
+                        TiledScheme::Default => {
+                            if let Some(layout_tree) = &mut self.tiled_tree {
+                                layout_tree.insert_window(&self.focus, window.clone(), &mut self.tiled);
+            
+                                #[cfg(feature = "trace_layout")]
+                                layout_tree.print_tree();
+                            }
                         }
                     }
                 }
             }
+        }
+
+        // set focus
+        if activate {
+            self.focus = Some(window);
         }
     }
 
@@ -190,21 +208,10 @@ impl Workspace {
             return;
         }
 
-        if let Some(focus) = &self.focus {
-            if focus == window {
-                self.focus = None;
-            }
-        }
-
         self.tiled.unmap_elem(window);
     }
 
     fn unmap_floating_element(&mut self, window: &Window) {
-        if let Some(focus) = &self.focus {
-            if focus == window {
-                self.focus = None;
-            }
-        }
         self.floating.unmap_elem(window);
     }
 
