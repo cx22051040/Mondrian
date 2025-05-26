@@ -83,10 +83,25 @@ impl GlobalData {
 
         if let Some(command) = keybindings.get(&keys) {
             match command {
-                KeyAction::Command(cmd) => {
+                KeyAction::Command(cmd, args) => {
                     #[cfg(feature = "trace_input")]
-                    info!("Command: {}", cmd);
-                    std::process::Command::new(cmd).spawn().ok();
+                    info!("Command: {} {}", cmd, args.join(" "));
+
+                    let mut command = std::process::Command::new(cmd);
+
+                    for arg in args {
+                        command.arg(arg);
+                    }
+
+                    match command.spawn() {
+                        Ok(child) => {
+                            #[cfg(feature = "trace_input")]
+                            info!("Command spawned with PID: {}", child.id());
+                        }
+                        Err(e) => {
+                            error!("Failed to execute command '{} {}': {}", cmd, args.join(" "), e);
+                        }
+                    }
                 }
                 KeyAction::Internal(func) => match func {
                     FunctionEnum::SwitchWorkspace1 => {

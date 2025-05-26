@@ -127,6 +127,7 @@ impl XdgShellHandler for GlobalData {
         };
         let wl_surface: &WlSurface = surface.wl_surface();
         self.grab_request(wl_surface, &pointer, serial);
+        info!("2131221");
     }
 
     fn resize_request(

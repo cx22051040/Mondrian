@@ -23,7 +23,7 @@ pub enum FunctionEnum {
 
 #[derive(Debug)]
 pub enum KeyAction {
-    Command(String),
+    Command(String, Vec<String>),
     Internal(FunctionEnum),
 }
 
@@ -122,7 +122,13 @@ impl InputManager {
 
             for key in keys {
                 let action_enum = match action {
-                    "command" => KeyAction::Command(command.trim().to_string()),
+                    "command" => {
+                        let mut parts = command.split_whitespace();
+                        let cmd = parts.next().unwrap_or("").to_string();
+                        let args: Vec<String> = parts.map(|s| s.to_string()).collect();
+
+                        KeyAction::Command(cmd, args)
+                    },
                     "exec" => {
                         let internal_action = match command.trim() {
                             "workspace-1" => FunctionEnum::SwitchWorkspace1,
