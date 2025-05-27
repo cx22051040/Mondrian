@@ -1,5 +1,5 @@
 use crate::{
-    input::{move_grab::PointerMoveSurfaceGrab, resize_grab::ResizeSurfaceGrab}, manager::workspace::WindowLayout, state::GlobalData
+    input::{move_grab::PointerMoveSurfaceGrab, resize_grab::ResizeSurfaceGrab}, manager::{window::WindowExt, workspace::WindowLayout}, state::GlobalData
 };
 use smithay::{
     delegate_xdg_shell, desktop::{PopupKind, PopupManager, Space, Window}, input::{pointer::{Focus, PointerHandle}, Seat}, reexports::{
@@ -8,10 +8,9 @@ use smithay::{
             protocol::{wl_seat, wl_surface::WlSurface}, Resource
         },
     }, utils::{Coordinate, Point, Rectangle, Serial, SERIAL_COUNTER}, wayland::{
-        compositor::with_states,
+        compositor::{self, with_states},
         shell::xdg::{
-            PopupSurface, PositionerState, ToplevelSurface, XdgShellHandler, XdgShellState,
-            XdgToplevelSurfaceData,
+            PopupSurface, PositionerState, ToplevelSurface, XdgShellHandler, XdgShellState, XdgToplevelSurfaceData
         },
     }
 };
@@ -66,10 +65,17 @@ impl XdgShellHandler for GlobalData {
 
     fn new_toplevel(&mut self, surface: ToplevelSurface) {
         let window = Window::new_wayland_window(surface.clone());
+
         self.window_manager.add_window(
             window.clone(),
             self.workspace_manager.current_workspace().id(),
+            &mut self.state
         );
+
+        // use the size from the suggested size of the surface if available
+        if let Some(size) = surface.with_pending_state(|state| state.size) {
+            window.set_rec(size);
+        }
 
         self.workspace_manager
             .map_element(None, window.clone(), (0, 0).into(), Some(WindowLayout::Tiled), true);
@@ -99,6 +105,12 @@ impl XdgShellHandler for GlobalData {
 
     fn toplevel_destroyed(&mut self, surface: ToplevelSurface) {
         let wl_surface = surface.wl_surface();
+
+        self.window_manager.get_foreign_handle(wl_surface)
+        .map(|handle| {
+            handle.send_closed();
+        });
+
         match self.window_manager.remove_window(wl_surface) {
             Some(window) => {
                 self.workspace_manager.unmap_element(&window);
@@ -127,7 +139,6 @@ impl XdgShellHandler for GlobalData {
         };
         let wl_surface: &WlSurface = surface.wl_surface();
         self.grab_request(wl_surface, &pointer, serial);
-        info!("2131221");
     }
 
     fn resize_request(
@@ -191,6 +202,26 @@ impl XdgShellHandler for GlobalData {
     }
 
     fn grab(&mut self, _surface: PopupSurface, _seat: wl_seat::WlSeat, _serial: Serial) {}
+
+    fn title_changed(&mut self, surface: ToplevelSurface) {
+        let (title, app_id) = 
+            compositor::with_states(surface.wl_surface(), |states| {
+                let roll= &mut states
+                    .data_map
+                    .get::<XdgToplevelSurfaceData>()
+                    .unwrap()
+                    .lock()
+                    .unwrap();
+                (roll.title.clone(), roll.app_id.clone())
+            });
+
+        self.window_manager.get_foreign_handle(surface.wl_surface())
+            .map(|handle| {
+                handle.send_title(&title.unwrap_or("unkown".to_string()));
+                handle.send_app_id(&app_id.unwrap_or("unkown".to_string()));
+                handle.send_done();
+            });
+    }
 }
 delegate_xdg_shell!(GlobalData);
 

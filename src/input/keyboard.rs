@@ -94,13 +94,14 @@ impl GlobalData {
                     }
 
                     match command.spawn() {
+                        #[cfg(feature = "trace_input")]
                         Ok(child) => {
-                            #[cfg(feature = "trace_input")]
                             info!("Command spawned with PID: {}", child.id());
                         }
                         Err(e) => {
                             error!("Failed to execute command '{} {}': {}", cmd, args.join(" "), e);
                         }
+                        _ => {}
                     }
                 }
                 KeyAction::Internal(func) => match func {

@@ -90,6 +90,11 @@ impl Workspace {
             }
         });
 
+        window.toplevel().unwrap().with_pending_state(|state| {
+            state.bounds = Some(self.output_geometry.size)
+        });
+        window.toplevel().unwrap().send_pending_configure();
+
         match layout {
             WindowLayout::Tiled => {
                 match self.layout.insert(window.clone(), WindowLayout::Tiled) {
@@ -136,10 +141,6 @@ impl Workspace {
     ) {
         self.refresh();
         
-        window.toplevel().unwrap().with_pending_state(|state| {
-            state.bounds = Some(self.output_geometry.size)
-        });
-
         self.floating.map_element(window.clone(), location, activate);
 
         // set focus

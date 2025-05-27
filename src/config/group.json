@@ -6,7 +6,7 @@
       "offset": [150, 0],
       "left": {
         "type": "Leaf",
-        "command": "weston-terminal"
+        "command": "kitty -e nvim"
       },
       "right": {
         "type": "Leaf",

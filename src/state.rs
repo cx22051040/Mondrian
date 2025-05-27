@@ -8,28 +8,16 @@ use smithay::{
     reexports::{
         calloop::LoopHandle,
         wayland_server::{
-            DisplayHandle, Resource,
-            backend::ClientData,
-            protocol::{wl_buffer, wl_shm, wl_surface::WlSurface},
+            backend::ClientData, protocol::{wl_buffer, wl_shm, wl_surface::WlSurface}, DisplayHandle, Resource
         },
     },
     utils::{Clock, Monotonic, Time},
     wayland::{
-        buffer::BufferHandler,
-        compositor::{CompositorClientState, CompositorState},
-        dmabuf::{DmabufGlobal, DmabufHandler, DmabufState, ImportNotifier},
-        output::OutputHandler,
-        security_context::SecurityContext,
-        selection::{
-            SelectionHandler,
+        buffer::BufferHandler, compositor::{CompositorClientState, CompositorState}, dmabuf::{DmabufGlobal, DmabufHandler, DmabufState, ImportNotifier}, foreign_toplevel_list::ForeignToplevelListState, output::OutputHandler, security_context::SecurityContext, selection::{
             data_device::{
-                ClientDndGrabHandler, DataDeviceHandler, DataDeviceState, ServerDndGrabHandler,
-                set_data_device_focus,
-            },
-        },
-        shell::{wlr_layer::WlrLayerShellState, xdg::XdgShellState},
-        shm::{ShmHandler, ShmState},
-        viewporter::ViewporterState,
+                set_data_device_focus, ClientDndGrabHandler, DataDeviceHandler, DataDeviceState, ServerDndGrabHandler
+            }, SelectionHandler
+        }, shell::{wlr_layer::WlrLayerShellState, xdg::XdgShellState}, shm::{ShmHandler, ShmState}, viewporter::ViewporterState
     },
 };
 
@@ -168,6 +156,7 @@ pub struct State {
     pub layer_shell_state: WlrLayerShellState,
     #[allow(dead_code)]
     pub viewporter_state: ViewporterState,
+    pub foreign_toplevel_state: ForeignToplevelListState,
 }
 
 impl State {
@@ -184,6 +173,7 @@ impl State {
         let xdg_shell_state = XdgShellState::new::<GlobalData>(display_handle);
         let layer_shell_state = WlrLayerShellState::new::<GlobalData>(display_handle);
         let viewporter_state = ViewporterState::new::<GlobalData>(display_handle);
+        let foreign_toplevel_state = ForeignToplevelListState::new::<GlobalData>(display_handle);
 
         Ok(State {
             compositor_state,
@@ -194,6 +184,7 @@ impl State {
             xdg_shell_state,
             layer_shell_state,
             viewporter_state,
+            foreign_toplevel_state,
         })
     }
 }
