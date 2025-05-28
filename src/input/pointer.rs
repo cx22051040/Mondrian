@@ -13,11 +13,9 @@ use smithay::{
         Logical, Point, SERIAL_COUNTER
     }, 
     wayland::{
-        pointer_constraints::{
+        compositor::get_parent, pointer_constraints::{
             with_pointer_constraint, PointerConstraint
-        }, 
-        seat::WaylandFocus,
-        shell::wlr_layer::Layer as WlrLayer
+        }, seat::WaylandFocus, shell::wlr_layer::Layer as WlrLayer
     }
 };
 
@@ -214,6 +212,12 @@ impl GlobalData {
         
         // grab and resize
         if self.input_manager.is_mainmod_pressed && button_state == ButtonState::Pressed {
+            // if this is wl_subsurface
+            let wl_surface = match get_parent(&wl_surface) {
+                Some(wl_surface) => wl_surface,
+                None => wl_surface,
+            };
+
             let start_data = PointerGrabStartData {
                 button,
                 focus: Some((wl_surface.clone(), loc)),

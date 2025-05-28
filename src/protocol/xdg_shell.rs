@@ -209,8 +209,6 @@ impl XdgShellHandler for GlobalData {
                 (roll.title.clone(), roll.app_id.clone())
             });
 
-        info!("Title changed: {:?}, App ID: {:?}", title, app_id);
-
         self.window_manager.get_foreign_handle(surface.wl_surface())
             .map(|handle| {
                 handle.send_title(&title.unwrap_or("unkown".to_string()));

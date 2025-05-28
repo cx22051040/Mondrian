@@ -11,7 +11,7 @@ use smithay::{
     wayland::compositor,
 };
 
-use crate::{manager::workspace::WorkspaceManager, state::GlobalData};
+use crate::state::GlobalData;
 
 bitflags::bitflags! {
   #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -69,7 +69,7 @@ impl ResizeSurfaceState {
         })
     }
 
-    fn commit(&mut self) -> Option<(ResizeEdge, Rectangle<i32, Logical>)> {
+    fn _commit(&mut self) -> Option<(ResizeEdge, Rectangle<i32, Logical>)> {
         match *self {
             Self::Resizing {
                 edges,
@@ -152,6 +152,7 @@ impl PointerGrab<GlobalData> for ResizeSurfaceGrab {
         handle.motion(data, None, event);
 
         let delta = event.location - self.last_position;
+        
         data.workspace_manager
             .resize((delta.x as i32, delta.y as i32));
 
@@ -335,53 +336,55 @@ impl PointerGrab<GlobalData> for ResizeSurfaceGrab {
     }
 }
 
-pub fn handle_commit(workspace_manager: &mut WorkspaceManager, surface: &WlSurface) -> Option<()> {
-    let window = match workspace_manager.find_window(surface) {
-        Some(window) => window,
-        None => {
-            return None;
-        }
-    };
 
-    let mut window_loc = match workspace_manager.window_geometry(&window) {
-        Some(rec) => rec.loc,
-        None => {
-            warn!("Failed to get location from window: {:?}", window);
-            return None;
-        }
-    };
+// TODO: only for floating window
+// pub fn handle_commit(workspace_manager: &mut WorkspaceManager, surface: &WlSurface) -> Option<()> {
+//     let window = match workspace_manager.find_window(surface) {
+//         Some(window) => window,
+//         None => {
+//             return None;
+//         }
+//     };
 
-    let geometry = window.geometry();
+//     let mut window_loc = match workspace_manager.window_geometry(&window) {
+//         Some(rec) => rec.loc,
+//         None => {
+//             warn!("Failed to get location from window: {:?}", window);
+//             return None;
+//         }
+//     };
 
-    let new_loc: Point<Option<i32>, Logical> = ResizeSurfaceState::with(surface, |state| {
-        state
-            .commit()
-            .and_then(|(edges, initial_rect)| {
-                // If the window is being resized by top or left, its location must be adjusted
-                // accordingly.
-                edges.intersects(ResizeEdge::TOP_LEFT).then(|| {
-                    let new_x = edges
-                        .intersects(ResizeEdge::LEFT)
-                        .then_some(initial_rect.loc.x + (initial_rect.size.w - geometry.size.w));
-                    let new_y = edges
-                        .intersects(ResizeEdge::TOP)
-                        .then_some(initial_rect.loc.y + (initial_rect.size.h - geometry.size.h));
-                    (new_x, new_y).into()
-                })
-            })
-            .unwrap_or_default()
-    });
+//     let geometry = window.geometry();
 
-    if let Some(new_x) = new_loc.x {
-        window_loc.x = new_x;
-    }
-    if let Some(new_y) = new_loc.y {
-        window_loc.y = new_y;
-    }
+//     let new_loc: Point<Option<i32>, Logical> = ResizeSurfaceState::with(surface, |state| {
+//         state
+//             .commit()
+//             .and_then(|(edges, initial_rect)| {
+//                 // If the window is being resized by top or left, its location must be adjusted
+//                 // accordingly.
+//                 edges.intersects(ResizeEdge::TOP_LEFT).then(|| {
+//                     let new_x = edges
+//                         .intersects(ResizeEdge::LEFT)
+//                         .then_some(initial_rect.loc.x + (initial_rect.size.w - geometry.size.w));
+//                     let new_y = edges
+//                         .intersects(ResizeEdge::TOP)
+//                         .then_some(initial_rect.loc.y + (initial_rect.size.h - geometry.size.h));
+//                     (new_x, new_y).into()
+//                 })
+//             })
+//             .unwrap_or_default()
+//     });
 
-    if new_loc.x.is_some() || new_loc.y.is_some() {
-        // If TOP or LEFT side of the window got resized, we have to move it
-        workspace_manager.map_element(None, window.clone(), window_loc, None, false);
-    }
-    Some(())
-}
+//     if let Some(new_x) = new_loc.x {
+//         window_loc.x = new_x;
+//     }
+//     if let Some(new_y) = new_loc.y {
+//         window_loc.y = new_y;
+//     }
+
+//     if new_loc.x.is_some() || new_loc.y.is_some() {
+//         // If TOP or LEFT side of the window got resized, we have to move it
+//         workspace_manager.map_element(None, window.clone(), window_loc, None, false);
+//     }
+//     Some(())
+// }
