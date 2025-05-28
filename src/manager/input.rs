@@ -19,6 +19,7 @@ pub enum FunctionEnum {
     InvertWindow,
     Quit,
     Kill,
+    Json,
 }
 
 #[derive(Debug)]
@@ -136,6 +137,7 @@ impl InputManager {
                             "invert" => FunctionEnum::InvertWindow,
                             "quit" => FunctionEnum::Quit,
                             "kill" => FunctionEnum::Kill,
+                            "json" => FunctionEnum::Json,
                             _ => {
                                 tracing::info!(
                                     "Warning: No registered function for exec '{}'",

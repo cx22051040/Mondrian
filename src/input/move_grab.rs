@@ -76,7 +76,8 @@ impl PointerGrab<GlobalData> for PointerMoveSurfaceGrab {
         self.initial_window_location += delta.to_i32_round();
         
         data.workspace_manager
-            .map_element(None, self.window.clone(), self.initial_window_location, None, false);
+            .map_element(None, self.window.clone(), self.initial_window_location, Some(WindowLayout::Floating), false);
+
         self.start_data.location = event.location;
     }
 

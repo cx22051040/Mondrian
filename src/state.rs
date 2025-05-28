@@ -98,7 +98,11 @@ impl GlobalData {
         let mut workspace_manager = WorkspaceManager::new();
         let window_manager = WindowManager::new();
         let cursor_manager = CursorManager::new("default", 24);
-        let input_manager = InputManager::new(backend.seat_name(), &display_handle, "src/config/keybindings.conf").context("Failed to create input_manager")?;
+        let input_manager = InputManager::new(
+            backend.seat_name(), 
+            &display_handle, 
+            "src/config/keybindings.conf"
+        ).context("Failed to create input_manager")?;
         let popups = PopupManager::default();
         let render_manager = RenderManager::new();
 

@@ -127,6 +127,12 @@ impl GlobalData {
                         info!("Kill the full compositor");
                         std::process::exit(0);
                     }
+                    FunctionEnum::Json => {
+                        // TODO
+                        if let Some(tiled_tree) = &mut self.workspace_manager.current_workspace_mut().tiled_tree.as_mut() {
+                            tiled_tree.from_json("src/config/group.json");
+                        }
+                    }
                 },
             }
         }

@@ -128,6 +128,12 @@ impl PointerGrab<GlobalData> for ResizeSurfaceGrab {
     }
 
     fn unset(&mut self, state: &mut GlobalData) {
+        let toplevel = self.window.toplevel().unwrap();
+        toplevel.with_pending_state(|state| {
+            state.states.unset(xdg_toplevel::State::Resizing);
+        });
+        toplevel.send_pending_configure();
+        
         state
             .cursor_manager
             .set_cursor_image(CursorImageStatus::default_named());
@@ -337,8 +343,8 @@ pub fn handle_commit(workspace_manager: &mut WorkspaceManager, surface: &WlSurfa
         }
     };
 
-    let mut window_loc = match workspace_manager.element_location(&window) {
-        Some(location) => location,
+    let mut window_loc = match workspace_manager.window_geometry(&window) {
+        Some(rec) => rec.loc,
         None => {
             warn!("Failed to get location from window: {:?}", window);
             return None;

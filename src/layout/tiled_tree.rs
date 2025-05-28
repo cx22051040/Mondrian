@@ -1,7 +1,10 @@
+use serde::{Deserialize, Serialize};
 use slotmap::{new_key_type, SlotMap};
 use smithay::{desktop::{Space, Window}, utils::{Logical, Rectangle}};
 
 use crate::manager::window::WindowExt;
+
+use super::json_tiled_tree::JsonTree;
 
 const RATE: f32 = 2.0;
 const GAP: i32 = 12;
@@ -11,7 +14,7 @@ pub enum TiledScheme {
     Default,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum Direction {
     Horizontal,
     Vertical,
@@ -47,6 +50,10 @@ impl TiledTree {
             nodes,
             root
        }
+    }
+    
+    pub fn get_root(&self) -> Option<NodeId> {
+        self.root
     }
 
     pub fn is_empty(&self) -> bool {
@@ -274,10 +281,6 @@ impl TiledTree {
         }
     }
 
-    pub fn get_root(&self) -> Option<NodeId> {
-        self.root
-    }
-
     pub fn resize(&mut self, target: &Window, offset: (i32, i32), space: &mut Space<Window>) {
         let target_id = match self.find_node(target) {
             Some(r) => {
@@ -310,6 +313,12 @@ impl TiledTree {
                 self.modify(parent_id, rec, space);
             },
             NodeData::Leaf { .. } => { }
+        }
+    }
+
+    pub fn from_json(&mut self, path: &str) {
+        if let Some(json_tree) = JsonTree::from_json(path) {
+            json_tree.print_tree();
         }
     }
 

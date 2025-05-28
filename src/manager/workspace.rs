@@ -82,7 +82,15 @@ impl Workspace {
         self.id
     }
 
-    pub fn map_element(&mut self, target: Option<Window>, window: Window, location: Point<i32, Logical>, layout: Option<WindowLayout>, activate: bool) {
+    pub fn map_element(
+        &mut self, 
+        target: Option<Window>, 
+        window: Window, 
+        location: Point<i32, Logical>, 
+        layout: Option<WindowLayout>, 
+        activate: bool,
+
+    ) {
         let layout = layout.unwrap_or_else(|| {
             match self.layout.get(&window) {
                 Some(layout) => layout.clone(),
@@ -259,25 +267,6 @@ impl Workspace {
         }
     }
 
-    pub fn element_location(&self, window: &Window) -> Option<Point<i32, Logical>> {
-        match self.layout.get(window) {
-            Some(layout) => {
-                match layout {
-                    WindowLayout::Tiled => {
-                        self.tiled.element_location(window)
-                    }
-                    WindowLayout::Floating => {
-                        self.floating.element_location(window)
-                    }
-                }
-            }
-            None => {
-                warn!("Failed to get window's layout type");
-                None
-            }
-        }
-    }
-
     pub fn elements(&self) -> impl DoubleEndedIterator<Item = &Window> {
         self.tiled.elements().chain(self.floating.elements())
     }
@@ -384,6 +373,7 @@ impl Workspace {
     }
 
     pub fn check_grab(&mut self, surface: &WlSurface) -> Option<(&Window, Rectangle<i32, Logical>)> {
+        // TODO: check window's lock state
         match self.find_window(surface) {
             Some(window) => {
                 match self.window_geometry(window) {
@@ -443,7 +433,6 @@ impl Workspace {
             }
         }
     }
-
 }
 
 #[derive(Debug)]
@@ -525,10 +514,6 @@ impl WorkspaceManager {
     ) -> Option<(&Window, Point<i32, Logical>)> {
         self.current_workspace()
             .window_under(position, extra)
-    }
-
-    pub fn element_location(&self, window: &Window) -> Option<Point<i32, Logical>> {
-        self.current_workspace().element_location(window)
     }
 
     pub fn elements(&self) -> impl DoubleEndedIterator<Item = &Window> {

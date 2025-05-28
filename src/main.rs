@@ -2,6 +2,8 @@
 
 #[macro_use]
 extern crate tracing;
+extern crate serde;
+extern crate serde_json;
 
 mod backend;
 mod config;

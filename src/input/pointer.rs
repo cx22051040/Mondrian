@@ -6,8 +6,8 @@ use smithay::{
         layer_map_for_output, WindowSurfaceType
     }, 
     input::pointer::{
-        ButtonEvent, MotionEvent, RelativeMotionEvent
-    }, 
+            ButtonEvent, GrabStartData as PointerGrabStartData, MotionEvent, RelativeMotionEvent
+        }, 
     reexports::wayland_server::protocol::wl_surface::WlSurface, 
     utils::{
         Logical, Point, SERIAL_COUNTER
@@ -22,6 +22,9 @@ use smithay::{
 };
 
 use crate::state::GlobalData;
+
+const BUTTON_LEFT: u32 = 272;
+const BUTTON_RIGHT: u32 = 273;
 
 impl GlobalData {
     pub fn on_pointer_motion<I: InputBackend>(&mut self, event: I::PointerMotionEvent) {
@@ -200,16 +203,30 @@ impl GlobalData {
         );
 
         let position = pointer.current_location();
-        let wl_surface = match self.surface_under(position) {
-            Some((wl_surface, _)) => wl_surface,
+        let (wl_surface, loc) = match self.surface_under(position) {
+            Some((wl_surface, loc)) => (wl_surface, loc),
             None => return
         };
 
         if button_state == ButtonState::Pressed && !pointer.is_grabbed() {
             self.set_keyboard_focus(Some(wl_surface.clone()), serial);
         }
+        
+        // grab and resize
+        if self.input_manager.is_mainmod_pressed && button_state == ButtonState::Pressed {
+            let start_data = PointerGrabStartData {
+                button,
+                focus: Some((wl_surface.clone(), loc)),
+                location: pointer.current_location(),
+            };
+            if button == BUTTON_LEFT {
+                self.grab_move_request(&wl_surface, &pointer, start_data, serial);
+            } else if button == BUTTON_RIGHT {
+                self.resize_move_request(&wl_surface, &pointer, start_data, serial);
+            }
+            return;
+        }
 
-        // modify pointer state
         pointer.button(
             self,
             &ButtonEvent {
@@ -221,10 +238,8 @@ impl GlobalData {
         );
 
         pointer.frame(self);
+        
 
-        if button_state == ButtonState::Pressed {
-            self.grab_request(&wl_surface, &pointer, serial);
-        }
     }
 
     pub fn on_pointer_axis<I: InputBackend>(&mut self, _event: I::PointerAxisEvent) {
