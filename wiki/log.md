@@ -123,3 +123,11 @@ TODO：完善 resize 部分的代码
 ### 2025.5.24
 
 完善平铺模式下的grab机制
+
+### 2025.5.25-28
+
+完善平铺模式下的resize机制，修复了 wl_surface 与 wl_subsurface 导致的冲突，grab时需设置 wl_surface 为 focus。
+
+### 2025.5.29-30
+
+添加平铺模式与浮动模式的切换

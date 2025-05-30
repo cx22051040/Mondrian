@@ -1,2 +1,0 @@
-### My Wayland compositor - Nuonuo
-
