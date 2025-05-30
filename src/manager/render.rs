@@ -229,7 +229,7 @@ impl RenderManager {
             let window_geo = match workspace_manager.window_geometry(window) {
                 Some(g) => g,
                 None => {
-                    warn!("Failed to get window {:?} geometry", window);
+                    warn!("Failed to get window geometry: {:?}", window);
                     return vec![];
                 }
             };

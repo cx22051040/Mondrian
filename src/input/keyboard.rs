@@ -116,6 +116,9 @@ impl GlobalData {
                     FunctionEnum::InvertWindow => {
                         self.workspace_manager.invert_window();
                     }
+                    FunctionEnum::Toggle => {
+                        self.workspace_manager.toggle_window();
+                    }
                     FunctionEnum::Quit => {
                         if let Some(focus) = &self.workspace_manager.current_workspace().focus {
                             info!("quit");

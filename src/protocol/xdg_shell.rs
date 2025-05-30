@@ -260,21 +260,22 @@ impl GlobalData {
     }
 
     pub fn grab_move_request(&mut self, wl_surface: &WlSurface, pointer: &PointerHandle<GlobalData>, start_data: PointerGrabStartData<GlobalData>,  serial: Serial) {
-        if let Some((window, mut window_rec)) = self.workspace_manager.check_grab(wl_surface) {
+        if let Some((window, mut window_rec, layout)) = self.workspace_manager.check_grab(wl_surface) {
             let window = window.clone();
             let pointer_loc = start_data.location;
 
             window_rec.size.w = window_rec.size.w * 8 / 10;
             window_rec.size.h = window_rec.size.h * 8 / 10;
 
-            let initial_window_location = Point::from(
-                (
+            let initial_window_location = Point::from((
                     pointer_loc.x - (window_rec.size.w.to_f64() / 2.0), 
                     pointer_loc.y - (window_rec.size.h.to_f64() / 2.0)
                 ))
                 .to_i32_round();
 
             // if window is tiled, change it to floating
+            // move the window to let pointer in the middle
+            // of window
             self.workspace_manager.grab_request(&window, Rectangle { loc: initial_window_location, size: window_rec.size });
 
             // set pointer state
@@ -282,6 +283,7 @@ impl GlobalData {
                 start_data,
                 window,
                 initial_window_location,
+                layout,
             };
             
             pointer.set_grab(self, grab, serial, Focus::Clear);
@@ -293,7 +295,7 @@ impl GlobalData {
     }
 
     pub fn resize_move_request(&mut self, wl_surface: &WlSurface, pointer: &PointerHandle<GlobalData>, start_data: PointerGrabStartData<GlobalData>, serial: Serial) {
-        if let Some((window, window_rec)) = self.workspace_manager.check_grab(wl_surface) {
+        if let Some((window, window_rec, layout)) = self.workspace_manager.check_grab(wl_surface) {
             let window = window.clone();
             let pointer_loc = start_data.location;
 

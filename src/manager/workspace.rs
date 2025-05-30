@@ -148,9 +148,9 @@ impl Workspace {
         activate: bool,
     ) {
         self.refresh();
-        
-        self.floating.map_element(window.clone(), location, activate);
 
+        self.floating.map_element(window.clone(), location, activate);
+        
         // set focus
         if activate {
             self.focus = Some(window);
@@ -352,19 +352,9 @@ impl Workspace {
     }
 
     pub fn window_geometry(&self, window: &Window) -> Option<Rectangle<i32, Logical>> {
-        match self.layout.get(window) {
-            Some(layout) => {
-                match layout {
-                    WindowLayout::Tiled => {
-                        self.tiled.element_geometry(window)
-                    }
-                    WindowLayout::Floating => {
-                        self.floating.element_geometry(window)
-                    }
-                }
-            }
-            None => None
-        }
+        self.tiled.element_geometry(window).or_else(|| {
+            self.floating.element_geometry(window)
+        })
     }
 
     pub fn find_window(&self, surface: &WlSurface) ->Option<&Window> {
@@ -372,25 +362,21 @@ impl Workspace {
             .find(|w| w.toplevel().unwrap().wl_surface() == surface)
     }
 
-    pub fn check_grab(&mut self, surface: &WlSurface) -> Option<(&Window, Rectangle<i32, Logical>)> {
+    pub fn check_grab(&mut self, surface: &WlSurface) -> Option<(&Window, Rectangle<i32, Logical>, WindowLayout)> {
         // TODO: check window's lock state
-        match self.find_window(surface) {
-            Some(window) => {
-                match self.window_geometry(window) {
-                    Some(rec) => {
-                        Some((window, rec))
-                    }
-                    None => {
-                        warn!("Failed to get window's layout type");
-                        None
-                    }
-                }
-            }
-            None => {
-                warn!("Failed to get window from surface: {:?}", surface);
-                None
-            }
-        }
+        let window = self.find_window(surface)?;
+
+        let rec = self.window_geometry(window).or_else(|| {
+            warn!("Failed to get window's geometry");
+            None
+        })?;
+    
+        let layout = self.layout.get(window).cloned().or_else(|| {
+            warn!("Failed to get window's layout type");
+            None
+        })?;
+
+        Some((window, rec, layout))
     }
 
     pub fn grab_request(&mut self, window: &Window, rec: Rectangle<i32, Logical>) {
@@ -398,11 +384,10 @@ impl Workspace {
             Some(layout) => {
                 match layout {
                     WindowLayout::Tiled => {
-                        *layout = WindowLayout::Floating;
-                        self.unmap_tiled_element(window);
+                        self.unmap_element(window);
 
                         window.set_rec(rec.size);
-                        self.map_floating_element(window.clone(), rec.loc, true);
+                        self.map_element(None, window.clone(), rec.loc, Some(WindowLayout::Floating), true);
                     }
                     _ => { }
                 }
@@ -414,22 +399,37 @@ impl Workspace {
         }
     }
 
-    pub fn grab_release(&mut self, target: Option<Window>, window: &Window) {
-        match self.layout.get_mut(window) {
-            Some(layout) => {
-                match layout {
-                    WindowLayout::Floating => {
-                        *layout = WindowLayout::Tiled;
-                        self.unmap_floating_element(window);
-                        // TODO: set location let cursor in the middle
-                        self.map_tiled_element(target, window.clone(), true);
-                    }
-                    _ => { }
-                }
+    pub fn grab_release(&mut self, target: Option<Window>, window: &Window, layout: &WindowLayout) {
+        match layout {
+            WindowLayout::Tiled => {
+                self.unmap_element(window);
+                // TODO: set location let cursor in the middle
+                self.map_element(target, window.clone(), (0, 0).into(), Some(WindowLayout::Tiled), true);
             }
-            None => {
-                warn!("Failed to get layout from window: {:?}", window);
-                return
+            _ => { }
+        }
+    }
+
+    pub fn toggle_window(&mut self) {
+        if let Some(focus) = &self.focus {
+            let window = focus.clone();
+            match self.layout.get(focus) {
+                Some(layout) => {
+                    match layout {
+                        WindowLayout::Tiled => {
+                            self.unmap_element(&window);
+                            self.map_element(None, window, (0, 0).into(), Some(WindowLayout::Floating), true);
+                        }
+                        WindowLayout::Floating => {
+                            self.unmap_element(&window);
+                            // TODO: judge pointer's location
+                            self.map_element(None, window, (0, 0).into(), Some(WindowLayout::Tiled), true);
+                        }
+                    }
+                }
+                None => {
+                    warn!("Failed to get window's layout type");
+                }
             }
         }
     }
@@ -561,7 +561,7 @@ impl WorkspaceManager {
         self.current_workspace().window_geometry(window)
     }
 
-    pub fn check_grab(&mut self, surface: &WlSurface) -> Option<(&Window, Rectangle<i32, Logical>)> {
+    pub fn check_grab(&mut self, surface: &WlSurface) -> Option<(&Window, Rectangle<i32, Logical>, WindowLayout)> {
         self.current_workspace_mut().check_grab(surface)
     }
 
@@ -569,7 +569,11 @@ impl WorkspaceManager {
         self.current_workspace_mut().grab_request(window, rec);
     }
 
-    pub fn grab_release(&mut self, target: Option<Window>, window: &Window) {
-        self.current_workspace_mut().grab_release(target, window);
+    pub fn grab_release(&mut self, target: Option<Window>, window: &Window, layout: &WindowLayout) {
+        self.current_workspace_mut().grab_release(target, window, layout);
+    }
+
+    pub fn toggle_window(&mut self) {
+        self.current_workspace_mut().toggle_window()
     }
 }

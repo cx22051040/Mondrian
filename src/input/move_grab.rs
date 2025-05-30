@@ -11,6 +11,7 @@ pub struct PointerMoveSurfaceGrab {
     pub start_data: PointerGrabStartData<GlobalData>,
     pub window: Window,
     pub initial_window_location: Point<i32, Logical>,
+    pub layout: WindowLayout,
 }
 
 impl PointerGrab<GlobalData> for PointerMoveSurfaceGrab {
@@ -28,7 +29,7 @@ impl PointerGrab<GlobalData> for PointerMoveSurfaceGrab {
             None => None
         };
 
-        data.workspace_manager.grab_release(target, &self.window);
+        data.workspace_manager.grab_release(target, &self.window, &self.layout);
     }
 
     fn frame(
