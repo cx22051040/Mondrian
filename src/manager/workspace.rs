@@ -7,7 +7,7 @@ use smithay::{
     utils::{Logical, Point, Rectangle},
 };
 
-use crate::layout::tiled_tree::{TiledScheme, TiledTree};
+use crate::{input::resize_grab::ResizeEdge, layout::tiled_tree::{TiledScheme, TiledTree}};
 
 use super::window::WindowExt;
 
@@ -305,7 +305,7 @@ impl Workspace {
         }
     }
 
-    pub fn resize(&mut self, offset: (i32, i32)) {
+    pub fn resize(&mut self, offset: Point<f64, Logical>, edges: &ResizeEdge, rec: &mut Rectangle<i32, Logical>) {
         if let Some(focus) = &self.focus {
             match self.layout.get(focus) {
                 Some(layout) => {
@@ -316,7 +316,26 @@ impl Workspace {
                             }
                         }
                         WindowLayout::Floating => {
-                            todo!()
+
+                            let mut x = offset.x as i32;
+                            let mut y = offset.y as i32;
+
+                            if edges.intersects(ResizeEdge::LEFT) {
+                                rec.loc.x += x;
+                                x = -x;
+                            }
+
+                            if edges.intersects(ResizeEdge::TOP) {
+                                rec.loc.y += y;
+                                y = -y;
+                            }
+
+                            rec.size.w += x;
+                            rec.size.h += y;
+
+                            focus.set_rec(rec.size);
+
+                            self.map_floating_element(focus.clone(), rec.loc, true);
                         }
                     }
                 }
@@ -541,8 +560,8 @@ impl WorkspaceManager {
         self.current_workspace_mut().modify_windows(rec);
     }
 
-    pub fn resize(&mut self, offset: (i32, i32)) {
-        self.current_workspace_mut().resize(offset);
+    pub fn resize(&mut self, offset: Point<f64, Logical>, edges: &ResizeEdge, rec: &mut Rectangle<i32, Logical>) {
+        self.current_workspace_mut().resize(offset, edges, rec);
     }
 
     pub fn set_focus(&mut self, window: Option<Window>) {

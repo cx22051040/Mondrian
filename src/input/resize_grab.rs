@@ -7,7 +7,7 @@ use smithay::{
         wayland_protocols::xdg::shell::server::xdg_toplevel,
         wayland_server::protocol::wl_surface::WlSurface,
     },
-    utils::{Logical, Point, Rectangle},
+    utils::{Logical, Rectangle},
     wayland::compositor,
 };
 
@@ -93,7 +93,6 @@ pub struct ResizeSurfaceGrab {
     window: Window,
     edges: ResizeEdge,
     initial_rect: Rectangle<i32, Logical>,
-    last_position: Point<f64, Logical>,
 }
 
 impl ResizeSurfaceGrab {
@@ -110,14 +109,11 @@ impl ResizeSurfaceGrab {
             };
         });
 
-        let last_position = start_data.location;
-
         Self {
             start_data,
             window,
             edges,
             initial_rect,
-            last_position,
         }
     }
 }
@@ -151,12 +147,12 @@ impl PointerGrab<GlobalData> for ResizeSurfaceGrab {
     ) {
         handle.motion(data, None, event);
 
-        let delta = event.location - self.last_position;
+        let delta = event.location - self.start_data.location;
         
         data.workspace_manager
-            .resize((delta.x as i32, delta.y as i32));
+            .resize(delta, &self.edges, &mut self.initial_rect);
 
-        self.last_position = event.location;
+        self.start_data.location = event.location;
 
         // let mut new_window_width = self.initial_rect.size.w;
         // let mut new_window_height = self.initial_rect.size.h;

@@ -264,14 +264,20 @@ impl GlobalData {
             let window = window.clone();
             let pointer_loc = start_data.location;
 
-            window_rec.size.w = window_rec.size.w * 8 / 10;
-            window_rec.size.h = window_rec.size.h * 8 / 10;
-
-            let initial_window_location = Point::from((
-                    pointer_loc.x - (window_rec.size.w.to_f64() / 2.0), 
-                    pointer_loc.y - (window_rec.size.h.to_f64() / 2.0)
-                ))
-                .to_i32_round();
+            let initial_window_location = match layout {
+                WindowLayout::Tiled => {
+                    window_rec.size.w = window_rec.size.w * 8 / 10;
+                    window_rec.size.h = window_rec.size.h * 8 / 10;
+                    Point::from((
+                        pointer_loc.x - (window_rec.size.w.to_f64() / 2.0), 
+                        pointer_loc.y - (window_rec.size.h.to_f64() / 2.0)
+                    ))
+                    .to_i32_round()
+                }
+                WindowLayout::Floating => {
+                    window_rec.loc
+                }
+            };
 
             // if window is tiled, change it to floating
             // move the window to let pointer in the middle
@@ -295,7 +301,7 @@ impl GlobalData {
     }
 
     pub fn resize_move_request(&mut self, wl_surface: &WlSurface, pointer: &PointerHandle<GlobalData>, start_data: PointerGrabStartData<GlobalData>, serial: Serial) {
-        if let Some((window, window_rec, layout)) = self.workspace_manager.check_grab(wl_surface) {
+        if let Some((window, window_rec, _)) = self.workspace_manager.check_grab(wl_surface) {
             let window = window.clone();
             let pointer_loc = start_data.location;
 

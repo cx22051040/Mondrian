@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use slotmap::{new_key_type, SlotMap};
-use smithay::{desktop::{Space, Window}, utils::{Logical, Rectangle}};
+use smithay::{desktop::{Space, Window}, utils::{Coordinate, Logical, Point, Rectangle}};
 
 use crate::manager::window::WindowExt;
 
@@ -30,7 +30,7 @@ pub enum NodeData {
     Split {
         direction: Direction,
         rec: Rectangle<i32, Logical>,
-        offset: (i32, i32),
+        offset: Point<f64, Logical>,
         left: NodeId,
         right: NodeId,
     }
@@ -133,7 +133,7 @@ impl TiledTree {
             self.nodes[target_id] = NodeData::Split {
                 direction,
                 rec,
-                offset: (0, 0),
+                offset: (0., 0.).into(),
                 left: old_leaf,
                 right: new_leaf,
             };
@@ -193,7 +193,7 @@ impl TiledTree {
                         self.nodes[parent_id] = NodeData::Split { 
                             direction, 
                             rec, // from parent
-                            offset: (0, 0),
+                            offset: (0., 0.).into(),
                             left, 
                             right,
                         };
@@ -281,7 +281,7 @@ impl TiledTree {
         }
     }
 
-    pub fn resize(&mut self, target: &Window, offset: (i32, i32), space: &mut Space<Window>) {
+    pub fn resize(&mut self, target: &Window, offset: Point<f64, Logical>, space: &mut Space<Window>) {
         let target_id = match self.find_node(target) {
             Some(r) => {
                 r
@@ -307,8 +307,7 @@ impl TiledTree {
 
         match &mut self.nodes[parent_id] {
             NodeData::Split { offset: current_offset, rec, .. } => {
-                current_offset.0 += offset.0;
-                current_offset.1 += offset.1;
+                *current_offset += offset;
                 let rec = *rec;
                 self.modify(parent_id, rec, space);
             },
@@ -372,40 +371,40 @@ fn get_new_rec(rec: &Rectangle<i32, Logical>) -> (Direction, Rectangle<i32, Logi
     }
 }
 
-fn recover_new_rec(rec: Rectangle<i32, Logical>, direction: &Direction, offset: (i32, i32)) -> (Rectangle<i32, Logical>, Rectangle<i32, Logical>) {
-    let mut l_rec = rec;
-    let mut r_rec = rec;
+fn recover_new_rec(rec: Rectangle<i32, Logical>, direction: &Direction, offset: Point<f64, Logical>) -> (Rectangle<i32, Logical>, Rectangle<i32, Logical>) {
+    let mut l_rec = rec.to_f64();
+    let mut r_rec = rec.to_f64();
 
-    let gap = (GAP as f32 * 0.5) as i32;
+    let gap = GAP as f64 * 0.5;
 
     match direction {
         Direction::Horizontal => {
-            let half = rec.size.w / 2 - gap;
+            let half = l_rec.size.w / 2.0 - gap;
             l_rec.size.w = half;
             r_rec.size.w = half;
-            r_rec.loc.x += half + GAP;
+            r_rec.loc.x += half + GAP.to_f64();
 
             // adjust the offset
-            l_rec.size.w += offset.0;
-            r_rec.size.w -= offset.0;
+            l_rec.size.w += offset.x;
+            r_rec.size.w -= offset.x;
 
-            r_rec.loc.x += offset.0;
+            r_rec.loc.x += offset.x;
 
-            (l_rec, r_rec)
+            (l_rec.to_i32_round(), r_rec.to_i32_round())
         },
         Direction::Vertical => {
-            let half = rec.size.h / 2 - gap;
+            let half = l_rec.size.h / 2.0 - gap;
             l_rec.size.h = half;
             r_rec.size.h = half;
-            r_rec.loc.y += half + GAP;
+            r_rec.loc.y += half + GAP.to_f64();
 
             // adjust the offset
-            l_rec.size.h += offset.1;
-            r_rec.size.h -= offset.1;
+            l_rec.size.h += offset.y;
+            r_rec.size.h -= offset.y;
 
-            r_rec.loc.y += offset.1;
+            r_rec.loc.y += offset.y;
 
-            (l_rec, r_rec)
+            (l_rec.to_i32_round(), r_rec.to_i32_round())
         }
     }
 }
