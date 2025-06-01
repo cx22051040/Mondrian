@@ -22,11 +22,9 @@ use smithay::{
 };
 
 use crate::{
-    backend::Backend,
-    config::Configs,
-    manager::{
+    backend::Backend, config::Configs, layout::tiled_tree::TiledScheme, manager::{
         cursor::CursorManager, input::InputManager, output::OutputManager, render::RenderManager, window::WindowManager, workspace::WorkspaceManager
-    },
+    }
 };
 
 #[derive(Default)]
@@ -115,8 +113,8 @@ impl GlobalData {
             .output_geometry(output)
             .context("workspace add test error")?;
         
-        workspace_manager.add_workspace(output, output_geo, None, true);
-        workspace_manager.add_workspace(output, output_geo, None, false);
+        workspace_manager.add_workspace(output, output_geo, Some(TiledScheme::Spiral), true);
+        workspace_manager.add_workspace(output, output_geo, Some(TiledScheme::Default), false);
 
         let start_time = std::time::Instant::now();
         let clock = Clock::new();

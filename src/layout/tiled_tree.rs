@@ -12,6 +12,7 @@ const GAP: i32 = 12;
 #[derive(Debug, Clone)]
 pub enum TiledScheme {
     Default,
+    Spiral,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -54,6 +55,21 @@ impl TiledTree {
     
     pub fn get_root(&self) -> Option<NodeId> {
         self.root
+    }
+
+    fn find_parent_and_sibling(&self, target: NodeId) -> Option<(NodeId, NodeId)> {
+        self.nodes.iter().find_map(|(id, data)| match data {
+            NodeData::Split { left, right, .. } => {
+                if *left == target {
+                    Some((id, *right))
+                } else if *right == target {
+                    Some((id, *left))
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        })
     }
 
     pub fn is_empty(&self) -> bool {
@@ -143,6 +159,35 @@ impl TiledTree {
         }
     }
 
+    pub fn insert_window_spiral(&mut self, new_window: Window, space: &mut Space<Window>) {
+        let mut current = match self.get_root() {
+            Some(root) => root,
+            None => {
+                warn!("Failed to get tiled tree's root node");
+                return;
+            }
+        };
+
+        let target = loop {
+            match self.nodes.get(current) {
+                Some(node) => {
+                    match node {
+                        NodeData::Leaf { window } => {break Some(window.clone())},
+                        NodeData::Split { right, .. } => {
+                            current = *right;
+                        }
+                    }
+                }
+                None => {
+                    warn!("Failed to get node from key: {:?}", current);
+                    return;
+                }
+            }
+        };
+
+        self.insert_window(&target, new_window, space);
+    }
+
     pub fn remove(&mut self, target: &Window, space: &mut Space<Window>) -> bool {
         let target_id = match self.find_node(target) {
             Some(r) => {
@@ -230,21 +275,6 @@ impl TiledTree {
                 self.modify(right_id, r_rec, space);
             }
         }
-    }
-
-    fn find_parent_and_sibling(&self, target: NodeId) -> Option<(NodeId, NodeId)> {
-        self.nodes.iter().find_map(|(id, data)| match data {
-            NodeData::Split { left, right, .. } => {
-                if *left == target {
-                    Some((id, *right))
-                } else if *right == target {
-                    Some((id, *left))
-                } else {
-                    None
-                }
-            }
-            _ => None,
-        })
     }
 
     pub fn invert_window(&mut self, target: &Window, space: &mut Space<Window>){

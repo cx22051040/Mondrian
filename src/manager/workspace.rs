@@ -191,6 +191,14 @@ impl Workspace {
                                 layout_tree.print_tree();
                             }
                         }
+                        TiledScheme::Spiral => {
+                            if let Some(layout_tree) = &mut self.tiled_tree {
+                                layout_tree.insert_window_spiral(window.clone(), &mut self.tiled);
+            
+                                #[cfg(feature = "trace_layout")]
+                                layout_tree.print_tree();
+                            }
+                        }
                     }
                 }
             }
