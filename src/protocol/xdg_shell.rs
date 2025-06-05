@@ -1,13 +1,13 @@
 use crate::{
-    input::{move_grab::PointerMoveSurfaceGrab, resize_grab::ResizeSurfaceGrab}, manager::{window::WindowExt, workspace::WindowLayout}, state::GlobalData
+    input::resize_grab::ResizeSurfaceGrab, state::GlobalData
 };
 use smithay::{
     delegate_xdg_shell, desktop::{PopupKind, PopupManager, Space, Window}, input::{pointer::{Focus, PointerHandle}, Seat}, reexports::{
-        wayland_protocols::xdg::shell::server::xdg_toplevel,
+        wayland_protocols::xdg::shell::server::xdg_toplevel::{self, ResizeEdge},
         wayland_server::{
             protocol::{wl_seat, wl_surface::WlSurface}, Resource
         },
-    }, utils::{Coordinate, Logical, Point, Rectangle, Serial, SERIAL_COUNTER}, wayland::{
+    }, utils::{Logical, Point, Rectangle, Serial, SERIAL_COUNTER}, wayland::{
         compositor::{self, with_states},
         shell::xdg::{
             PopupSurface, PositionerState, ToplevelSurface, XdgShellHandler, XdgShellState, XdgToplevelSurfaceData
@@ -16,7 +16,7 @@ use smithay::{
 };
 use smithay::{
     desktop::{find_popup_root_surface, get_popup_toplevel_coords},
-    input::pointer::{CursorIcon, CursorImageStatus, GrabStartData as PointerGrabStartData},
+    input::pointer::GrabStartData as PointerGrabStartData,
 };
 
 /// Should be called on `WlSurface::commit`
@@ -72,17 +72,36 @@ impl XdgShellHandler for GlobalData {
             &mut self.state
         );
 
-        // use the size from the suggested size of the surface if available
-        if let Some(size) = surface.with_pending_state(|state| state.size) {
-            window.set_rec(size);
-        }
+        // // use the size from the suggested size of the surface if available
+        // if let Some(size) = surface.with_pending_state(|state| state.size) {
+        //     window.set_rec(size);
+        // }
+
+        // TODO:
+        let pointer = self.input_manager.get_pointer();
+        let pointer = match pointer {
+            Some(k) => k,
+            None => {
+                error!("get pointer error");
+                return;
+            }
+        };
+        let pointer_loc = pointer.current_location();
+
+        let edges = match self.workspace_manager.get_focus() {
+            Some (focus) => {
+                let window_rec = self.workspace_manager.window_geometry(focus).unwrap();
+                detect_pointer_quadrant(pointer_loc, window_rec.to_f64())
+            }
+            None => {
+                ResizeEdge::None
+            }
+        };
 
         self.workspace_manager
             .map_element(
-                None, 
-                window.clone(), 
-                (0, 0).into(), 
-                Some(WindowLayout::Tiled), 
+                window.clone(),
+                edges,
                 true
             );
 
@@ -113,9 +132,9 @@ impl XdgShellHandler for GlobalData {
         let wl_surface = surface.wl_surface();
 
         self.window_manager.get_foreign_handle(wl_surface)
-        .map(|handle| {
-            handle.send_closed();
-        });
+            .map(|handle| {
+                handle.send_closed();
+            });
 
         match self.window_manager.remove_window(wl_surface) {
             Some(window) => {
@@ -259,49 +278,14 @@ impl GlobalData {
         });
     }
 
-    pub fn grab_move_request(&mut self, wl_surface: &WlSurface, pointer: &PointerHandle<GlobalData>, start_data: PointerGrabStartData<GlobalData>,  serial: Serial) {
-        if let Some((window, mut window_rec, layout)) = self.workspace_manager.check_grab(wl_surface) {
-            let window = window.clone();
-            let pointer_loc = start_data.location;
-
-            let initial_window_location = match layout {
-                WindowLayout::Tiled => {
-                    window_rec.size.w = window_rec.size.w * 8 / 10;
-                    window_rec.size.h = window_rec.size.h * 8 / 10;
-                    Point::from((
-                        pointer_loc.x - (window_rec.size.w.to_f64() / 2.0), 
-                        pointer_loc.y - (window_rec.size.h.to_f64() / 2.0)
-                    ))
-                    .to_i32_round()
-                }
-                WindowLayout::Floating => {
-                    window_rec.loc
-                }
-            };
-
-            // if window is tiled, change it to floating
-            // move the window to let pointer in the middle
-            // of window
-            self.workspace_manager.grab_request(&window, Rectangle { loc: initial_window_location, size: window_rec.size });
-
-            // set pointer state
-            let grab = PointerMoveSurfaceGrab {
-                start_data,
-                window,
-                initial_window_location,
-                layout,
-            };
-            
-            pointer.set_grab(self, grab, serial, Focus::Clear);
-
-            // change cursor image
-            self.cursor_manager
-                .set_cursor_image(CursorImageStatus::Named(CursorIcon::Grabbing));
+    pub fn grab_move_request(&mut self, wl_surface: &WlSurface, _pointer: &PointerHandle<GlobalData>, _start_data: PointerGrabStartData<GlobalData>, _serial: Serial) {
+        if let Some((..)) = self.workspace_manager.check_grab(wl_surface) {
+            // TODO
         }
     }
 
     pub fn resize_move_request(&mut self, wl_surface: &WlSurface, pointer: &PointerHandle<GlobalData>, start_data: PointerGrabStartData<GlobalData>, serial: Serial) {
-        if let Some((window, window_rec, _)) = self.workspace_manager.check_grab(wl_surface) {
+        if let Some((window, window_rec)) = self.workspace_manager.check_grab(wl_surface) {
             let window = window.clone();
             let pointer_loc = start_data.location;
 
@@ -311,7 +295,7 @@ impl GlobalData {
             let grab = ResizeSurfaceGrab::start(
                 start_data,
                 window,
-                edges.into(),
+                edges,
                 window_rec,
             );
             
@@ -358,7 +342,7 @@ fn check_grab(
 fn detect_pointer_quadrant(
     pointer_loc: Point<f64, Logical>,
     window_rec: Rectangle<f64, Logical>,
-) -> xdg_toplevel::ResizeEdge {
+) -> ResizeEdge {
     let center_x = window_rec.loc.x + window_rec.size.w / 2.0;
     let center_y = window_rec.loc.y + window_rec.size.h / 2.0;
 
@@ -366,9 +350,9 @@ fn detect_pointer_quadrant(
     let dy = pointer_loc.y - center_y;
 
     match (dx >= 0., dy >= 0.) {
-        (true, false) => xdg_toplevel::ResizeEdge::TopRight,
-        (false, false) => xdg_toplevel::ResizeEdge::TopLeft,
-        (false, true) => xdg_toplevel::ResizeEdge::BottomLeft,
-        (true, true) => xdg_toplevel::ResizeEdge::BottomRight,
+        (true, false) => ResizeEdge::TopRight,
+        (false, false) => ResizeEdge::TopLeft,
+        (false, true) => ResizeEdge::BottomLeft,
+        (true, true) => ResizeEdge::BottomRight,
     }
 }

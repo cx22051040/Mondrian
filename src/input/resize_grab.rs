@@ -1,97 +1,20 @@
-use std::cell::RefCell;
-
 use smithay::{
     desktop::Window,
     input::pointer::{CursorImageStatus, GrabStartData as PointerGrabStartData, PointerGrab},
     reexports::{
-        wayland_protocols::xdg::shell::server::xdg_toplevel,
-        wayland_server::protocol::wl_surface::WlSurface,
+        wayland_protocols::xdg::shell::server::xdg_toplevel::{self, ResizeEdge},
     },
     utils::{Logical, Rectangle},
-    wayland::compositor,
 };
 
 use crate::state::GlobalData;
 
-bitflags::bitflags! {
-  #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-  pub struct ResizeEdge: u32 {
-      const TOP          = 0b0001;
-      const BOTTOM       = 0b0010;
-      const LEFT         = 0b0100;
-      const RIGHT        = 0b1000;
-
-      const TOP_LEFT     = Self::TOP.bits() | Self::LEFT.bits();
-      const BOTTOM_LEFT  = Self::BOTTOM.bits() | Self::LEFT.bits();
-
-      const TOP_RIGHT    = Self::TOP.bits() | Self::RIGHT.bits();
-      const BOTTOM_RIGHT = Self::BOTTOM.bits() | Self::RIGHT.bits();
-  }
-}
-
-impl From<xdg_toplevel::ResizeEdge> for ResizeEdge {
-    #[inline]
-    fn from(x: xdg_toplevel::ResizeEdge) -> Self {
-        Self::from_bits(x as u32).unwrap()
-    }
-}
-
-/// State of the resize operation.
-///
-/// It is stored inside of WlSurface,
-/// and can be accessed using [`ResizeSurfaceState::with`]
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Default)]
-enum ResizeSurfaceState {
-    #[default]
-    Idle,
-    Resizing {
-        edges: ResizeEdge,
-        /// The initial window size and location.
-        initial_rect: Rectangle<i32, Logical>,
-    },
-    /// Resize is done, we are now waiting for last commit, to do the final move
-    WaitingForLastCommit {
-        edges: ResizeEdge,
-        /// The initial window size and location.
-        initial_rect: Rectangle<i32, Logical>,
-    },
-}
-
-impl ResizeSurfaceState {
-    fn with<F, T>(surface: &WlSurface, cb: F) -> T
-    where
-        F: FnOnce(&mut Self) -> T,
-    {
-        compositor::with_states(surface, |states| {
-            states.data_map.insert_if_missing(RefCell::<Self>::default);
-            let state = states.data_map.get::<RefCell<Self>>().unwrap();
-            cb(&mut state.borrow_mut())
-        })
-    }
-
-    fn _commit(&mut self) -> Option<(ResizeEdge, Rectangle<i32, Logical>)> {
-        match *self {
-            Self::Resizing {
-                edges,
-                initial_rect,
-            } => Some((edges, initial_rect)),
-            Self::WaitingForLastCommit {
-                edges,
-                initial_rect,
-            } => {
-                // The resize is done, let's go back to idle
-                *self = Self::Idle;
-                Some((edges, initial_rect))
-            }
-            Self::Idle => None,
-        }
-    }
-}
-
 pub struct ResizeSurfaceGrab {
     start_data: PointerGrabStartData<GlobalData>,
     window: Window,
+    #[allow(dead_code)]
     edges: ResizeEdge,
+    #[allow(dead_code)]
     initial_rect: Rectangle<i32, Logical>,
 }
 
@@ -102,12 +25,12 @@ impl ResizeSurfaceGrab {
         edges: ResizeEdge,
         initial_rect: Rectangle<i32, Logical>,
     ) -> Self {
-        ResizeSurfaceState::with(window.toplevel().unwrap().wl_surface(), |state| {
-            *state = ResizeSurfaceState::Resizing {
-                edges,
-                initial_rect,
-            };
+
+        let xdg = window.toplevel().unwrap();
+        xdg.with_pending_state(|state| {
+            state.states.set(xdg_toplevel::State::Resizing);
         });
+        xdg.send_pending_configure();
 
         Self {
             start_data,
@@ -147,10 +70,10 @@ impl PointerGrab<GlobalData> for ResizeSurfaceGrab {
     ) {
         handle.motion(data, None, event);
 
-        let delta = event.location - self.start_data.location;
+        let _delta = event.location - self.start_data.location;
         
-        data.workspace_manager
-            .resize(delta, &self.edges, &mut self.initial_rect);
+        // data.workspace_manager
+        //     .resize(delta.to_i32_round(), &self.edges, &mut self.initial_rect);
 
         self.start_data.location = event.location;
 
@@ -226,19 +149,11 @@ impl PointerGrab<GlobalData> for ResizeSurfaceGrab {
             handle.unset_grab(self, data, event.serial, event.time, true);
 
             let xdg = self.window.toplevel().unwrap();
-            // xdg.with_pending_state(|state| {
-            //     state.states.unset(xdg_toplevel::State::Resizing);
-            //     state.size = Some(self.last_window_size);
-            // });
-
-            // xdg.send_pending_configure();
-
-            ResizeSurfaceState::with(xdg.wl_surface(), |state| {
-                *state = ResizeSurfaceState::WaitingForLastCommit {
-                    edges: self.edges,
-                    initial_rect: self.initial_rect,
-                };
+            xdg.with_pending_state(|state| {
+                state.states.unset(xdg_toplevel::State::Resizing);
             });
+
+            xdg.send_pending_configure();
         }
     }
 

@@ -2,7 +2,7 @@ use std::fs;
 
 use serde::{Deserialize, Serialize};
 
-use super::tiled_tree::{Direction, TiledTree};
+use super::{Direction, tiled_tree::TiledTree};
 
 #[derive(Serialize, Deserialize)]
 #[serde(tag = "type")]

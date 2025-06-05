@@ -116,8 +116,11 @@ impl GlobalData {
                     FunctionEnum::InvertWindow => {
                         self.workspace_manager.invert_window();
                     }
-                    FunctionEnum::Toggle => {
-                        self.workspace_manager.toggle_window();
+                    FunctionEnum::Expansion => {
+                        self.workspace_manager.tiled_expansion();
+                    }
+                    FunctionEnum::Recover => {
+                        self.workspace_manager.tiled_recover();
                     }
                     FunctionEnum::Quit => {
                         if let Some(focus) = &self.workspace_manager.current_workspace().focus {

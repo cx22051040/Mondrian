@@ -284,7 +284,7 @@ impl GlobalData {
         // The window
         else if let Some((window, location)) = self
             .workspace_manager
-            .window_under(position, None)
+            .window_under(position)
             .map(|(w, p)| (w.clone(), p))
         {
             if let Some(surface) = window

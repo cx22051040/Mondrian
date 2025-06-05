@@ -1,24 +1,16 @@
-use serde::{Deserialize, Serialize};
 use slotmap::{new_key_type, SlotMap};
-use smithay::{desktop::{Space, Window}, utils::{Coordinate, Logical, Point, Rectangle}};
+use smithay::{desktop::{Space, Window}, utils::{Logical, Point, Rectangle}};
 
-use crate::manager::window::WindowExt;
+use crate::{layout::Direction, manager::window::WindowExt};
 
 use super::json_tiled_tree::JsonTree;
 
-const RATE: f32 = 2.0;
 const GAP: i32 = 12;
 
 #[derive(Debug, Clone)]
 pub enum TiledScheme {
     Default,
     Spiral,
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-pub enum Direction {
-    Horizontal,
-    Vertical,
 }
 
 new_key_type! {
@@ -31,7 +23,7 @@ pub enum NodeData {
     Split {
         direction: Direction,
         rec: Rectangle<i32, Logical>,
-        offset: Point<f64, Logical>,
+        offset: Point<i32, Logical>,
         left: NodeId,
         right: NodeId,
     }
@@ -40,6 +32,7 @@ pub enum NodeData {
 #[derive(Debug)]
 pub struct TiledTree {
     nodes: SlotMap<NodeId, NodeData>,
+    spiral_node: Option<NodeId>,
     root: Option<NodeId>,
 }
 
@@ -47,16 +40,67 @@ impl TiledTree {
     pub fn new(window: Window) -> Self {
         let mut nodes = SlotMap::with_key();
         let root = Some(nodes.insert(NodeData::Leaf { window }));
+        let spiral_node = root.clone();
+
         Self { 
             nodes,
+            spiral_node,
             root
        }
+    }
+
+    pub fn expansion(&self, space: &mut Space<Window>) {
+        if let Some(bound) = self.get_root_rec(space) {
+            let width = (bound.size.w - 2*GAP) / 3;
+            let height = bound.size.h;
+            let mut loc = bound.loc;
+
+            for node in self.nodes.values() {
+                match node {
+                    NodeData::Leaf { window } => {
+                        window.set_rec((width, height).into());
+                        space.map_element(window.clone(), loc, false);
+                        loc.x = loc.x + width + GAP;
+                    }
+                    _ => { }
+                }
+            }
+        }
+    }
+
+    pub fn recover(&mut self, space: &mut Space<Window>) {
+        if let Some(root_id) = self.get_root() {
+            match self.nodes[root_id] {
+                NodeData::Split { rec , .. } => {
+                    self.modify(root_id, rec, space);
+                }
+                _ => { }
+            }
+        }
     }
     
     pub fn get_root(&self) -> Option<NodeId> {
         self.root
     }
+    
+    pub fn get_root_rec(&self, space: &mut Space<Window>) -> Option<Rectangle<i32, Logical>>{
+        match self.get_root() {
+            Some(root_id) => {
+                match &self.nodes[root_id] {
+                    NodeData::Leaf { window } => { space.element_geometry(window) }
+                    NodeData::Split { rec, .. } => Some(rec.clone())
+                }
+            }
+            None => {
+                None
+            }
+        }
+    }
 
+    pub fn get_count(&self) -> usize {
+        self.nodes.values().filter(|node| matches!(node, NodeData::Leaf { .. })).count()
+    }
+    
     fn find_parent_and_sibling(&self, target: NodeId) -> Option<(NodeId, NodeId)> {
         self.nodes.iter().find_map(|(id, data)| match data {
             NodeData::Split { left, right, .. } => {
@@ -107,12 +151,13 @@ impl TiledTree {
         get_window(&self.nodes, root_id)
     }
 
-    pub fn insert_window(&mut self, focus: &Option<Window>, new_window: Window, space: &mut Space<Window>) -> bool {
-        let target = match focus {
-            Some(r) => r,
+    pub fn insert_window(&mut self, target: Option<&Window>, new_window: Window, direction: Direction, space: &mut Space<Window>) -> bool {
+
+        let target = match target {
+            Some(window) => window.clone(),
             None => {
                 match self.get_first_window() {
-                    Some(r) => r,
+                    Some(window) => window.clone(),
                     None => {
                         warn!("Failed to get first window");
                         return false
@@ -121,38 +166,54 @@ impl TiledTree {
             }
         };
 
-        if let Some(target_id) = self.find_node(target) {
+        if let Some(target_id) = self.find_node(&target) {
             // resize
-            let rec = match space.element_geometry(target){
+            // TODO: use server geometry
+            let rec = match space.element_geometry(&target){
                 Some(r) => r,
                 None => {
                     warn!("Failed to get window rectangle");
                     return false
                 }
             };
-            let (direction, l_rec, r_rec) = get_new_rec(&rec);
             
-            target.set_rec(l_rec.size);
-            new_window.set_rec(r_rec.size);
+            info!("{:?}", rec);
+
+            let mut old_rec = rec.clone();
+            let new_rec = get_new_rec(&direction, &mut old_rec);
             
-            space.map_element(target.clone(), l_rec.loc, false);
-            space.map_element(new_window.clone(), r_rec.loc, true);
+            target.set_rec(old_rec.size);
+            new_window.set_rec(new_rec.size);
+            
+            space.map_element(target.clone(), old_rec.loc, false);
+            space.map_element(new_window.clone(), new_rec.loc, true);
 
             // adjust tree
-            let original = self.nodes[target_id].clone();
+            let old_leaf = self.nodes.insert(NodeData::Leaf { window: target });
             let new_leaf = self.nodes.insert(NodeData::Leaf { window: new_window });
-            let old_leaf = match original {
-                NodeData::Leaf { window } => self.nodes.insert(NodeData::Leaf { window }),
-                _ => return false,
-            };
 
-            self.nodes[target_id] = NodeData::Split {
-                direction,
-                rec,
-                offset: (0., 0.).into(),
-                left: old_leaf,
-                right: new_leaf,
-            };
+            self.spiral_node = Some(new_leaf);
+
+            match direction {
+                Direction::Left | Direction::Up => {
+                    self.nodes[target_id] = NodeData::Split {
+                        direction,
+                        rec,
+                        offset: (0, 0).into(),
+                        left: new_leaf,
+                        right: old_leaf,
+                    };
+                }
+                _ => {
+                    self.nodes[target_id] = NodeData::Split {
+                        direction,
+                        rec,
+                        offset: (0, 0).into(),
+                        left: old_leaf,
+                        right: new_leaf,
+                    };
+                }   
+            }
             true
         } else {
             false
@@ -160,32 +221,22 @@ impl TiledTree {
     }
 
     pub fn insert_window_spiral(&mut self, new_window: Window, space: &mut Space<Window>) {
-        let mut current = match self.get_root() {
-            Some(root) => root,
+
+        let spiarl_node  = match self.spiral_node {
+            Some(node_id) => &self.nodes[node_id],
             None => {
-                warn!("Failed to get tiled tree's root node");
                 return;
             }
         };
 
-        let target = loop {
-            match self.nodes.get(current) {
-                Some(node) => {
-                    match node {
-                        NodeData::Leaf { window } => {break Some(window.clone())},
-                        NodeData::Split { right, .. } => {
-                            current = *right;
-                        }
-                    }
-                }
-                None => {
-                    warn!("Failed to get node from key: {:?}", current);
-                    return;
-                }
-            }
+        let target = match spiarl_node {
+            NodeData::Leaf { window } => { window }
+            _ => { return; }
         };
 
-        self.insert_window(&target, new_window, space);
+        let direction = Direction::ALL[(self.get_count() - 1) % 4].clone();
+
+        self.insert_window(Some(&target.clone()), new_window, direction, space);
     }
 
     pub fn remove(&mut self, target: &Window, space: &mut Space<Window>) -> bool {
@@ -198,14 +249,13 @@ impl TiledTree {
                 return false
             }
         };
+
         // remove last node
-        if let Some(root_id) = self.root {
-            if target_id == root_id {
-                if let NodeData::Leaf { .. } = self.nodes[target_id] {
-                    self.nodes.remove(target_id);
-                    self.root = None;
-                    return true;
-                }
+        if Some(target_id) == self.root {
+            if matches!(self.nodes[target_id], NodeData::Leaf { .. }) {
+                self.nodes.remove(target_id);
+                self.root = None;
+                return true;
             }
         }
 
@@ -216,6 +266,10 @@ impl TiledTree {
                 return false
             }
         };
+
+        if self.spiral_node == Some(target_id) {
+            self.spiral_node = Some(sibling_id)
+        }
 
         match self.nodes[parent_id] {
             NodeData::Split { rec, .. } => {
@@ -238,7 +292,7 @@ impl TiledTree {
                         self.nodes[parent_id] = NodeData::Split { 
                             direction, 
                             rec, // from parent
-                            offset: (0., 0.).into(),
+                            offset: (0, 0).into(),
                             left, 
                             right,
                         };
@@ -265,7 +319,7 @@ impl TiledTree {
             },
             NodeData::Split { left, right, direction, rec: current_rec, offset } => {
                 let (l_rec, r_rec) = recover_new_rec(rec, direction, offset.clone());
-                
+
                 *current_rec = rec.clone();
 
                 let left_id = *left;
@@ -303,7 +357,7 @@ impl TiledTree {
 
         match &mut self.nodes[parent_id] {
             NodeData::Split { direction, rec , .. } => {
-                *direction = invert_direction(direction);
+                *direction = direction.rotate_cw();
                 let rec = *rec;
                 self.modify(parent_id, rec, space);
             },
@@ -311,7 +365,7 @@ impl TiledTree {
         }
     }
 
-    pub fn resize(&mut self, target: &Window, offset: Point<f64, Logical>, space: &mut Space<Window>) {
+    pub fn _resize(&mut self, target: &Window, offset: Point<i32, Logical>, space: &mut Space<Window>) {
         let target_id = match self.find_node(target) {
             Some(r) => {
                 r
@@ -379,69 +433,64 @@ impl TiledTree {
     }
 }
 
-fn get_new_rec(rec: &Rectangle<i32, Logical>) -> (Direction, Rectangle<i32, Logical>, Rectangle<i32, Logical>) {
-
-    let mut l_rec = *rec;
-    let mut r_rec = *rec;
+fn recover_new_rec(rec: Rectangle<i32, Logical>, direction: &Direction, offset: Point<i32, Logical>) -> (Rectangle<i32, Logical>, Rectangle<i32, Logical>) {
+    let mut l_rec = rec;
+    let mut r_rec = rec;
 
     let gap = (GAP as f32 * 0.5) as i32;
-    
-    if rec.size.h as f32 / rec.size.w as f32 > RATE {
-        let half = rec.size.h / 2 - gap;
-        l_rec.size.h = half;
-        r_rec.size.h = half;
-        r_rec.loc.y += half + GAP;
-        (Direction::Vertical, l_rec, r_rec)
-    } else {
-        let half = rec.size.w / 2 - gap;
-        l_rec.size.w = half;
-        r_rec.size.w = half;
-        r_rec.loc.x += half + GAP;
-        (Direction::Horizontal, l_rec, r_rec)
-    }
-}
-
-fn recover_new_rec(rec: Rectangle<i32, Logical>, direction: &Direction, offset: Point<f64, Logical>) -> (Rectangle<i32, Logical>, Rectangle<i32, Logical>) {
-    let mut l_rec = rec.to_f64();
-    let mut r_rec = rec.to_f64();
-
-    let gap = GAP as f64 * 0.5;
 
     match direction {
-        Direction::Horizontal => {
-            let half = l_rec.size.w / 2.0 - gap;
-            l_rec.size.w = half;
-            r_rec.size.w = half;
-            r_rec.loc.x += half + GAP.to_f64();
+        Direction::Left | Direction::Right => {
+            let half = rec.size.w / 2 - gap;
+            l_rec.size.w = half + offset.x;
+            r_rec.size.w = half - offset.x;
 
-            // adjust the offset
-            l_rec.size.w += offset.x;
-            r_rec.size.w -= offset.x;
+            r_rec.loc.x += half + GAP + offset.x;
+        }
+        Direction::Up | Direction::Down => {
+            let half = rec.size.h / 2 - gap;
+            l_rec.size.h = half + offset.y;
+            r_rec.size.h = half - offset.y;
 
-            r_rec.loc.x += offset.x;
-
-            (l_rec.to_i32_round(), r_rec.to_i32_round())
-        },
-        Direction::Vertical => {
-            let half = l_rec.size.h / 2.0 - gap;
-            l_rec.size.h = half;
-            r_rec.size.h = half;
-            r_rec.loc.y += half + GAP.to_f64();
-
-            // adjust the offset
-            l_rec.size.h += offset.y;
-            r_rec.size.h -= offset.y;
-
-            r_rec.loc.y += offset.y;
-
-            (l_rec.to_i32_round(), r_rec.to_i32_round())
+            r_rec.loc.y += half + GAP + offset.y;
         }
     }
+
+    (l_rec, r_rec)
 }
 
-fn invert_direction(direction: &Direction) -> Direction {
+fn get_new_rec(direction: &Direction, rec: &mut Rectangle<i32, Logical>) -> Rectangle<i32, Logical> {
+
+    let mut new_rec = *rec;
+
+    let gap = (GAP as f32 * 0.5) as i32;
+
     match direction {
-        Direction::Horizontal => Direction::Vertical,
-        Direction::Vertical => Direction::Horizontal,
+        Direction::Left | Direction::Right => {
+            let half = rec.size.w / 2 - gap;
+            new_rec.size.w = half;
+            rec.size.w = half;
+
+            if direction == &Direction::Left {
+                rec.loc.x += half + GAP;
+            } else {
+                new_rec.loc.x += half + GAP;
+            }
+
+            new_rec
+        }
+        Direction::Up | Direction::Down => {
+            let half = rec.size.h / 2 - gap;
+            new_rec.size.h = half;
+            rec.size.h = half;
+
+            if direction == &Direction::Up {
+                rec.loc.y += half + GAP;
+            } else {
+                new_rec.loc.y += half + GAP;
+            }
+
+            new_rec
+        }
     }
 }

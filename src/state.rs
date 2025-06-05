@@ -113,8 +113,8 @@ impl GlobalData {
             .output_geometry(output)
             .context("workspace add test error")?;
         
-        workspace_manager.add_workspace(output, output_geo, Some(TiledScheme::Spiral), true);
-        workspace_manager.add_workspace(output, output_geo, Some(TiledScheme::Default), false);
+        workspace_manager.add_workspace(output, output_geo, Some(TiledScheme::Default), true);
+        workspace_manager.add_workspace(output, output_geo, Some(TiledScheme::Spiral), false);
 
         let start_time = std::time::Instant::now();
         let clock = Clock::new();

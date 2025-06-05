@@ -105,16 +105,16 @@ impl RenderManager {
         let mut elements: Vec::<SpaceRenderElements<R, WaylandSurfaceRenderElement<R>>> = vec![];
 
         let tiled = &workspace_manager.current_workspace().tiled;
-        let floating = &workspace_manager.current_workspace().floating;
+        // let floating = &workspace_manager.current_workspace().floating;
         let output = output_manager.current_output();
 
-        match floating.render_elements_for_output(renderer, output, 0.85) {
-            Ok(r) => elements.extend(r),
-            Err(err) => {
-                warn!("Failed to get windows render elements: {:?}", err);
-                return vec![];
-            }
-        }
+        // match floating.render_elements_for_output(renderer, output, 0.85) {
+        //     Ok(r) => elements.extend(r),
+        //     Err(err) => {
+        //         warn!("Failed to get windows render elements: {:?}", err);
+        //         return vec![];
+        //     }
+        // }
 
         match tiled.render_elements_for_output(renderer, output, 0.85) {
             Ok(r) => elements.extend(r),
