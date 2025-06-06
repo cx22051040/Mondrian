@@ -1,7 +1,9 @@
-use slotmap::{new_key_type, SlotMap};
-use smithay::{desktop::{Space, Window}, utils::{Logical, Point, Rectangle}};
+use std::time::Duration;
 
-use crate::{layout::Direction, manager::window::WindowExt};
+use slotmap::{new_key_type, SlotMap};
+use smithay::{desktop::{Space, Window}, reexports::calloop::LoopHandle, utils::{Logical, Point, Rectangle}};
+
+use crate::{layout::Direction, manager::window::WindowExt, state::GlobalData};
 
 use super::json_tiled_tree::JsonTree;
 
@@ -151,7 +153,14 @@ impl TiledTree {
         get_window(&self.nodes, root_id)
     }
 
-    pub fn insert_window(&mut self, target: Option<&Window>, new_window: Window, direction: Direction, space: &mut Space<Window>) -> bool {
+    pub fn insert_window(
+        &mut self, 
+        target: Option<&Window>, 
+        new_window: Window, 
+        direction: Direction, 
+        space: &mut Space<Window>,
+        loop_handle: &LoopHandle<'_, GlobalData>,
+    ) -> bool {
 
         let target = match target {
             Some(window) => window.clone(),
@@ -177,27 +186,25 @@ impl TiledTree {
                 }
             };
             
-            info!("{:?}", rec);
-
-            let mut old_rec = rec.clone();
-            let new_rec = get_new_rec(&direction, &mut old_rec);
+            let mut original_rec = rec.clone();
+            let new_rec = get_new_rec(&direction, &mut original_rec);
             
-            target.set_rec(old_rec.size);
+            target.set_rec(original_rec.size);
             new_window.set_rec(new_rec.size);
             
-            space.map_element(target.clone(), old_rec.loc, false);
+            space.map_element(target.clone(), original_rec.loc, false);
             space.map_element(new_window.clone(), new_rec.loc, true);
 
             // adjust tree
-            let old_leaf = self.nodes.insert(NodeData::Leaf { window: target });
-            let new_leaf = self.nodes.insert(NodeData::Leaf { window: new_window });
+            let old_leaf = self.nodes.insert(NodeData::Leaf { window: target.clone() });
+            let new_leaf = self.nodes.insert(NodeData::Leaf { window: new_window.clone() });
 
             self.spiral_node = Some(new_leaf);
 
             match direction {
                 Direction::Left | Direction::Up => {
                     self.nodes[target_id] = NodeData::Split {
-                        direction,
+                        direction: direction.clone(),
                         rec,
                         offset: (0, 0).into(),
                         left: new_leaf,
@@ -206,7 +213,7 @@ impl TiledTree {
                 }
                 _ => {
                     self.nodes[target_id] = NodeData::Split {
-                        direction,
+                        direction: direction.clone(),
                         rec,
                         offset: (0, 0).into(),
                         left: old_leaf,
@@ -214,13 +221,49 @@ impl TiledTree {
                     };
                 }   
             }
+
+            // TODO: use config
+            loop_handle.insert_idle(move |data| {
+                data.render_manager.add_animation(
+                    target.clone(),
+                    rec,
+                    original_rec,
+                    Duration::from_millis(60),
+                    crate::animation::AnimationType::EaseInOutQuad,
+                );
+
+                let mut from = new_rec;
+                match direction {
+                    Direction::Right => {
+                        from.loc.x += from.size.w;
+                    }
+                    Direction::Left => {
+                        from.loc.x -= from.size.w;
+                    }
+                    Direction::Up => {
+                        from.loc.y -= from.size.h;
+                    }
+                    Direction::Down => {
+                        from.loc.y += from.size.h;
+                    }
+                }
+
+                data.render_manager.add_animation(
+                    new_window.clone(),
+                    from,
+                    new_rec,
+                    Duration::from_millis(60),
+                    crate::animation::AnimationType::EaseInOutQuad,
+                );
+            });
+
             true
         } else {
             false
         }
     }
 
-    pub fn insert_window_spiral(&mut self, new_window: Window, space: &mut Space<Window>) {
+    pub fn insert_window_spiral(&mut self, new_window: Window, space: &mut Space<Window>, loop_handle: &LoopHandle<'_, GlobalData>) {
 
         let spiarl_node  = match self.spiral_node {
             Some(node_id) => &self.nodes[node_id],
@@ -236,7 +279,7 @@ impl TiledTree {
 
         let direction = Direction::ALL[(self.get_count() - 1) % 4].clone();
 
-        self.insert_window(Some(&target.clone()), new_window, direction, space);
+        self.insert_window(Some(&target.clone()), new_window, direction, space, loop_handle);
     }
 
     pub fn remove(&mut self, target: &Window, space: &mut Space<Window>) -> bool {
@@ -268,7 +311,7 @@ impl TiledTree {
         };
 
         if self.spiral_node == Some(target_id) {
-            self.spiral_node = Some(sibling_id)
+            self.spiral_node = Some(parent_id);
         }
 
         match self.nodes[parent_id] {

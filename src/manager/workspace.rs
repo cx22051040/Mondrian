@@ -3,11 +3,11 @@ use std::{hash::Hash, sync::atomic::{AtomicUsize, Ordering}};
 use smithay::{
     desktop::{Space, Window},
     output::Output,
-    reexports::{wayland_protocols::xdg::shell::server::xdg_toplevel::ResizeEdge, wayland_server::protocol::wl_surface::WlSurface},
+    reexports::{calloop::LoopHandle, wayland_protocols::xdg::shell::server::xdg_toplevel::ResizeEdge, wayland_server::protocol::wl_surface::WlSurface},
     utils::{Logical, Point, Rectangle},
 };
 
-use crate::layout::{tiled_tree::{TiledScheme, TiledTree}, Direction};
+use crate::{layout::{tiled_tree::{TiledScheme, TiledTree}, Direction}, state::GlobalData};
 
 use super::window::WindowExt;
 
@@ -75,6 +75,7 @@ impl Workspace {
         window: Window,
         edges: ResizeEdge,
         activate: bool,
+        loop_handle: &LoopHandle<'_, GlobalData>,
     ) {
         self.refresh();
 
@@ -122,7 +123,7 @@ impl Workspace {
                             }
                         };
 
-                        layout_tree.insert_window(self.focus.as_ref(), window.clone(), direction, &mut self.tiled);
+                        layout_tree.insert_window(self.focus.as_ref(), window.clone(), direction, &mut self.tiled, loop_handle);
     
                         #[cfg(feature = "trace_layout")]
                         layout_tree.print_tree();
@@ -130,7 +131,7 @@ impl Workspace {
                 }
                 TiledScheme::Spiral => {
                     if let Some(layout_tree) = &mut self.tiled_tree {
-                        layout_tree.insert_window_spiral(window.clone(), &mut self.tiled);
+                        layout_tree.insert_window_spiral(window.clone(), &mut self.tiled, loop_handle);
     
                         #[cfg(feature = "trace_layout")]
                         layout_tree.print_tree();
@@ -151,6 +152,7 @@ impl Workspace {
 
             if tiled_tree.is_empty() {
                 self.tiled_tree = None;
+                self.focus = None;
             } else {
                 #[cfg(feature = "trace_layout")]
                 tiled_tree.print_tree();
@@ -161,7 +163,9 @@ impl Workspace {
         }
 
         if self.focus.as_ref() == Some(window) {
-            self.focus = None;
+            if let Some(tiled_tree) = &self.tiled_tree {
+                self.focus = tiled_tree.get_first_window().cloned();
+            }
         }
 
         self.tiled.unmap_elem(window);
@@ -344,9 +348,9 @@ impl WorkspaceManager {
             .expect("no current_workspace")
     }
 
-    pub fn map_element(&mut self, window: Window, edges: ResizeEdge, activate: bool) {
+    pub fn map_element(&mut self, window: Window, edges: ResizeEdge, activate: bool, loop_handle: &LoopHandle<'_, GlobalData>) {
         self.current_workspace_mut()
-            .map_element(window, edges, activate);
+            .map_element(window, edges, activate, loop_handle);
     }
 
     pub fn refresh(&mut self) {

@@ -64,7 +64,7 @@ impl Winit {
                         );
                         data.backend.winit().render_output(
                             damage_traker,
-                            &data.render_manager,
+                            &mut data.render_manager,
                             &data.output_manager,
                             &data.workspace_manager,
                             &mut data.cursor_manager,
@@ -192,7 +192,7 @@ impl Winit {
     pub fn render_output(
         &mut self,
         damage_tracker: &mut OutputDamageTracker,
-        render_manager: &RenderManager,
+        render_manager: &mut RenderManager,
         output_manager: &OutputManager,
         workspace_manager: &WorkspaceManager,
         cursor_manager: &mut CursorManager,

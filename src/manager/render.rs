@@ -1,20 +1,16 @@
-use std::time::Instant;
+use std::{collections::HashMap, time::{Duration, Instant}};
 
 use smithay::{
     backend::renderer::{
         element::{
-            memory::MemoryRenderBufferRenderElement, 
-            surface::{render_elements_from_surface_tree, WaylandSurfaceRenderElement}, 
-            Kind
+            memory::MemoryRenderBufferRenderElement, surface::{render_elements_from_surface_tree, WaylandSurfaceRenderElement}, AsRenderElements, Kind
         }, gles::{GlesRenderer, Uniform}, Color32F
-    },
-    desktop::space::SpaceRenderElements,
-    utils::Scale,
+    }, desktop::Window, utils::{Logical, Rectangle, Scale}
 };
 
-use crate::render::{
+use crate::{animation::{Animation, AnimationState, AnimationType}, manager::window::WindowExt, render::{
         background::{Background, BackgroundRenderElement}, border::{BorderRenderElement, BorderShader}, elements::{CustomRenderElements, OutputRenderElements, ShaderRenderElement}, NuonuoRenderer
-    };
+    }};
 
 use super::{
     input::InputManager, output::OutputManager, workspace::WorkspaceManager, cursor::{CursorManager, RenderCursor, XCursor}
@@ -23,13 +19,14 @@ use super::{
 pub struct RenderManager {
     // no need now
     pub start_time: Instant,
+    pub animations: HashMap<Window, Animation>,
 }
-
 
 impl RenderManager {
     pub fn new() -> Self {
         Self {
             start_time: Instant::now(),
+            animations: HashMap::new(),
         }
     }
 
@@ -39,7 +36,7 @@ impl RenderManager {
     }
 
     pub fn get_render_elements<R: NuonuoRenderer>(
-        &self,
+        &mut self,
         renderer: &mut R,
         output_manager: &OutputManager,
         workspace_manager: &WorkspaceManager,
@@ -79,7 +76,7 @@ impl RenderManager {
         output_elements.extend(
             self.get_windows_render_elements(renderer, output_manager, workspace_manager)
                 .into_iter()
-                .map(OutputRenderElements::Space),
+                .map(OutputRenderElements::Custom),
         );
 
         // Then Shader and CustomRenderElements
@@ -97,34 +94,58 @@ impl RenderManager {
     }
 
     pub fn get_windows_render_elements<R: NuonuoRenderer>(
-        &self,
+        &mut self,
         renderer: &mut R,
         output_manager: &OutputManager,
         workspace_manager: &WorkspaceManager,
-    ) -> Vec<SpaceRenderElements<R, WaylandSurfaceRenderElement<R>>> {
-        let mut elements: Vec::<SpaceRenderElements<R, WaylandSurfaceRenderElement<R>>> = vec![];
+    ) -> Vec<CustomRenderElements<R>> {
+        // TODO: 暂时使用
+        self.refresh();
 
-        let tiled = &workspace_manager.current_workspace().tiled;
-        // let floating = &workspace_manager.current_workspace().floating;
+        let mut elements: Vec::<WaylandSurfaceRenderElement<R>> = vec![];
+
         let output = output_manager.current_output();
+        let output_scale = output.current_scale().fractional_scale();
+        for window in workspace_manager.elements() {
 
-        // match floating.render_elements_for_output(renderer, output, 0.85) {
-        //     Ok(r) => elements.extend(r),
-        //     Err(err) => {
-        //         warn!("Failed to get windows render elements: {:?}", err);
-        //         return vec![];
-        //     }
-        // }
+            let location = match self.animations.get_mut(window) {
+                Some(animation) => {
+                    match animation.state {
+                        AnimationState::NotStarted => {
+                            let rec = animation.start();
+                            window.set_rec(rec.size);
+                            rec.loc
+                        }
+                        AnimationState::Running => {
+                            animation.tick();
+                            let rec = animation.current_value();
+                            window.set_rec(rec.size);
+                            // info!("{:?}", rec);
+                            rec.loc
+                        }
+                        _ => { break }
+                    }
+                }
+                None => {
+                    let window_rec = workspace_manager.window_geometry(window).unwrap();
+                    window_rec.loc
+                }
+            };
 
-        match tiled.render_elements_for_output(renderer, output, 0.85) {
-            Ok(r) => elements.extend(r),
-            Err(err) => {
-                warn!("Failed to get windows render elements: {:?}", err);
-                return vec![];
-            }
+            elements.extend(
+                window.render_elements::<WaylandSurfaceRenderElement<R>>(
+                    renderer, 
+                    (location - window.geometry().loc).to_physical_precise_round(output_scale),
+                    Scale::from(output_scale), 
+                    0.8
+                )
+            );
         }
 
         elements
+            .into_iter()
+            .map(CustomRenderElements::Surface)
+            .collect()
     }
 
     pub fn get_cursor_render_elements<R: NuonuoRenderer>(
@@ -226,11 +247,13 @@ impl RenderManager {
 
         let focus = workspace_manager.get_focus();
         if let Some(window) = focus {
-            let window_geo = match workspace_manager.window_geometry(window) {
-                Some(g) => g,
+
+            let window_rec = match self.animations.get(window) {
+                Some(animation) => {
+                    animation.current_value()
+                }
                 None => {
-                    warn!("Failed to get window geometry: {:?}", window);
-                    return vec![];
+                    workspace_manager.window_geometry(window).unwrap()
                 }
             };
 
@@ -242,7 +265,7 @@ impl RenderManager {
                 .0
                 .clone();
 
-            let point = window_geo.size.to_point();
+            let point = window_rec.size.to_point();
 
             // Colors are 24 bits with 8 bits for each red, green, blue value.
             // To get each color, shift the bits over by the offset and zero
@@ -257,7 +280,7 @@ impl RenderManager {
                 ShaderRenderElement::Border(
                     BorderRenderElement::new(
                         program,
-                        window_geo,
+                        window_rec,
                         None,
                         1.0,
                         vec![
@@ -309,6 +332,30 @@ impl RenderManager {
         ));
     
         elements
+    }
+
+    pub fn add_animation(
+        &mut self, 
+        window: Window,
+        from: Rectangle<i32, Logical>,
+        to: Rectangle<i32, Logical>,
+        duration: Duration,
+        animation_type: AnimationType,
+    ) {
+        let animation = Animation::new(
+            from, 
+            to, 
+            duration, 
+            animation_type
+        );
+        self.animations.insert(window, animation);
+    }
+
+    pub fn refresh(&mut self) {
+        // clean dead animations
+        self.animations.retain(|_, animation| {
+            !matches!(animation.state, AnimationState::Completed)
+        });
     }
 
 }

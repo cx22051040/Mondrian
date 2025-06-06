@@ -102,7 +102,8 @@ impl XdgShellHandler for GlobalData {
             .map_element(
                 window.clone(),
                 edges,
-                true
+                true,
+                &self.loop_handle,
             );
 
         self.set_keyboard_focus(Some(surface.wl_surface().clone()), SERIAL_COUNTER.next_serial());
