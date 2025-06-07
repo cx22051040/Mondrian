@@ -20,10 +20,9 @@ use std::sync::Arc;
 
 use smithay::{
     reexports::{
-        calloop::{EventLoop, Interest, Mode, PostAction, generic::Generic},
+        calloop::{generic::Generic, EventLoop, Interest, Mode, PostAction},
         wayland_server::Display,
-    },
-    wayland::socket::ListeningSocketSource,
+    }, utils::Clock, wayland::socket::ListeningSocketSource
 };
 
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
@@ -101,8 +100,8 @@ fn main() -> anyhow::Result<()> {
     info!("Initialization completed, starting the main loop.");
 
     event_loop
-        .run(None, &mut global_data, move |_| {
-            // Nuonuo is running
+        .run(None, &mut global_data, move |data| {
+            data.clock = Clock::new();
         })
         .anyhow_err("Failed to run event loop")?;
     

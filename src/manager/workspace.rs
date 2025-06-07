@@ -164,11 +164,10 @@ impl Workspace {
 
     pub fn unmap_element(&mut self, window: &Window, loop_handle: &LoopHandle<'_, GlobalData>) {
         if let Some(tiled_tree) = &mut self.tiled_tree {
-            tiled_tree.remove(window, &mut self.tiled, loop_handle);
+            tiled_tree.remove(window, &mut self.focus, &mut self.tiled, loop_handle);
 
             if tiled_tree.is_empty() {
                 self.tiled_tree = None;
-                self.focus = None;
             } else {
                 #[cfg(feature = "trace_layout")]
                 tiled_tree.print_tree();
@@ -176,12 +175,6 @@ impl Workspace {
         } else {
             error!("empty layout tree!");
             return;
-        }
-
-        if self.focus.as_ref() == Some(window) {
-            if let Some(tiled_tree) = &self.tiled_tree {
-                self.focus = tiled_tree.get_first_window().cloned();
-            }
         }
 
         self.tiled.unmap_elem(window);

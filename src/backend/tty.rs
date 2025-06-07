@@ -35,7 +35,6 @@ use smithay::{
         input::InputEvent,
         libinput::{LibinputInputBackend, LibinputSessionInterface},
         renderer::{
-            Color32F,
             element::RenderElementStates,
             gles::GlesRenderer,
             multigpu::{GpuManager, MultiRenderer, gbm::GbmGlesBackend},
@@ -120,7 +119,6 @@ pub struct Tty {
     pub primary_render_node: DrmNode,
     pub devices: HashMap<DrmNode, OutputDevice>,
     pub seat_name: String,
-    pub vblank_meta_data: HashMap<crtc::Handle, DrmEventMetadata>,
     pub dmabuf_global: Option<DmabufGlobal>,
 }
 pub struct OutputDevice {
@@ -242,7 +240,6 @@ impl Tty {
             primary_render_node,
             devices: HashMap::new(),
             seat_name,
-            vblank_meta_data: HashMap::new(),
             dmabuf_global: None,
         })
     }
@@ -345,21 +342,11 @@ impl Tty {
                     // );
                     if data.clock.now() > data.next_frame_target + MINIMIZE {
                         // drop current frame, render next frame
-                        // info!("jump the frame");
+                        info!("jump the frame");
                         data.next_frame_target = data.next_frame_target + duration;
                         let new_duration = Duration::from(data.next_frame_target)
                             .saturating_sub(data.clock.now().into());
                         return TimeoutAction::ToDuration(new_duration);
-                    }
-
-                    // VBlank
-                    for (crtc, meta) in &data.backend.tty().vblank_meta_data.clone() {
-                        data.backend.tty().on_vblank(
-                            crtc,
-                            meta,
-                            data.output_manager.current_output(),
-                            &data.clock,
-                        );
                     }
 
                     data.backend.tty().render_output(
@@ -427,7 +414,12 @@ impl Tty {
                 match event {
                     DrmEvent::VBlank(crtc) => {
                         let meta = meta.expect("VBlank events must have metadata");
-                        data.backend.tty().vblank_meta_data.insert(crtc, meta);
+                        data.backend.tty().on_vblank(
+                            &crtc,
+                            &meta,
+                            data.output_manager.current_output(),
+                            &data.clock,
+                        );
                     }
                     DrmEvent::Error(error) => warn!("DRM Vblank error: {error}"),
                 };
@@ -1008,7 +1000,7 @@ impl Tty {
                     .render_frame(
                         &mut renderer,
                         &elements,
-                        Color32F::new(1.0, 1.0, 0.0, 1.0),
+                        [0.; 4],
                         FrameFlags::DEFAULT,
                     )
                     .map(|render_frame_result| {
@@ -1031,6 +1023,7 @@ impl Tty {
                                     workspace_manager.current_space(),
                                     &states,
                                 );
+
                                 // queue_frame will arise vlbank
                                 match surface
                                     .compositor

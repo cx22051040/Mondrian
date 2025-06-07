@@ -3,7 +3,7 @@ use std::time::Duration;
 use slotmap::{new_key_type, SlotMap};
 use smithay::{desktop::{Space, Window}, reexports::calloop::LoopHandle, utils::{Logical, Point, Rectangle}};
 
-use crate::{layout::Direction, manager::window::WindowExt, state::GlobalData};
+use crate::{layout::{neighbor_graph::NeighborGraph, Direction}, manager::window::WindowExt, state::GlobalData};
 
 use super::json_tiled_tree::JsonTree;
 
@@ -36,6 +36,7 @@ pub struct TiledTree {
     nodes: SlotMap<NodeId, NodeData>,
     spiral_node: Option<NodeId>,
     root: Option<NodeId>,
+    neighbor_graph: NeighborGraph,
 }
 
 impl TiledTree {
@@ -47,7 +48,8 @@ impl TiledTree {
         Self { 
             nodes,
             spiral_node,
-            root
+            root,
+            neighbor_graph: NeighborGraph::new()
        }
     }
 
@@ -297,7 +299,7 @@ impl TiledTree {
         self.insert_window(Some(&target.clone()), new_window, direction, space, loop_handle);
     }
 
-    pub fn remove(&mut self, target: &Window, space: &mut Space<Window>, loop_handle: &LoopHandle<'_, GlobalData>) -> bool {
+    pub fn remove(&mut self, target: &Window, focus: &mut Option<Window>, space: &mut Space<Window>, loop_handle: &LoopHandle<'_, GlobalData>) -> bool {
         let target_id = match self.find_node(target) {
             Some(r) => {
                 r
@@ -313,6 +315,7 @@ impl TiledTree {
             if matches!(self.nodes[target_id], NodeData::Leaf { .. }) {
                 self.nodes.remove(target_id);
                 self.root = None;
+                *focus = None;
                 return true;
             }
         }
@@ -348,6 +351,10 @@ impl TiledTree {
 
                         self.nodes[parent_id] = NodeData::Leaf { window: window.clone() };
 
+                        if focus.as_ref() == Some(target) {
+                            *focus = Some(window.clone());
+                        }
+
                         loop_handle.insert_idle(move |data| {
                             data.render_manager.add_animation(
                                 window,
@@ -367,6 +374,11 @@ impl TiledTree {
                             right,
                         };
                         self.modify(parent_id, rec, space, loop_handle);
+
+                        if focus.as_ref() == Some(target) {
+                            *focus = self.get_first_window().cloned();
+                        }
+
                     }
                 }
 

@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 pub mod tiled_tree;
 pub mod json_tiled_tree;
-
+pub mod neighbor_graph;
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub enum Direction {
@@ -17,7 +17,7 @@ impl Direction {
         Direction::Right
     }
 
-    pub fn _opposite(&self) -> Direction {
+    pub fn opposite(&self) -> Direction {
         match self {
             Direction::Right => Direction::Left,
             Direction::Down => Direction::Up,
