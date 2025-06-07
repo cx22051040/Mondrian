@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{mem::swap, time::Duration};
 
 use slotmap::{new_key_type, SlotMap};
 use smithay::{desktop::{Space, Window}, reexports::calloop::LoopHandle, utils::{Logical, Point, Rectangle}};
@@ -502,6 +502,60 @@ impl TiledTree {
     pub fn from_json(&mut self, path: &str) {
         if let Some(json_tree) = JsonTree::from_json(path) {
             json_tree.print_tree();
+        }
+    }
+
+    pub fn exchange(&mut self, focus: &Window, direction: &Direction, space: &mut Space<Window>, loop_handle: &LoopHandle<'_, GlobalData>) {
+        if let Some(neighbor) = self.neighbor_graph.get(focus, direction) {
+            let neighbor = neighbor.first().unwrap();
+
+            let neighbor_id = self.find_node(neighbor).unwrap();
+            let focus_id = self.find_node(focus).unwrap();
+
+            let neighbor_rec = space.element_geometry(neighbor).unwrap();
+            let focus_rec = space.element_geometry(focus).unwrap();
+
+            // swap window
+            if let Some([a, b]) = self.nodes.get_disjoint_mut([neighbor_id, focus_id]) {
+                match (a, b) {
+                    (NodeData::Leaf { window: win_a }, NodeData::Leaf { window: win_b }) => {
+                        // 交换 window
+                        swap(win_a, win_b);
+            
+                        win_a.set_rec(neighbor_rec.size);
+                        space.map_element(win_a.clone(), neighbor_rec.loc, false);
+            
+                        win_b.set_rec(focus_rec.size);
+                        space.map_element(win_b.clone(), focus_rec.loc, false);
+                    }
+                    _ => { }
+                }
+            }
+            
+            let neighbor = neighbor.clone();
+            let focus = focus.clone();
+
+            // modify neighbor_graph
+            self.neighbor_graph.exchange(&neighbor, &focus);
+
+            // add animation
+            loop_handle.insert_idle(move |data| {
+                data.render_manager.add_animation(
+                    neighbor.clone(), 
+                    neighbor_rec, 
+                    focus_rec, 
+                    Duration::from_millis(30), 
+                    crate::animation::AnimationType::EaseInOutQuad
+                );
+
+                data.render_manager.add_animation(
+                    focus.clone(), 
+                    focus_rec, 
+                    neighbor_rec, 
+                    Duration::from_millis(30), 
+                    crate::animation::AnimationType::EaseInOutQuad
+                );
+            });
         }
     }
 

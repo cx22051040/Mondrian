@@ -10,7 +10,7 @@ use smithay::{
     reexports::wayland_server::DisplayHandle,
 };
 
-use crate::{state::GlobalData, utils::errors::AnyHowErr};
+use crate::{layout::Direction, state::GlobalData, utils::errors::AnyHowErr};
 
 #[derive(Debug)]
 pub enum FunctionEnum {
@@ -22,6 +22,10 @@ pub enum FunctionEnum {
     Quit,
     Kill,
     Json,
+    Up(Direction),
+    Down(Direction),
+    Left(Direction),
+    Right(Direction),
 }
 
 #[derive(Debug)]
@@ -142,6 +146,10 @@ impl InputManager {
                             "quit" => FunctionEnum::Quit,
                             "kill" => FunctionEnum::Kill,
                             "json" => FunctionEnum::Json,
+                            "up" => FunctionEnum::Up(Direction::Up),
+                            "down" => FunctionEnum::Down(Direction::Down),
+                            "left" => FunctionEnum::Left(Direction::Left),
+                            "right" => FunctionEnum::Right(Direction::Right),
                             _ => {
                                 tracing::info!(
                                     "Warning: No registered function for exec '{}'",

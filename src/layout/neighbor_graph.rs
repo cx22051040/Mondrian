@@ -72,7 +72,28 @@ impl NeighborGraph {
         // new <--> from
         self.add_window(from.clone(), direction, vec![new.clone()]);
         self.add_window(new, opposite, vec![from]);
-    }    
+    }
+
+    pub fn exchange(&mut self, a: &Window, b: &Window) {
+        let a_neighbors = self.edges.remove(a).unwrap_or_default();
+        let b_neighbors = self.edges.remove(b).unwrap_or_default();
+
+        self.edges.insert(a.clone(), b_neighbors);
+        self.edges.insert(b.clone(), a_neighbors);
+
+        // exchange a <-> b
+        for (_, dir_map) in self.edges.iter_mut() {
+            for (_, neighbors) in dir_map.iter_mut() {
+                for win in neighbors.iter_mut() {
+                    if win == a {
+                        *win = b.clone();
+                    } else if win == b {
+                        *win = a.clone();
+                    }
+                }
+            }
+        }
+    }
 
     #[cfg(feature="trace_layout")]
     pub fn print(&self) {

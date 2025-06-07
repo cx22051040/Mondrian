@@ -129,6 +129,12 @@ impl GlobalData {
                             toplevel.send_close();
                         }
                     }
+                    FunctionEnum::Up(direction) 
+                        | FunctionEnum::Down(direction) 
+                        | FunctionEnum::Left(direction)
+                        | FunctionEnum::Right(direction) => {
+                            self.workspace_manager.exchange_window(&direction, &self.loop_handle);
+                    }
                     FunctionEnum::Kill => {
                         info!("Kill the full compositor");
                         std::process::exit(0);

@@ -218,6 +218,14 @@ impl Workspace {
         }
     }
 
+    pub fn exchange_window(&mut self, direction: &Direction, loop_handle: &LoopHandle<'_, GlobalData>) {
+        if let Some(layout_tree) = &mut self.tiled_tree {
+            if let Some(focus) = &self.focus {
+                layout_tree.exchange(focus, direction, &mut self.tiled, loop_handle);
+            }
+        }
+    }
+
     pub fn modify_windows(&mut self, rec: Rectangle<i32, Logical>, loop_handle: &LoopHandle<'_, GlobalData>) {
         self.output_geometry = rec;
         if let Some(layout_tree) = &mut self.tiled_tree {
@@ -430,5 +438,9 @@ impl WorkspaceManager {
 
     pub fn tiled_recover(&mut self, loop_handle: &LoopHandle<'_, GlobalData>) {
         self.current_workspace_mut().tiled_recover(loop_handle);
+    }
+
+    pub fn exchange_window(&mut self, direction: &Direction, loop_handle: &LoopHandle<'_, GlobalData>) {
+        self.current_workspace_mut().exchange_window(direction, loop_handle);
     }
 }
