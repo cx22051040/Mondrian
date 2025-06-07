@@ -1,12 +1,12 @@
 use smithay::{
     backend::input::{
-        AbsolutePositionEvent, ButtonState, Event, InputBackend, PointerButtonEvent, PointerMotionEvent
+        self, AbsolutePositionEvent, Axis, AxisSource, ButtonState, Event, InputBackend, PointerAxisEvent as _, PointerButtonEvent, PointerMotionEvent
     }, 
     desktop::{
         layer_map_for_output, WindowSurfaceType
     }, 
     input::pointer::{
-            ButtonEvent, GrabStartData as PointerGrabStartData, MotionEvent, RelativeMotionEvent
+            AxisFrame, ButtonEvent, GrabStartData as PointerGrabStartData, MotionEvent, RelativeMotionEvent
         }, 
     reexports::wayland_server::protocol::wl_surface::WlSurface, 
     utils::{
@@ -246,8 +246,51 @@ impl GlobalData {
 
     }
 
-    pub fn on_pointer_axis<I: InputBackend>(&mut self, _event: I::PointerAxisEvent) {
-        // TODO
+    pub fn on_pointer_axis<I: InputBackend>(&mut self, evt: I::PointerAxisEvent) {
+        let horizontal_amount = evt
+            .amount(input::Axis::Horizontal)
+            .unwrap_or_else(|| evt.amount_v120(input::Axis::Horizontal).unwrap_or(0.0) * 15.0 / 120.);
+        let vertical_amount = evt
+            .amount(input::Axis::Vertical)
+            .unwrap_or_else(|| evt.amount_v120(input::Axis::Vertical).unwrap_or(0.0) * 15.0 / 120.);
+        let horizontal_amount_discrete = evt.amount_v120(input::Axis::Horizontal);
+        let vertical_amount_discrete = evt.amount_v120(input::Axis::Vertical);
+        
+        {
+            let mut frame = AxisFrame::new(evt.time_msec()).source(evt.source());
+            if horizontal_amount != 0.0 {
+                frame = frame.relative_direction(Axis::Horizontal, evt.relative_direction(Axis::Horizontal));
+                frame = frame.value(Axis::Horizontal, horizontal_amount);
+                if let Some(discrete) = horizontal_amount_discrete {
+                    frame = frame.v120(Axis::Horizontal, discrete as i32);
+                }
+            }
+            if vertical_amount != 0.0 {
+                frame = frame.relative_direction(Axis::Vertical, evt.relative_direction(Axis::Vertical));
+                frame = frame.value(Axis::Vertical, vertical_amount);
+                if let Some(discrete) = vertical_amount_discrete {
+                    frame = frame.v120(Axis::Vertical, discrete as i32);
+                }
+            }
+            if evt.source() == AxisSource::Finger {
+                if evt.amount(Axis::Horizontal) == Some(0.0) {
+                    frame = frame.stop(Axis::Horizontal);
+                }
+                if evt.amount(Axis::Vertical) == Some(0.0) {
+                    frame = frame.stop(Axis::Vertical);
+                }
+            }
+            let pointer = self.input_manager.get_pointer();
+            let pointer = match pointer {
+                Some(k) => k,
+                None => {
+                    error!("get pointer error");
+                    return;
+                }
+            };
+            pointer.axis(self, frame);
+            pointer.frame(self);
+        }
     }
 
     fn surface_under(&mut self, position: Point<f64, Logical>) -> Option<(WlSurface, Point<f64, Logical>)> {

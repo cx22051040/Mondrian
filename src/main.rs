@@ -22,7 +22,7 @@ use smithay::{
     reexports::{
         calloop::{generic::Generic, EventLoop, Interest, Mode, PostAction},
         wayland_server::Display,
-    }, utils::Clock, wayland::socket::ListeningSocketSource
+    }, wayland::socket::ListeningSocketSource
 };
 
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
@@ -100,8 +100,8 @@ fn main() -> anyhow::Result<()> {
     info!("Initialization completed, starting the main loop.");
 
     event_loop
-        .run(None, &mut global_data, move |data| {
-            data.clock = Clock::new();
+        .run(None, &mut global_data, move |_| {
+            // running
         })
         .anyhow_err("Failed to run event loop")?;
     

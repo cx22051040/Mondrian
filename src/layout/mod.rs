@@ -35,10 +35,18 @@ impl Direction {
         }
     }
 
-    pub fn _orthogonal(&self) -> [Direction; 2] {
+    pub fn horizontals() -> [Direction; 2] {
+        [Direction::Left, Direction::Right]
+    }
+
+    pub fn verticals() -> [Direction; 2] {
+        [Direction::Up, Direction::Down]
+    }
+
+    pub fn orthogonal(&self) -> [Direction; 2] {
         match self {
-            Direction::Left | Direction::Right => [Direction::Up, Direction::Down],
-            Direction::Up | Direction::Down => [Direction::Left, Direction::Right],
+            Direction::Left | Direction::Right => Direction::verticals(),
+            Direction::Up | Direction::Down => Direction::horizontals(),
         }
     }
 

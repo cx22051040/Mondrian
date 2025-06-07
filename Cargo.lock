@@ -883,6 +883,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "mondrian"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bitflags 2.9.0",
+ "itertools",
+ "regex",
+ "serde",
+ "serde_json",
+ "slotmap",
+ "smithay",
+ "smithay-drm-extras",
+ "tokio",
+ "tracing",
+ "tracing-appender",
+ "tracing-subscriber",
+ "tracy-client",
+ "xcursor",
+]
+
+[[package]]
 name = "ndk"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -956,27 +977,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
-]
-
-[[package]]
-name = "nuonuo"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bitflags 2.9.0",
- "itertools",
- "regex",
- "serde",
- "serde_json",
- "slotmap",
- "smithay",
- "smithay-drm-extras",
- "tokio",
- "tracing",
- "tracing-appender",
- "tracing-subscriber",
- "tracy-client",
- "xcursor",
 ]
 
 [[package]]

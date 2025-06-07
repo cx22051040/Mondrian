@@ -206,9 +206,9 @@ impl TiledTree {
             let mut original_rec = rec.clone();
             let new_rec = get_new_rec(&direction, &mut original_rec);
             
+            // TODO: merge
             target.set_rec(original_rec.size);
             new_window.set_rec(new_rec.size);
-            
             space.map_element(target.clone(), original_rec.loc, false);
             space.map_element(new_window.clone(), new_rec.loc, true);
 
@@ -218,6 +218,7 @@ impl TiledTree {
 
             self.spiral_node = Some(new_leaf);
 
+            // use split node hold leafs
             match direction {
                 Direction::Left | Direction::Up => {
                     self.nodes[target_id] = NodeData::Split {
@@ -239,10 +240,14 @@ impl TiledTree {
                 }   
             }
 
+            // modify neighbor_graph
+            self.neighbor_graph.tiled_add(target.clone(), direction.clone(), new_window.clone());
+
             // TODO: use config
+            // create animation
             loop_handle.insert_idle(move |data| {
                 data.render_manager.add_animation(
-                    target.clone(),
+                    target,
                     rec,
                     original_rec,
                     Duration::from_millis(30),
@@ -266,7 +271,7 @@ impl TiledTree {
                 }
 
                 data.render_manager.add_animation(
-                    new_window.clone(),
+                    new_window,
                     from,
                     new_rec,
                     Duration::from_millis(30),
@@ -525,6 +530,7 @@ impl TiledTree {
         }
 
         print(&self.nodes, root_id, 0);
+        self.neighbor_graph.print();
     }
 }
 
