@@ -3,14 +3,24 @@ use std::time::Duration;
 use smithay::utils::{Coordinate, Logical, Point, Rectangle, Size};
 
 pub enum AnimationType {
+    #[allow(dead_code)]
     Linear,
     EaseInOutQuad,
+    #[allow(dead_code)]
+    OvershootBounce,
 }
 
 impl AnimationType {
+    pub fn _default() -> AnimationType {
+        AnimationType::Linear
+    }
+
     pub fn get_progress(&self, t: f64) -> f64 {
+        let t = t.clamp(0.0, 1.0);
+
         match self {
             AnimationType::Linear => t,
+
             AnimationType::EaseInOutQuad => {
                 if t < 0.5 {
                     2.0 * t * t
@@ -18,9 +28,25 @@ impl AnimationType {
                     -1.0 + (4.0 - 2.0 * t) * t
                 }
             }
+
+            AnimationType::OvershootBounce => {
+                // 类似 easeOutBack 的效果 + 回落
+                // overshoot 控制“超出”程度
+                let overshoot = 1.70158;
+                if t < 0.8 {
+                    // 前段：从 0 上升至 >1.0
+                    let s = t / 0.8;
+                    s * s * ((overshoot + 1.0) * s - overshoot)
+                } else {
+                    // 后段：缓慢下降回 1.0
+                    let s = (t - 0.8) / 0.2;
+                    1.0 - (1.0 - s) * (1.0 - s) * 0.5
+                }
+            }
         }
     }
 }
+
 pub enum AnimationState {
     NotStarted,
     Running,

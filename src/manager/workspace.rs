@@ -1,4 +1,4 @@
-use std::{hash::Hash, sync::atomic::{AtomicUsize, Ordering}};
+use std::{hash::Hash, sync::atomic::{AtomicUsize, Ordering}, time::Duration};
 
 use smithay::{
     desktop::{Space, Window},
@@ -93,49 +93,65 @@ impl Workspace {
             window.set_rec(rec.size);
             self.tiled.map_element(window.clone(), rec.loc, activate);
             self.tiled_tree = Some(TiledTree::new(window.clone()));
-        } else {
-            match self.scheme {
-                TiledScheme::Default => {
-                    if let Some(layout_tree) = &mut self.tiled_tree {
 
-                        // TODO
-                        let focus_rec = self.tiled.element_geometry(self.focus.as_ref().unwrap()).unwrap();
+            // set focus
+            if activate {
+                self.focus = Some(window.clone());
+            }
 
-                        let direction = if focus_rec.size.w > focus_rec.size.h {
-                            match edges {
-                                ResizeEdge::TopLeft | ResizeEdge::BottomLeft => {
-                                    Direction::Left
-                                }
-                                ResizeEdge::TopRight | ResizeEdge::BottomRight => {
-                                    Direction::Right
-                                }
-                                _ => { Direction::default() }
+            loop_handle.insert_idle(move |data| {
+                let mut from = rec;
+                from.loc.y += from.size.h;
+                data.render_manager.add_animation(
+                    window, 
+                    from,
+                    rec, 
+                    Duration::from_millis(30), 
+                    crate::animation::AnimationType::EaseInOutQuad,
+                );
+            });
+
+            return;
+        }
+
+        match self.scheme {
+            TiledScheme::Default => {
+                if let Some(layout_tree) = &mut self.tiled_tree {
+                    // TODO
+                    let focus_rec = self.tiled.element_geometry(self.focus.as_ref().unwrap()).unwrap();
+                    let direction = if focus_rec.size.w > focus_rec.size.h {
+                        match edges {
+                            ResizeEdge::TopLeft | ResizeEdge::BottomLeft => {
+                                Direction::Left
                             }
-                        } else {
-                            match edges {
-                                ResizeEdge::TopLeft | ResizeEdge::TopRight => {
-                                    Direction::Up
-                                }
-                                ResizeEdge::BottomLeft | ResizeEdge::BottomRight => {
-                                    Direction::Down
-                                }
-                                _ => { Direction::default() }
+                            ResizeEdge::TopRight | ResizeEdge::BottomRight => {
+                                Direction::Right
                             }
-                        };
+                            _ => { Direction::default() }
+                        }
+                    } else {
+                        match edges {
+                            ResizeEdge::TopLeft | ResizeEdge::TopRight => {
+                                Direction::Up
+                            }
+                            ResizeEdge::BottomLeft | ResizeEdge::BottomRight => {
+                                Direction::Down
+                            }
+                            _ => { Direction::default() }
+                        }
+                    };
+                    layout_tree.insert_window(self.focus.as_ref(), window.clone(), direction, &mut self.tiled, loop_handle);
 
-                        layout_tree.insert_window(self.focus.as_ref(), window.clone(), direction, &mut self.tiled, loop_handle);
-    
-                        #[cfg(feature = "trace_layout")]
-                        layout_tree.print_tree();
-                    }
+                    #[cfg(feature = "trace_layout")]
+                    layout_tree.print_tree();
                 }
-                TiledScheme::Spiral => {
-                    if let Some(layout_tree) = &mut self.tiled_tree {
-                        layout_tree.insert_window_spiral(window.clone(), &mut self.tiled, loop_handle);
-    
-                        #[cfg(feature = "trace_layout")]
-                        layout_tree.print_tree();
-                    }
+            }
+            TiledScheme::Spiral => {
+                if let Some(layout_tree) = &mut self.tiled_tree {
+                    layout_tree.insert_window_spiral(window.clone(), &mut self.tiled, loop_handle);
+
+                    #[cfg(feature = "trace_layout")]
+                    layout_tree.print_tree();
                 }
             }
         }
@@ -146,9 +162,9 @@ impl Workspace {
         }
     }
 
-    pub fn unmap_element(&mut self, window: &Window) {
+    pub fn unmap_element(&mut self, window: &Window, loop_handle: &LoopHandle<'_, GlobalData>) {
         if let Some(tiled_tree) = &mut self.tiled_tree {
-            tiled_tree.remove(window, &mut self.tiled);
+            tiled_tree.remove(window, &mut self.tiled, loop_handle);
 
             if tiled_tree.is_empty() {
                 self.tiled_tree = None;
@@ -198,10 +214,10 @@ impl Workspace {
         }
     }
 
-    pub fn invert_window(&mut self) {
+    pub fn invert_window(&mut self, loop_handle: &LoopHandle<'_, GlobalData>) {
         if let Some(layout_tree) = &mut self.tiled_tree {
             if let Some(focus) = &self.focus {
-                layout_tree.invert_window(focus, &mut self.tiled);
+                layout_tree.invert_window(focus, &mut self.tiled, loop_handle);
         
                 #[cfg(feature = "trace_layout")]
                 layout_tree.print_tree();
@@ -209,7 +225,7 @@ impl Workspace {
         }
     }
 
-    pub fn modify_windows(&mut self, rec: Rectangle<i32, Logical>) {
+    pub fn modify_windows(&mut self, rec: Rectangle<i32, Logical>, loop_handle: &LoopHandle<'_, GlobalData>) {
         self.output_geometry = rec;
         if let Some(layout_tree) = &mut self.tiled_tree {
             let root_id = layout_tree.get_root().unwrap();
@@ -219,7 +235,8 @@ impl Workspace {
                     (GAP, GAP).into(),
                     (rec.size - (GAP * 2, GAP * 2).into()).into(),
                 ),
-                &mut self.tiled
+                &mut self.tiled,
+                loop_handle,
             );
         }
     }
@@ -272,15 +289,15 @@ impl Workspace {
         Some((window, rec))
     }
 
-    pub fn tiled_expansion(&mut self) {
+    pub fn tiled_expansion(&mut self, loop_handle: &LoopHandle<'_, GlobalData>) {
         if let Some(layout_tree) = &self.tiled_tree {
-            layout_tree.expansion(&mut self.tiled);
+            layout_tree.expansion(&mut self.tiled, loop_handle);
         }
     }
 
-    pub fn tiled_recover(&mut self) {
+    pub fn tiled_recover(&mut self, loop_handle: &LoopHandle<'_, GlobalData>) {
         if let Some(layout_tree) = &mut self.tiled_tree {
-            layout_tree.recover(&mut self.tiled);
+            layout_tree.recover(&mut self.tiled, loop_handle);
         }
     }
 }
@@ -378,16 +395,16 @@ impl WorkspaceManager {
         self.workspaces.iter().count()
     }
 
-    pub fn unmap_element(&mut self, window: &Window) {
-        self.current_workspace_mut().unmap_element(window);
+    pub fn unmap_element(&mut self, window: &Window, loop_handle: &LoopHandle<'_, GlobalData>) {
+        self.current_workspace_mut().unmap_element(window, loop_handle);
     }
 
-    pub fn invert_window(&mut self) {
-        self.current_workspace_mut().invert_window();
+    pub fn invert_window(&mut self, loop_handle: &LoopHandle<'_, GlobalData>) {
+        self.current_workspace_mut().invert_window(loop_handle);
     }
 
-    pub fn modify_windows(&mut self, rec: Rectangle<i32, Logical>) {
-        self.current_workspace_mut().modify_windows(rec);
+    pub fn modify_windows(&mut self, rec: Rectangle<i32, Logical>, loop_handle: &LoopHandle<'_, GlobalData>) {
+        self.current_workspace_mut().modify_windows(rec, loop_handle);
     }
 
     // pub fn resize(&mut self, offset: Point<i32, Logical>, edges: &ResizeEdge, rec: &mut Rectangle<i32, Logical>) {
@@ -414,11 +431,11 @@ impl WorkspaceManager {
         self.current_workspace_mut().check_grab(surface)
     }
 
-    pub fn tiled_expansion(&mut self) {
-        self.current_workspace_mut().tiled_expansion();
+    pub fn tiled_expansion(&mut self, loop_handle: &LoopHandle<'_, GlobalData>) {
+        self.current_workspace_mut().tiled_expansion(loop_handle);
     }
 
-    pub fn tiled_recover(&mut self) {
-        self.current_workspace_mut().tiled_recover();
+    pub fn tiled_recover(&mut self, loop_handle: &LoopHandle<'_, GlobalData>) {
+        self.current_workspace_mut().tiled_recover(loop_handle);
     }
 }

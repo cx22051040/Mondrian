@@ -12,6 +12,7 @@ use super::workspace::WorkspaceId;
 
 pub trait WindowExt {
     fn set_rec(&self, size: Size<i32, Logical>);
+    #[allow(dead_code)]
     fn get_title_and_id(&self) -> Option<(Option<String>, Option<String>)>;
 }
 

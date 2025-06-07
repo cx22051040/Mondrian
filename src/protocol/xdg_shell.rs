@@ -139,7 +139,7 @@ impl XdgShellHandler for GlobalData {
 
         match self.window_manager.remove_window(wl_surface) {
             Some(window) => {
-                self.workspace_manager.unmap_element(&window);
+                self.workspace_manager.unmap_element(&window, &self.loop_handle);
             }
             None => {
                 warn!("Failed to find window for toplevel destroy");

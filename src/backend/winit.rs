@@ -50,7 +50,7 @@ impl Winit {
                         let scale = Scale::from(scale.integer_scale());
 
                         data.workspace_manager
-                            .modify_windows(Rectangle::from_size(size.to_logical(scale)));
+                            .modify_windows(Rectangle::from_size(size.to_logical(scale)), &data.loop_handle);
                     }
                     WinitEvent::Input(event) => {
                         data.process_input_event(event);

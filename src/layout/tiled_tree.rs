@@ -51,7 +51,7 @@ impl TiledTree {
        }
     }
 
-    pub fn expansion(&self, space: &mut Space<Window>) {
+    pub fn expansion(&self, space: &mut Space<Window>, loop_handle: &LoopHandle<'_, GlobalData>) {
         if let Some(bound) = self.get_root_rec(space) {
             let width = (bound.size.w - 2*GAP) / 3;
             let height = bound.size.h;
@@ -60,8 +60,23 @@ impl TiledTree {
             for node in self.nodes.values() {
                 match node {
                     NodeData::Leaf { window } => {
+                        let from = space.element_geometry(window).unwrap();
+
                         window.set_rec((width, height).into());
                         space.map_element(window.clone(), loc, false);
+
+                        let window = window.clone();
+
+                        loop_handle.insert_idle(move |data| {
+                            data.render_manager.add_animation(
+                                window,
+                                from,
+                                Rectangle { loc, size: (width, height).into() },
+                                Duration::from_millis(30),
+                                crate::animation::AnimationType::EaseInOutQuad,
+                            );
+                        });
+
                         loc.x = loc.x + width + GAP;
                     }
                     _ => { }
@@ -70,11 +85,11 @@ impl TiledTree {
         }
     }
 
-    pub fn recover(&mut self, space: &mut Space<Window>) {
+    pub fn recover(&mut self, space: &mut Space<Window>, loop_handle: &LoopHandle<'_, GlobalData>) {
         if let Some(root_id) = self.get_root() {
             match self.nodes[root_id] {
                 NodeData::Split { rec , .. } => {
-                    self.modify(root_id, rec, space);
+                    self.modify(root_id, rec, space, loop_handle);
                 }
                 _ => { }
             }
@@ -228,7 +243,7 @@ impl TiledTree {
                     target.clone(),
                     rec,
                     original_rec,
-                    Duration::from_millis(60),
+                    Duration::from_millis(30),
                     crate::animation::AnimationType::EaseInOutQuad,
                 );
 
@@ -252,7 +267,7 @@ impl TiledTree {
                     new_window.clone(),
                     from,
                     new_rec,
-                    Duration::from_millis(60),
+                    Duration::from_millis(30),
                     crate::animation::AnimationType::EaseInOutQuad,
                 );
             });
@@ -282,7 +297,7 @@ impl TiledTree {
         self.insert_window(Some(&target.clone()), new_window, direction, space, loop_handle);
     }
 
-    pub fn remove(&mut self, target: &Window, space: &mut Space<Window>) -> bool {
+    pub fn remove(&mut self, target: &Window, space: &mut Space<Window>, loop_handle: &LoopHandle<'_, GlobalData>) -> bool {
         let target_id = match self.find_node(target) {
             Some(r) => {
                 r
@@ -326,10 +341,22 @@ impl TiledTree {
 
                 match sibling_data {
                     NodeData::Leaf { window } => {
+                        let from = space.element_geometry(&window).unwrap();
+
                         window.set_rec(rec.size);
                         space.map_element(window.clone(), rec.loc, false);
 
-                        self.nodes[parent_id] = NodeData::Leaf { window };
+                        self.nodes[parent_id] = NodeData::Leaf { window: window.clone() };
+
+                        loop_handle.insert_idle(move |data| {
+                            data.render_manager.add_animation(
+                                window,
+                                from,
+                                rec,
+                                Duration::from_millis(30),
+                                crate::animation::AnimationType::EaseInOutQuad,
+                            );
+                        });
                     },
                     NodeData::Split { direction, left, right, .. } => {
                         self.nodes[parent_id] = NodeData::Split { 
@@ -339,7 +366,7 @@ impl TiledTree {
                             left, 
                             right,
                         };
-                        self.modify(parent_id, rec, space);
+                        self.modify(parent_id, rec, space, loop_handle);
                     }
                 }
 
@@ -353,12 +380,25 @@ impl TiledTree {
         }
     }
 
-    pub fn modify(&mut self, node_id: NodeId, rec: Rectangle<i32, Logical>, space: &mut Space<Window>) {
+    pub fn modify(&mut self, node_id: NodeId, rec: Rectangle<i32, Logical>, space: &mut Space<Window>, loop_handle: &LoopHandle<'_, GlobalData>) {
         // modify the child tree with new rec with direction
         match &mut self.nodes[node_id] {
             NodeData::Leaf { window } => {
+                let from = space.element_geometry(&window).unwrap();
+
                 window.set_rec(rec.size);
                 space.map_element(window.clone(), rec.loc, false);
+
+                let window = window.clone();
+                loop_handle.insert_idle(move |data| {
+                    data.render_manager.add_animation(
+                        window,
+                        from,
+                        rec,
+                        Duration::from_millis(30),
+                        crate::animation::AnimationType::EaseInOutQuad,
+                    );
+                });
             },
             NodeData::Split { left, right, direction, rec: current_rec, offset } => {
                 let (l_rec, r_rec) = recover_new_rec(rec, direction, offset.clone());
@@ -368,13 +408,13 @@ impl TiledTree {
                 let left_id = *left;
                 let right_id = *right;
 
-                self.modify(left_id, l_rec, space);
-                self.modify(right_id, r_rec, space);
+                self.modify(left_id, l_rec, space, loop_handle);
+                self.modify(right_id, r_rec, space, loop_handle);
             }
         }
     }
 
-    pub fn invert_window(&mut self, target: &Window, space: &mut Space<Window>){
+    pub fn invert_window(&mut self, target: &Window, space: &mut Space<Window>, loop_handle: &LoopHandle<'_, GlobalData>){
         let target_id = match self.find_node(target) {
             Some(r) => {
                 r
@@ -402,13 +442,13 @@ impl TiledTree {
             NodeData::Split { direction, rec , .. } => {
                 *direction = direction.rotate_cw();
                 let rec = *rec;
-                self.modify(parent_id, rec, space);
+                self.modify(parent_id, rec, space, loop_handle);
             },
             NodeData::Leaf { .. } => { }
         }
     }
 
-    pub fn _resize(&mut self, target: &Window, offset: Point<i32, Logical>, space: &mut Space<Window>) {
+    pub fn _resize(&mut self, target: &Window, offset: Point<i32, Logical>, space: &mut Space<Window>, loop_handle: &LoopHandle<'_, GlobalData>) {
         let target_id = match self.find_node(target) {
             Some(r) => {
                 r
@@ -436,7 +476,7 @@ impl TiledTree {
             NodeData::Split { offset: current_offset, rec, .. } => {
                 *current_offset += offset;
                 let rec = *rec;
-                self.modify(parent_id, rec, space);
+                self.modify(parent_id, rec, space, loop_handle);
             },
             NodeData::Leaf { .. } => { }
         }
