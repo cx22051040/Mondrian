@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025 Alvin
+
 #![allow(irrefutable_let_patterns)]
 
 #[macro_use]
