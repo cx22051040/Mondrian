@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use anyhow::Context;
 use smithay::{
     backend::allocator::dmabuf::Dmabuf,
@@ -52,8 +54,7 @@ impl ClientData for ClientState {
 
 pub struct GlobalData {
     // config
-    #[allow(dead_code)]
-    pub configs: Configs,
+    pub configs: Arc<Configs>,
 
     pub backend: Backend,
     pub state: State,
@@ -83,7 +84,7 @@ impl GlobalData {
         display_handle: DisplayHandle,
     ) -> anyhow::Result<Self> {
         // load configs
-        let configs = Configs::new();
+        let configs = Arc::new(Configs::new());
         
         // init backend
         let mut backend = Backend::new(&loop_handle).context("Failed to create backend")?;
@@ -92,8 +93,8 @@ impl GlobalData {
         let mut nuonuo_state = State::new(&display_handle).context("Failed to create global state")?;
 
         // initial managers
-        let mut output_manager = OutputManager::new(&display_handle);
-        let mut workspace_manager = WorkspaceManager::new();
+        let mut output_manager = OutputManager::new(&display_handle, configs.clone());
+        let mut workspace_manager = WorkspaceManager::new(configs.conf_workspaces.clone());
         let window_manager = WindowManager::new();
         let cursor_manager = CursorManager::new("default", 24);
         let input_manager = InputManager::new(

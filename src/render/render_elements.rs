@@ -7,7 +7,7 @@ macro_rules! niri_render_elements {
     ($name:ident<R> => { $($variant:ident = $type:ty),+ $(,)? }) => {
         $crate::niri_render_elements!(@impl $name () ($name<R>) => { $($variant = $type),+ });
 
-        $(impl<R: $crate::render::NuonuoRenderer> From<$type> for $name<R> {
+        $(impl<R: $crate::render::MondrianRenderer> From<$type> for $name<R> {
             fn from(x: $type) -> Self {
                 Self::$variant(x)
             }
@@ -30,11 +30,11 @@ macro_rules! niri_render_elements {
     // names instead. Like this: $($name_R<SomeRenderer>)? $($name_no_R)? so only one is chosen.
     (@impl $name:ident ($($name_no_R:ident)?) ($($name_R:ident<$R:ident>)?) => { $($variant:ident = $type:ty),+ }) => {
         #[derive(Debug)]
-        pub enum $name$(<$R: $crate::render::NuonuoRenderer>)? {
+        pub enum $name$(<$R: $crate::render::MondrianRenderer>)? {
             $($variant($type)),+
         }
 
-        impl$(<$R: $crate::render::NuonuoRenderer>)? smithay::backend::renderer::element::Element for $name$(<$R>)? {
+        impl$(<$R: $crate::render::MondrianRenderer>)? smithay::backend::renderer::element::Element for $name$(<$R>)? {
             fn id(&self) -> &smithay::backend::renderer::element::Id {
                 match self {
                     $($name::$variant(elem) => elem.id()),+

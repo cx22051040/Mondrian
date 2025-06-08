@@ -328,7 +328,7 @@ impl Tty {
                 data.clock.now().as_millis()
             );
             // TODO: use true frame rate
-            let duration = Duration::from_millis(1000 / 60);
+            let duration = Duration::from_millis(1000 / 100);
             let next_frame_target = data.clock.now() + duration;
             let timer = Timer::from_duration(duration);
             data.next_frame_target = next_frame_target;

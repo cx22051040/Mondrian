@@ -58,6 +58,8 @@ impl BorderRenderElement {
                     UniformName::new("u_resolution", UniformType::_2f),
                     UniformName::new("border_color", UniformType::_3f),
                     UniformName::new("border_thickness", UniformType::_1f),
+                    UniformName::new("u_time", UniformType::_1f),
+                    UniformName::new("corner_radius", UniformType::_1f),
                 ],
             )
             .unwrap();

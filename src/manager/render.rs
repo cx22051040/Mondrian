@@ -5,11 +5,11 @@ use smithay::{
         element::{
             memory::MemoryRenderBufferRenderElement, surface::{render_elements_from_surface_tree, WaylandSurfaceRenderElement}, AsRenderElements, Kind
         }, gles::{GlesRenderer, Uniform}, Color32F
-    }, desktop::Window, utils::{Logical, Rectangle, Scale}
+    }, desktop::{layer_map_for_output, Window}, utils::{Logical, Rectangle, Scale}, wayland::shell::wlr_layer::Layer
 };
 
 use crate::{animation::{Animation, AnimationState, AnimationType}, manager::window::WindowExt, render::{
-        background::{Background, BackgroundRenderElement}, border::{BorderRenderElement, BorderShader}, elements::{CustomRenderElements, OutputRenderElements, ShaderRenderElement}, NuonuoRenderer
+        background::{Background, BackgroundRenderElement}, border::{BorderRenderElement, BorderShader}, elements::{CustomRenderElements, OutputRenderElements, ShaderRenderElement}, MondrianRenderer
     }};
 
 use super::{
@@ -35,7 +35,7 @@ impl RenderManager {
         BackgroundRenderElement::complie_shaders(renderer);
     }
 
-    pub fn get_render_elements<R: NuonuoRenderer>(
+    pub fn get_render_elements<R: MondrianRenderer>(
         &mut self,
         renderer: &mut R,
         output_manager: &OutputManager,
@@ -59,11 +59,7 @@ impl RenderManager {
 
         // Then Some Control elements
 
-        // Then Fullscreen
-        // TODO:
-
-        // Then LayerShell Overlay and Top
-        // TODO:
+        // Then fullscreen
 
         // Then Border
         output_elements.extend(
@@ -80,20 +76,18 @@ impl RenderManager {
         );
 
         // Then Shader and CustomRenderElements
-
-        // Then LayerShell Bottom and Background
         // TODO:
 
-        output_elements.extend(
-            self.get_background_render_elements(renderer, output_manager)
-                .into_iter()
-                .map(OutputRenderElements::Custom),
-        );
+        // output_elements.extend(
+        //     self.get_background_render_elements(renderer, output_manager)
+        //         .into_iter()
+        //         .map(OutputRenderElements::Custom),
+        // );
 
         output_elements
     }
 
-    pub fn get_windows_render_elements<R: NuonuoRenderer>(
+    pub fn get_windows_render_elements<R: MondrianRenderer>(
         &mut self,
         renderer: &mut R,
         output_manager: &OutputManager,
@@ -105,7 +99,26 @@ impl RenderManager {
         let mut elements: Vec::<WaylandSurfaceRenderElement<R>> = vec![];
 
         let output = output_manager.current_output();
+        let output_geo = output_manager.output_geometry(output).unwrap();
         let output_scale = output.current_scale().fractional_scale();
+
+        // layer shell top and overlap
+        let layer_map = layer_map_for_output(output);
+
+        for layer in [Layer::Overlay, Layer::Top] {
+            for layer_surface in layer_map.layers_on(layer) {
+                elements.extend(
+                    layer_surface.render_elements::<WaylandSurfaceRenderElement<R>>(
+                        renderer,
+                        output_geo.loc.to_physical_precise_round(output_scale),
+                        Scale::from(output_scale),
+                        0.85,
+                    )
+                );
+            }
+        }
+
+        // windows
         for window in workspace_manager.elements() {
 
             let location = match self.animations.get_mut(window) {
@@ -142,13 +155,27 @@ impl RenderManager {
             );
         }
 
+        // layer shell bottom and background
+        for layer in [Layer::Bottom, Layer::Background] {
+            for layer_surface in layer_map.layers_on(layer) {
+                elements.extend(
+                    layer_surface.render_elements::<WaylandSurfaceRenderElement<R>>(
+                        renderer,
+                        output_geo.loc.to_physical_precise_round(output_scale),
+                        Scale::from(output_scale),
+                        0.85,
+                    )
+                );
+            }
+        }
+
         elements
             .into_iter()
             .map(CustomRenderElements::Surface)
             .collect()
     }
 
-    pub fn get_cursor_render_elements<R: NuonuoRenderer>(
+    pub fn get_cursor_render_elements<R: MondrianRenderer>(
         &self,
         renderer: &mut R,
         output_manager: &OutputManager,
@@ -238,7 +265,7 @@ impl RenderManager {
         pointer_render_elements
     }
 
-    pub fn get_border_render_elements<R: NuonuoRenderer>(
+    pub fn get_border_render_elements<R: MondrianRenderer>(
         &self,
         renderer: &mut R,
         workspace_manager: &WorkspaceManager,
@@ -287,6 +314,8 @@ impl RenderManager {
                             Uniform::new("u_resolution", (point.x as f32, point.y as f32)),
                             Uniform::new("border_color", (border_color.r(), border_color.g(), border_color.b())), 
                             Uniform::new("border_thickness", border_thickness),
+                            Uniform::new("u_time", self.start_time.elapsed().as_secs_f32() % (2.0 * 3.1415926)), // TODO: just a test
+                            Uniform::new("corner_radius", 10.0),
                         ],
                         Kind::Unspecified,
                     )
@@ -297,7 +326,7 @@ impl RenderManager {
         elements
     }
     
-    pub fn get_background_render_elements<R: NuonuoRenderer>(
+    pub fn _get_background_render_elements<R: MondrianRenderer>(
         &self,
         renderer: &mut R,
         output_manager: &OutputManager,

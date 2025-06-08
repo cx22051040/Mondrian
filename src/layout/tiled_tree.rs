@@ -7,8 +7,6 @@ use crate::{layout::{neighbor_graph::NeighborGraph, Direction}, manager::window:
 
 use super::json_tiled_tree::JsonTree;
 
-const GAP: i32 = 12;
-
 #[derive(Debug, Clone)]
 pub enum TiledScheme {
     Default,
@@ -37,10 +35,12 @@ pub struct TiledTree {
     spiral_node: Option<NodeId>,
     root: Option<NodeId>,
     neighbor_graph: NeighborGraph,
+
+    gap: i32,
 }
 
 impl TiledTree {
-    pub fn new(window: Window) -> Self {
+    pub fn new(window: Window, gap: i32) -> Self {
         let mut nodes = SlotMap::with_key();
         let root = Some(nodes.insert(NodeData::Leaf { window }));
         let spiral_node = root.clone();
@@ -49,13 +49,15 @@ impl TiledTree {
             nodes,
             spiral_node,
             root,
-            neighbor_graph: NeighborGraph::new()
+            neighbor_graph: NeighborGraph::new(),
+
+            gap,
        }
     }
 
     pub fn expansion(&self, space: &mut Space<Window>, loop_handle: &LoopHandle<'_, GlobalData>) {
         if let Some(bound) = self.get_root_rec(space) {
-            let width = (bound.size.w - 2*GAP) / 3;
+            let width = (bound.size.w - 2*self.gap) / 3;
             let height = bound.size.h;
             let mut loc = bound.loc;
 
@@ -79,7 +81,7 @@ impl TiledTree {
                             );
                         });
 
-                        loc.x = loc.x + width + GAP;
+                        loc.x = loc.x + width + self.gap;
                     }
                     _ => { }
                 }
@@ -204,7 +206,7 @@ impl TiledTree {
             };
             
             let mut original_rec = rec.clone();
-            let new_rec = get_new_rec(&direction, &mut original_rec);
+            let new_rec = get_new_rec(&direction, &mut original_rec, self.gap);
             
             // TODO: merge
             target.set_rec(original_rec.size);
@@ -418,7 +420,7 @@ impl TiledTree {
                 });
             },
             NodeData::Split { left, right, direction, rec: current_rec, offset } => {
-                let (l_rec, r_rec) = recover_new_rec(rec, direction, offset.clone());
+                let (l_rec, r_rec) = recover_new_rec(rec, direction, offset.clone(), self.gap);
 
                 *current_rec = rec.clone();
 
@@ -519,7 +521,6 @@ impl TiledTree {
             if let Some([a, b]) = self.nodes.get_disjoint_mut([neighbor_id, focus_id]) {
                 match (a, b) {
                     (NodeData::Leaf { window: win_a }, NodeData::Leaf { window: win_b }) => {
-                        // 交换 window
                         swap(win_a, win_b);
             
                         win_a.set_rec(neighbor_rec.size);
@@ -588,11 +589,9 @@ impl TiledTree {
     }
 }
 
-fn recover_new_rec(rec: Rectangle<i32, Logical>, direction: &Direction, offset: Point<i32, Logical>) -> (Rectangle<i32, Logical>, Rectangle<i32, Logical>) {
+fn recover_new_rec(rec: Rectangle<i32, Logical>, direction: &Direction, offset: Point<i32, Logical>, gap: i32) -> (Rectangle<i32, Logical>, Rectangle<i32, Logical>) {
     let mut l_rec = rec;
     let mut r_rec = rec;
-
-    let gap = (GAP as f32 * 0.5) as i32;
 
     match direction {
         Direction::Left | Direction::Right => {
@@ -600,25 +599,23 @@ fn recover_new_rec(rec: Rectangle<i32, Logical>, direction: &Direction, offset: 
             l_rec.size.w = half + offset.x;
             r_rec.size.w = half - offset.x;
 
-            r_rec.loc.x += half + GAP + offset.x;
+            r_rec.loc.x += half + gap + offset.x;
         }
         Direction::Up | Direction::Down => {
             let half = rec.size.h / 2 - gap;
             l_rec.size.h = half + offset.y;
             r_rec.size.h = half - offset.y;
 
-            r_rec.loc.y += half + GAP + offset.y;
+            r_rec.loc.y += half + gap + offset.y;
         }
     }
 
     (l_rec, r_rec)
 }
 
-fn get_new_rec(direction: &Direction, rec: &mut Rectangle<i32, Logical>) -> Rectangle<i32, Logical> {
+fn get_new_rec(direction: &Direction, rec: &mut Rectangle<i32, Logical>, gap: i32) -> Rectangle<i32, Logical> {
 
     let mut new_rec = *rec;
-
-    let gap = (GAP as f32 * 0.5) as i32;
 
     match direction {
         Direction::Left | Direction::Right => {
@@ -627,9 +624,9 @@ fn get_new_rec(direction: &Direction, rec: &mut Rectangle<i32, Logical>) -> Rect
             rec.size.w = half;
 
             if direction == &Direction::Left {
-                rec.loc.x += half + GAP;
+                rec.loc.x += half + gap;
             } else {
-                new_rec.loc.x += half + GAP;
+                new_rec.loc.x += half + gap;
             }
 
             new_rec
@@ -640,9 +637,9 @@ fn get_new_rec(direction: &Direction, rec: &mut Rectangle<i32, Logical>) -> Rect
             rec.size.h = half;
 
             if direction == &Direction::Up {
-                rec.loc.y += half + GAP;
+                rec.loc.y += half + gap;
             } else {
-                new_rec.loc.y += half + GAP;
+                new_rec.loc.y += half + gap;
             }
 
             new_rec

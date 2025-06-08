@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use smithay::{
     desktop::{Space, Window},
     output::{Mode, Output, PhysicalProperties, Scale, Subpixel},
@@ -6,7 +8,7 @@ use smithay::{
     wayland::output::OutputManagerState,
 };
 
-use crate::state::GlobalData;
+use crate::{config::Configs, state::GlobalData};
 
 #[derive(Debug)]
 pub struct OutputElement {
@@ -45,10 +47,13 @@ pub struct OutputManager {
     // This space does not actually contain any windows, but all outputs are
     // mapped into it
     pub output_space: Space<Window>,
+
+    #[allow(dead_code)]
+    pub configs: Arc<Configs>,
 }
 
 impl OutputManager {
-    pub fn new(display_handle: &DisplayHandle) -> Self {
+    pub fn new(display_handle: &DisplayHandle, configs: Arc<Configs>) -> Self {
         let output_manager_state =
             OutputManagerState::new_with_xdg_output::<GlobalData>(display_handle);
         let output_space: Space<Window> = Default::default();
@@ -57,6 +62,7 @@ impl OutputManager {
             outputs: Vec::new(),
             output_manager_state,
             output_space,
+            configs,
         }
     }
 

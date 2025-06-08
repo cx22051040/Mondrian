@@ -9,7 +9,7 @@ pub mod render_elements;
 pub mod background;
 
 /// Trait with our main renderer requirements to save on the typing.
-pub trait NuonuoRenderer:
+pub trait MondrianRenderer:
     ImportAll
     + ImportMem
     + ExportMem
@@ -26,7 +26,7 @@ pub trait NuonuoRenderer:
         + 'static;
 }
 
-impl<R> NuonuoRenderer for R
+impl<R> MondrianRenderer for R
 where
     R: ImportAll + ImportMem + ImportMemWl + ExportMem + AsGlesRenderer,
     R::TextureId: Texture + Clone + Send + 'static,

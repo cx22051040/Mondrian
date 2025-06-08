@@ -85,6 +85,8 @@ fn main() -> anyhow::Result<()> {
     
     unsafe { std::env::set_var("WAYLAND_DISPLAY", &socket_name) };
 
+    global_data.configs.init();
+
     // start the project
     let mut args = std::env::args().skip(1);
     let flag = args.next();

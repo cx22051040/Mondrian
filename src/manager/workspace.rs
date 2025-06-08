@@ -1,4 +1,4 @@
-use std::{hash::Hash, sync::atomic::{AtomicUsize, Ordering}, time::Duration};
+use std::{hash::Hash, sync::{atomic::{AtomicUsize, Ordering}, Arc}, time::Duration};
 
 use smithay::{
     desktop::{Space, Window},
@@ -7,12 +7,11 @@ use smithay::{
     utils::{Logical, Point, Rectangle},
 };
 
-use crate::{layout::{tiled_tree::{TiledScheme, TiledTree}, Direction}, state::GlobalData};
+use crate::{config::WorkspaceConfigs, layout::{tiled_tree::{TiledScheme, TiledTree}, Direction}, state::GlobalData};
 
 use super::window::WindowExt;
 
 static NEXT_ID: AtomicUsize = AtomicUsize::new(1);
-const GAP: i32 = 12;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct WorkspaceId(usize);
@@ -40,6 +39,8 @@ pub struct Workspace {
     pub tiled_tree: Option<TiledTree>,
     pub focus: Option<Window>,
     pub output_geometry: Rectangle<i32, Logical>,
+
+    configs: Arc<WorkspaceConfigs>,
 }
 
 impl Workspace {
@@ -47,6 +48,7 @@ impl Workspace {
         output: &Output,
         output_geometry: Rectangle<i32, Logical>,
         scheme: TiledScheme,
+        configs: Arc<WorkspaceConfigs>
     ) -> Self {
         let mut tiled: Space<Window> = Default::default();
         let mut floating: Space<Window> = Default::default();
@@ -63,6 +65,8 @@ impl Workspace {
             tiled_tree: None,
             focus: None,
             output_geometry,
+
+            configs,
         }
     }
 
@@ -86,13 +90,13 @@ impl Workspace {
 
         if self.tiled_tree.is_none() {
             let rec = Rectangle {
-                loc: (GAP, GAP).into(),
-                size: (self.output_geometry.size - (GAP * 2, GAP * 2).into()).into()
+                loc: (self.configs.gap, self.configs.gap).into(),
+                size: (self.output_geometry.size - (self.configs.gap * 2, self.configs.gap * 2).into()).into()
             };
 
             window.set_rec(rec.size);
             self.tiled.map_element(window.clone(), rec.loc, activate);
-            self.tiled_tree = Some(TiledTree::new(window.clone()));
+            self.tiled_tree = Some(TiledTree::new(window.clone(), self.configs.gap));
 
             // set focus
             if activate {
@@ -233,8 +237,8 @@ impl Workspace {
             layout_tree.modify(
                 root_id,
                 Rectangle::new(
-                    (GAP, GAP).into(),
-                    (rec.size - (GAP * 2, GAP * 2).into()).into(),
+                    (self.configs.gap, self.configs.gap).into(),
+                    (rec.size - (self.configs.gap * 2, self.configs.gap * 2).into()).into(),
                 ),
                 &mut self.tiled,
                 loop_handle,
@@ -307,13 +311,15 @@ impl Workspace {
 pub struct WorkspaceManager {
     pub workspaces: Vec<Workspace>,
     pub activated_workspace: Option<WorkspaceId>,
+    configs: Arc<WorkspaceConfigs>,
 }
 
 impl WorkspaceManager {
-    pub fn new() -> Self {
+    pub fn new(configs: Arc<WorkspaceConfigs>) -> Self {
         Self {
             workspaces: vec![],
             activated_workspace: None,
+            configs,
         }
     }
 
@@ -328,7 +334,8 @@ impl WorkspaceManager {
         let workspace = Workspace::new(
             output,
             output_geometry,
-            scheme.unwrap_or_else(|| TiledScheme::Default),
+            scheme.unwrap_or_else(|| self.configs.scheme.clone()),
+            self.configs.clone(),
         );
 
         if activate {
