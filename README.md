@@ -1,6 +1,6 @@
-## 进栈不排队 - OS 功能赛道
+## 进栈不排队 - proj340 - Wayland 平铺式桌面管理器
 
-### Wayland 平铺式桌面管理器
+---
 
 ```
 ███╗   ███╗ ██████╗ ███╗   ██╗██████╗ ██████╗ ██╗ █████╗ ███╗   ██╗
@@ -13,16 +13,17 @@
 
 ### 目录
 
-- [进栈不排队 - OS 功能赛道](#进栈不排队---os-功能赛道)
-  - [Wayland 平铺式桌面管理器](#wayland-平铺式桌面管理器)
+- [进栈不排队 - proj340 - Wayland 平铺式桌面管理器](#进栈不排队---proj340---wayland-平铺式桌面管理器)
   - [目录](#目录)
   - [基本信息](#基本信息)
-  - [项目简介（图片待更换）](#项目简介图片待更换)
+  - [项目简介](#项目简介)
+  - [项目演示](#项目演示)
   - [项目运行](#项目运行)
   - [项目结构](#项目结构)
   - [TODO](#todo)
 - [参考文件](#参考文件)
 - [贡献者](#贡献者)
+
 
 ### 基本信息
 
@@ -36,32 +37,71 @@
   - 陈序
 - 指导老师：周旭，王俊美
 
-### 项目简介（图片待更换）
 
-> 本项目的详细技术文档目录在 /wiki/* 下，其中包含了详细的模块设计，解释，测试评估等内容。
+### 项目简介
+
+> 本项目的详细技术文档目录在 wiki 中，其中包含了详细的模块设计，解释，测试评估等内容。
 
 本项目基于 [Smithay](https://github.com/Smithay/smithay.git) 使用 `Rust` 开发了一个使用 `Wayland` 协议的平铺式桌面管理器。
 
-![introduce](wiki/README/introduce.png)
+![whole](wiki/README/whole.png)
+
+- **设计哲学**
+
+  > “Beauty is the promise of happiness.” — Stendhal
+
+  - 本项目秉持 **“优雅即力量”** 的设计哲学，力求在系统结构与用户体验之间取得和谐平衡。无论是内部代码逻辑还是外部交互呈现，都追求简洁、清晰而富有韵律的表达。
+
+- **代码体量**
+
+  - 累计修改超 **10,000** 行代码，新增 **5,000+** 行，配套文档逾 **20,000** 字，涵盖架构设计、接口协议与开发细节。
+
+- **全栈实现**
+
+  - 实现双后端架构：`winit` 支持桌面环境，`tty` 支持裸机直启，图形界面无需登录管理器，直接运行于 GPU 设备之上。
+
+- **数据结构与算法**
+
+  - 引入改造后的 ***容器式二叉树布局算法***，实现灵活的平铺与窗口变换；结合 `SlotMap` 实现节点的 **常数时间** 复杂度插入、删除与查找，极大提升动态性能。
+
+- **动画与渲染**
+
+  - 自定义过渡动画与渲染逻辑，配合手写 `GLSL` shader，实现流畅、响应式的交互体验，视觉层次统一且精致。
+
+
+### 项目演示
+
 ![show](wiki/README/show.png)
 
-截止初赛：
+![show2](wiki/README/show2.png)
 
-- 代码修改量超 `1w` 行，增量 `5k` 行，配套文档超 `?` 字。
-- 实现 `winit` 与 `tty` 两后端，允许在 `tty` 裸机环境下启动项目，开启图形化界面（目前只支持拥有GPU的设备）。
-- 基于二叉树改造 `容器二叉树算法` 实现动态平铺效果，并且使用 `SlotMap` 将查询，插入，删除的时间复杂度降低至 `O(1)` 级别。
-- 自定义多种动画效果与渲染效果，手写 `shader` 代码美化界面。
+![show3](wiki/README/show3.png)
 
 ### 项目运行
 
-TODO: Wayland 协议的环境基础配置需求
-TODO: Rust 语言的环境基础配置需求
+Wayland 基础协议配置：
+
+```bash
+# archlinux
+sudo pacman -S --needed wayland
+
+# ubuntu must use 25.05 or above, don't need any operations
+
+# extra
+# fcitx5 输入法安装
+sudo pacman -S fcitx5-im fcitx5-chinese-addons fcitx5-rime
+
+# kitty 终端安装
+sudo pacman -S kitty
+```
+
+项目运行：
 
 ```bash
 # 获取源代码
-git clone https://github.com/Linermao/Nuonuo.git
+git clone https://github.com/Linermao/Mondrian.git
 
-cd /Nuonuo
+cd /Mondrian
 
 # 初始化配置文件
 cargo build
@@ -103,7 +143,7 @@ cargo build --release
 - [x] 实现动态平铺算法
 - [x] 实现 `tty` 裸机启动
 - [x] 实现多种平铺算法的热切换与自定义调整
-- [ ] 实现动画效果
+- [x] 实现动画效果
 - [ ] 实现多显示器（output）的输出逻辑
 - [ ] 优化工作区（workspace）的切换逻辑
 - [ ] 实现软件组布局记忆功能
