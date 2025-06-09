@@ -6,7 +6,7 @@
 
 `Smithay` 使用 `rust` 封装了使用 `Wayland` 协议的一些基本内容，实现了核心 `Wayland` 协议以及一些重要的协议。
 
-[https://github.com/Smithay/smitha](https://github.com/Smithay/smithay)
+[https://github.com/Smithay/smithay](https://github.com/Smithay/smithay)
 
 本文的基础框架代码：[TODO](TOOD)
 

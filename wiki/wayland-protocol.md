@@ -30,13 +30,13 @@
   - GUI 应用程序通过协议与服务器通信，实现窗口创建、绘图与事件交互。
 
 <div align = center>
-    <img src = "wayland-protocol/LinuxGraphStack.svg">
-    <p style="font-size:14px;">Figure 1 from upload.wikimedia.org</p>
+    <img src = "wayland-protocol/linux图形人机交互.jpg">
+    <p style="font-size:14px;">Figure 1 人机交互</p>
 </div>
 
 <div align = center>
-    <img src = "wayland-protocol/fullStack.svg">
-    <p style="font-size:14px;">Figure 2 By Shmuel Csaba Otto Traian, CC BY-SA 3.0, https://commons.wikimedia.org/w/index.php?curid=29272912</p>
+    <img src = "wayland-protocol/linux图形栈.png">
+    <p style="font-size:14px;">Figure 2 linux 图形栈</p>
 </div>
 
 ### X11 协议
@@ -55,8 +55,8 @@ X11 协议支持网络透明性，即 X Client 和 X Server 可以运行在不�
 尽管历经多年优化，X11 的架构问题已难以适应现代图形性能与安全性的需求。
 
 <div align = center>
-    <img src = "wayland-protocol/x11.svg">
-    <p style="font-size:14px;">Figure 3 from upload.wikimedia.org</p>
+    <img src = "wayland-protocol/x11.png">
+    <p style="font-size:14px;">Figure 3 x11 协议演示图</p>
 </div>
 
 ### Wayland 协议
