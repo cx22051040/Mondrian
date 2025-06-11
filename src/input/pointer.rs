@@ -325,17 +325,18 @@ impl GlobalData {
         } 
         
         // The window
-        else if let Some((window, location)) = self
+        else if let Some((window, window_loc)) = self
             .workspace_manager
             .window_under(position)
             .map(|(w, p)| (w.clone(), p))
         {
-            if let Some(surface) = window
-                .surface_under(position - location.to_f64(), WindowSurfaceType::ALL)
-                .map(|(s, _)| s) {
+            if let Some((surface, surface_loc)) = window
+                .surface_under(position - window_loc.to_f64(), WindowSurfaceType::ALL)
+                .map(|(surface, surface_loc)| (surface, surface_loc)) {
+
                     self.workspace_manager.set_focus(Some(window));
         
-                    return Some((surface, location.to_f64()));
+                    return Some((surface, (surface_loc + window_loc).to_f64()));
                 }
         } 
         
