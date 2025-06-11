@@ -75,7 +75,7 @@ impl OutputManager {
         model: String,
         location: Point<i32, Logical>,
         activate: bool,
-        display_handle: &DisplayHandle
+        display_handle: &DisplayHandle,
     ) {
         let output = Output::new(
             name,
@@ -94,10 +94,7 @@ impl OutputManager {
     }
 
     pub fn remove_output(&mut self, output: &Output) {
-        if let Some(pos) = self.outputs
-            .iter()
-            .position(|o| o.output == *output) 
-        {
+        if let Some(pos) = self.outputs.iter().position(|o| o.output == *output) {
             self.output_space.unmap_output(output);
             self.outputs.remove(pos);
         } else {

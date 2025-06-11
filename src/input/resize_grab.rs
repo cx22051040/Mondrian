@@ -1,9 +1,7 @@
 use smithay::{
     desktop::Window,
     input::pointer::{CursorImageStatus, GrabStartData as PointerGrabStartData, PointerGrab},
-    reexports::{
-        wayland_protocols::xdg::shell::server::xdg_toplevel::{self, ResizeEdge},
-    },
+    reexports::wayland_protocols::xdg::shell::server::xdg_toplevel::{self, ResizeEdge},
     utils::{Logical, Rectangle},
 };
 
@@ -25,7 +23,6 @@ impl ResizeSurfaceGrab {
         edges: ResizeEdge,
         initial_rect: Rectangle<i32, Logical>,
     ) -> Self {
-
         let xdg = window.toplevel().unwrap();
         xdg.with_pending_state(|state| {
             state.states.set(xdg_toplevel::State::Resizing);
@@ -52,7 +49,7 @@ impl PointerGrab<GlobalData> for ResizeSurfaceGrab {
             state.states.unset(xdg_toplevel::State::Resizing);
         });
         toplevel.send_pending_configure();
-        
+
         state
             .cursor_manager
             .set_cursor_image(CursorImageStatus::default_named());
@@ -71,7 +68,7 @@ impl PointerGrab<GlobalData> for ResizeSurfaceGrab {
         handle.motion(data, None, event);
 
         let _delta = event.location - self.start_data.location;
-        
+
         // data.workspace_manager
         //     .resize(delta.to_i32_round(), &self.edges, &mut self.initial_rect);
 
@@ -246,7 +243,6 @@ impl PointerGrab<GlobalData> for ResizeSurfaceGrab {
         handle.gesture_hold_end(data, event);
     }
 }
-
 
 // TODO: only for floating window
 // pub fn handle_commit(workspace_manager: &mut WorkspaceManager, surface: &WlSurface) -> Option<()> {

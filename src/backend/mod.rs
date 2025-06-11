@@ -1,17 +1,21 @@
 pub mod tty;
 pub mod winit;
 
-use smithay::{backend::allocator::dmabuf::Dmabuf, reexports::{calloop::LoopHandle, wayland_server::{protocol::wl_surface::WlSurface, DisplayHandle}}};
+use smithay::{
+    backend::allocator::dmabuf::Dmabuf,
+    reexports::{
+        calloop::LoopHandle,
+        wayland_server::{DisplayHandle, protocol::wl_surface::WlSurface},
+    },
+};
 
 use tty::Tty;
 use winit::Winit;
 
 use crate::{
-    manager::{
-        output::OutputManager, 
-        render::RenderManager
-    }, 
-    state::{GlobalData, State}, utils::errors::AnyHowErr
+    manager::{output::OutputManager, render::RenderManager},
+    state::{GlobalData, State},
+    utils::errors::AnyHowErr,
 };
 
 pub enum Backend {
@@ -30,14 +34,12 @@ impl Backend {
         if has_display {
             info!("Using winit backend");
 
-            let winit = Winit::new(loop_handle)
-                .anyhow_err("Failed to create winit backend")?;
+            let winit = Winit::new(loop_handle).anyhow_err("Failed to create winit backend")?;
             Ok(Backend::Winit(winit))
         } else {
             info!("Using tty backend");
 
-            let tty = Tty::new(loop_handle)
-                .anyhow_err("Failed to create tty backend")?;
+            let tty = Tty::new(loop_handle).anyhow_err("Failed to create tty backend")?;
             Ok(Backend::Tty(tty))
         }
     }
@@ -67,8 +69,16 @@ impl Backend {
         state: &mut State,
     ) {
         match self {
-            Backend::Tty(tty) => tty.init(loop_handle, display_handle, output_manager, render_manager, state),
-            Backend::Winit(winit) => winit.init(display_handle, output_manager, render_manager, state),
+            Backend::Tty(tty) => tty.init(
+                loop_handle,
+                display_handle,
+                output_manager,
+                render_manager,
+                state,
+            ),
+            Backend::Winit(winit) => {
+                winit.init(display_handle, output_manager, render_manager, state)
+            }
         }
     }
 
@@ -92,9 +102,7 @@ impl Backend {
     pub fn early_import(&mut self, surface: &WlSurface) {
         match self {
             Backend::Tty(tty) => tty.early_import(surface),
-            Backend::Winit(_) => {},
+            Backend::Winit(_) => {}
         }
     }
-
 }
-

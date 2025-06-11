@@ -1,9 +1,17 @@
 use std::{mem::swap, time::Duration};
 
-use slotmap::{new_key_type, SlotMap};
-use smithay::{desktop::{Space, Window}, reexports::calloop::LoopHandle, utils::{Logical, Point, Rectangle}};
+use slotmap::{SlotMap, new_key_type};
+use smithay::{
+    desktop::{Space, Window},
+    reexports::calloop::LoopHandle,
+    utils::{Logical, Point, Rectangle},
+};
 
-use crate::{layout::{neighbor_graph::NeighborGraph, Direction}, manager::window::WindowExt, state::GlobalData};
+use crate::{
+    layout::{Direction, neighbor_graph::NeighborGraph},
+    manager::window::WindowExt,
+    state::GlobalData,
+};
 
 use super::json_tiled_tree::JsonTree;
 
@@ -19,14 +27,16 @@ new_key_type! {
 
 #[derive(Debug, Clone)]
 pub enum NodeData {
-    Leaf { window: Window },
+    Leaf {
+        window: Window,
+    },
     Split {
         direction: Direction,
         rec: Rectangle<i32, Logical>,
         offset: Point<i32, Logical>,
         left: NodeId,
         right: NodeId,
-    }
+    },
 }
 
 #[derive(Debug)]
@@ -45,19 +55,19 @@ impl TiledTree {
         let root = Some(nodes.insert(NodeData::Leaf { window }));
         let spiral_node = root.clone();
 
-        Self { 
+        Self {
             nodes,
             spiral_node,
             root,
             neighbor_graph: NeighborGraph::new(),
 
             gap,
-       }
+        }
     }
 
     pub fn expansion(&self, space: &mut Space<Window>, loop_handle: &LoopHandle<'_, GlobalData>) {
         if let Some(bound) = self.get_root_rec(space) {
-            let width = (bound.size.w - 2*self.gap) / 3;
+            let width = (bound.size.w - 2 * self.gap) / 3;
             let height = bound.size.h;
             let mut loc = bound.loc;
 
@@ -75,7 +85,10 @@ impl TiledTree {
                             data.render_manager.add_animation(
                                 window,
                                 from,
-                                Rectangle { loc, size: (width, height).into() },
+                                Rectangle {
+                                    loc,
+                                    size: (width, height).into(),
+                                },
                                 Duration::from_millis(30),
                                 crate::animation::AnimationType::EaseInOutQuad,
                             );
@@ -83,7 +96,7 @@ impl TiledTree {
 
                         loc.x = loc.x + width + self.gap;
                     }
-                    _ => { }
+                    _ => {}
                 }
             }
         }
@@ -92,36 +105,35 @@ impl TiledTree {
     pub fn recover(&mut self, space: &mut Space<Window>, loop_handle: &LoopHandle<'_, GlobalData>) {
         if let Some(root_id) = self.get_root() {
             match self.nodes[root_id] {
-                NodeData::Split { rec , .. } => {
+                NodeData::Split { rec, .. } => {
                     self.modify(root_id, rec, space, loop_handle);
                 }
-                _ => { }
-            }
-        }
-    }
-    
-    pub fn get_root(&self) -> Option<NodeId> {
-        self.root
-    }
-    
-    pub fn get_root_rec(&self, space: &mut Space<Window>) -> Option<Rectangle<i32, Logical>>{
-        match self.get_root() {
-            Some(root_id) => {
-                match &self.nodes[root_id] {
-                    NodeData::Leaf { window } => { space.element_geometry(window) }
-                    NodeData::Split { rec, .. } => Some(rec.clone())
-                }
-            }
-            None => {
-                None
+                _ => {}
             }
         }
     }
 
-    pub fn get_count(&self) -> usize {
-        self.nodes.values().filter(|node| matches!(node, NodeData::Leaf { .. })).count()
+    pub fn get_root(&self) -> Option<NodeId> {
+        self.root
     }
-    
+
+    pub fn get_root_rec(&self, space: &mut Space<Window>) -> Option<Rectangle<i32, Logical>> {
+        match self.get_root() {
+            Some(root_id) => match &self.nodes[root_id] {
+                NodeData::Leaf { window } => space.element_geometry(window),
+                NodeData::Split { rec, .. } => Some(rec.clone()),
+            },
+            None => None,
+        }
+    }
+
+    pub fn get_count(&self) -> usize {
+        self.nodes
+            .values()
+            .filter(|node| matches!(node, NodeData::Leaf { .. }))
+            .count()
+    }
+
     fn find_parent_and_sibling(&self, target: NodeId) -> Option<(NodeId, NodeId)> {
         self.nodes.iter().find_map(|(id, data)| match data {
             NodeData::Split { left, right, .. } => {
@@ -142,30 +154,25 @@ impl TiledTree {
     }
 
     pub fn find_node(&self, window: &Window) -> Option<NodeId> {
-        self.nodes.iter()
-            .find_map(|(id, data)| match data {
-                NodeData::Leaf { window: w } if w == window => Some(id),
-                _ => None,
-            })
+        self.nodes.iter().find_map(|(id, data)| match data {
+            NodeData::Leaf { window: w } if w == window => Some(id),
+            _ => None,
+        })
     }
 
     pub fn get_first_window(&self) -> Option<&Window> {
         let root_id = match self.get_root() {
-            Some(r) => {
-                r
-            }
+            Some(r) => r,
             None => {
                 warn!("Failed to get root_id");
-                return None
+                return None;
             }
         };
 
         fn get_window(nodes: &SlotMap<NodeId, NodeData>, id: NodeId) -> Option<&Window> {
             match &nodes[id] {
                 NodeData::Leaf { window } => Some(window),
-                NodeData::Split { left, .. } => {
-                    get_window(nodes, *left)
-                }
+                NodeData::Split { left, .. } => get_window(nodes, *left),
             }
         }
 
@@ -173,41 +180,38 @@ impl TiledTree {
     }
 
     pub fn insert_window(
-        &mut self, 
-        target: Option<&Window>, 
-        new_window: Window, 
-        direction: Direction, 
+        &mut self,
+        target: Option<&Window>,
+        new_window: Window,
+        direction: Direction,
         space: &mut Space<Window>,
         loop_handle: &LoopHandle<'_, GlobalData>,
     ) -> bool {
-
         let target = match target {
             Some(window) => window.clone(),
-            None => {
-                match self.get_first_window() {
-                    Some(window) => window.clone(),
-                    None => {
-                        warn!("Failed to get first window");
-                        return false
-                    }
+            None => match self.get_first_window() {
+                Some(window) => window.clone(),
+                None => {
+                    warn!("Failed to get first window");
+                    return false;
                 }
-            }
+            },
         };
 
         if let Some(target_id) = self.find_node(&target) {
             // resize
             // TODO: use server geometry
-            let rec = match space.element_geometry(&target){
+            let rec = match space.element_geometry(&target) {
                 Some(r) => r,
                 None => {
                     warn!("Failed to get window rectangle");
-                    return false
+                    return false;
                 }
             };
-            
+
             let mut original_rec = rec.clone();
             let new_rec = get_new_rec(&direction, &mut original_rec, self.gap);
-            
+
             // TODO: merge
             target.set_rec(original_rec.size);
             new_window.set_rec(new_rec.size);
@@ -215,8 +219,12 @@ impl TiledTree {
             space.map_element(new_window.clone(), new_rec.loc, true);
 
             // adjust tree
-            let old_leaf = self.nodes.insert(NodeData::Leaf { window: target.clone() });
-            let new_leaf = self.nodes.insert(NodeData::Leaf { window: new_window.clone() });
+            let old_leaf = self.nodes.insert(NodeData::Leaf {
+                window: target.clone(),
+            });
+            let new_leaf = self.nodes.insert(NodeData::Leaf {
+                window: new_window.clone(),
+            });
 
             self.spiral_node = Some(new_leaf);
 
@@ -239,11 +247,12 @@ impl TiledTree {
                         left: old_leaf,
                         right: new_leaf,
                     };
-                }   
+                }
             }
 
             // modify neighbor_graph
-            self.neighbor_graph.tiled_add(target.clone(), direction.clone(), new_window.clone());
+            self.neighbor_graph
+                .tiled_add(target.clone(), direction.clone(), new_window.clone());
 
             // TODO: use config
             // create animation
@@ -287,9 +296,13 @@ impl TiledTree {
         }
     }
 
-    pub fn insert_window_spiral(&mut self, new_window: Window, space: &mut Space<Window>, loop_handle: &LoopHandle<'_, GlobalData>) {
-
-        let spiarl_node  = match self.spiral_node {
+    pub fn insert_window_spiral(
+        &mut self,
+        new_window: Window,
+        space: &mut Space<Window>,
+        loop_handle: &LoopHandle<'_, GlobalData>,
+    ) {
+        let spiarl_node = match self.spiral_node {
             Some(node_id) => &self.nodes[node_id],
             None => {
                 return;
@@ -297,23 +310,35 @@ impl TiledTree {
         };
 
         let target = match spiarl_node {
-            NodeData::Leaf { window } => { window }
-            _ => { return; }
+            NodeData::Leaf { window } => window,
+            _ => {
+                return;
+            }
         };
 
         let direction = Direction::ALL[(self.get_count() - 1) % 4].clone();
 
-        self.insert_window(Some(&target.clone()), new_window, direction, space, loop_handle);
+        self.insert_window(
+            Some(&target.clone()),
+            new_window,
+            direction,
+            space,
+            loop_handle,
+        );
     }
 
-    pub fn remove(&mut self, target: &Window, focus: &mut Option<Window>, space: &mut Space<Window>, loop_handle: &LoopHandle<'_, GlobalData>) -> bool {
+    pub fn remove(
+        &mut self,
+        target: &Window,
+        focus: &mut Option<Window>,
+        space: &mut Space<Window>,
+        loop_handle: &LoopHandle<'_, GlobalData>,
+    ) -> bool {
         let target_id = match self.find_node(target) {
-            Some(r) => {
-                r
-            }
+            Some(r) => r,
             None => {
                 warn!("Failed to get target_id");
-                return false
+                return false;
             }
         };
 
@@ -331,7 +356,7 @@ impl TiledTree {
             Some(r) => r,
             None => {
                 warn!("Failed to get node: {:?} parent and sibling", target_id);
-                return false
+                return false;
             }
         };
 
@@ -341,11 +366,11 @@ impl TiledTree {
 
         match self.nodes[parent_id] {
             NodeData::Split { rec, .. } => {
-                let sibling_data = match self.nodes.remove(sibling_id){
+                let sibling_data = match self.nodes.remove(sibling_id) {
                     Some(r) => r,
                     None => {
                         warn!("Failed to remove sibling: {:?}", sibling_id);
-                        return false
+                        return false;
                     }
                 };
 
@@ -356,7 +381,9 @@ impl TiledTree {
                         window.set_rec(rec.size);
                         space.map_element(window.clone(), rec.loc, false);
 
-                        self.nodes[parent_id] = NodeData::Leaf { window: window.clone() };
+                        self.nodes[parent_id] = NodeData::Leaf {
+                            window: window.clone(),
+                        };
 
                         if focus.as_ref() == Some(target) {
                             *focus = Some(window.clone());
@@ -371,13 +398,18 @@ impl TiledTree {
                                 crate::animation::AnimationType::EaseInOutQuad,
                             );
                         });
-                    },
-                    NodeData::Split { direction, left, right, .. } => {
-                        self.nodes[parent_id] = NodeData::Split { 
-                            direction, 
+                    }
+                    NodeData::Split {
+                        direction,
+                        left,
+                        right,
+                        ..
+                    } => {
+                        self.nodes[parent_id] = NodeData::Split {
+                            direction,
                             rec, // from parent
                             offset: (0, 0).into(),
-                            left, 
+                            left,
                             right,
                         };
                         self.modify(parent_id, rec, space, loop_handle);
@@ -385,21 +417,24 @@ impl TiledTree {
                         if focus.as_ref() == Some(target) {
                             *focus = self.get_first_window().cloned();
                         }
-
                     }
                 }
 
                 self.nodes.remove(target_id);
 
                 true
-            },
-            NodeData::Leaf { .. } => { 
-                false 
             }
+            NodeData::Leaf { .. } => false,
         }
     }
 
-    pub fn modify(&mut self, node_id: NodeId, rec: Rectangle<i32, Logical>, space: &mut Space<Window>, loop_handle: &LoopHandle<'_, GlobalData>) {
+    pub fn modify(
+        &mut self,
+        node_id: NodeId,
+        rec: Rectangle<i32, Logical>,
+        space: &mut Space<Window>,
+        loop_handle: &LoopHandle<'_, GlobalData>,
+    ) {
         // modify the child tree with new rec with direction
         match &mut self.nodes[node_id] {
             NodeData::Leaf { window } => {
@@ -418,8 +453,14 @@ impl TiledTree {
                         crate::animation::AnimationType::EaseInOutQuad,
                     );
                 });
-            },
-            NodeData::Split { left, right, direction, rec: current_rec, offset } => {
+            }
+            NodeData::Split {
+                left,
+                right,
+                direction,
+                rec: current_rec,
+                offset,
+            } => {
                 let (l_rec, r_rec) = recover_new_rec(rec, direction, offset.clone(), self.gap);
 
                 *current_rec = rec.clone();
@@ -433,14 +474,17 @@ impl TiledTree {
         }
     }
 
-    pub fn invert_window(&mut self, target: &Window, space: &mut Space<Window>, loop_handle: &LoopHandle<'_, GlobalData>){
+    pub fn invert_window(
+        &mut self,
+        target: &Window,
+        space: &mut Space<Window>,
+        loop_handle: &LoopHandle<'_, GlobalData>,
+    ) {
         let target_id = match self.find_node(target) {
-            Some(r) => {
-                r
-            }
+            Some(r) => r,
             None => {
                 warn!("Failed to get target_id");
-                return
+                return;
             }
         };
 
@@ -453,28 +497,32 @@ impl TiledTree {
             Some(r) => r,
             None => {
                 warn!("Failed to get node: {:?} parent and sibling", target_id);
-                return
+                return;
             }
         };
 
         match &mut self.nodes[parent_id] {
-            NodeData::Split { direction, rec , .. } => {
+            NodeData::Split { direction, rec, .. } => {
                 *direction = direction.rotate_cw();
                 let rec = *rec;
                 self.modify(parent_id, rec, space, loop_handle);
-            },
-            NodeData::Leaf { .. } => { }
+            }
+            NodeData::Leaf { .. } => {}
         }
     }
 
-    pub fn _resize(&mut self, target: &Window, offset: Point<i32, Logical>, space: &mut Space<Window>, loop_handle: &LoopHandle<'_, GlobalData>) {
+    pub fn _resize(
+        &mut self,
+        target: &Window,
+        offset: Point<i32, Logical>,
+        space: &mut Space<Window>,
+        loop_handle: &LoopHandle<'_, GlobalData>,
+    ) {
         let target_id = match self.find_node(target) {
-            Some(r) => {
-                r
-            }
+            Some(r) => r,
             None => {
                 warn!("Failed to get target_id");
-                return
+                return;
             }
         };
 
@@ -487,27 +535,38 @@ impl TiledTree {
             Some(r) => r,
             None => {
                 warn!("Failed to get node: {:?} parent and sibling", target_id);
-                return
+                return;
             }
         };
 
         match &mut self.nodes[parent_id] {
-            NodeData::Split { offset: current_offset, rec, .. } => {
+            NodeData::Split {
+                offset: current_offset,
+                rec,
+                ..
+            } => {
                 *current_offset += offset;
                 let rec = *rec;
                 self.modify(parent_id, rec, space, loop_handle);
-            },
-            NodeData::Leaf { .. } => { }
+            }
+            NodeData::Leaf { .. } => {}
         }
     }
 
+    #[allow(dead_code)]
     pub fn from_json(&mut self, path: &str) {
         if let Some(json_tree) = JsonTree::from_json(path) {
             json_tree.print_tree();
         }
     }
 
-    pub fn exchange(&mut self, focus: &Window, direction: &Direction, space: &mut Space<Window>, loop_handle: &LoopHandle<'_, GlobalData>) {
+    pub fn exchange(
+        &mut self,
+        focus: &Window,
+        direction: &Direction,
+        space: &mut Space<Window>,
+        loop_handle: &LoopHandle<'_, GlobalData>,
+    ) {
         if let Some(neighbor) = self.neighbor_graph.get(focus, direction) {
             let neighbor = neighbor.first().unwrap();
 
@@ -522,17 +581,17 @@ impl TiledTree {
                 match (a, b) {
                     (NodeData::Leaf { window: win_a }, NodeData::Leaf { window: win_b }) => {
                         swap(win_a, win_b);
-            
+
                         win_a.set_rec(neighbor_rec.size);
                         space.map_element(win_a.clone(), neighbor_rec.loc, false);
-            
+
                         win_b.set_rec(focus_rec.size);
                         space.map_element(win_b.clone(), focus_rec.loc, false);
                     }
-                    _ => { }
+                    _ => {}
                 }
             }
-            
+
             let neighbor = neighbor.clone();
             let focus = focus.clone();
 
@@ -542,33 +601,31 @@ impl TiledTree {
             // add animation
             loop_handle.insert_idle(move |data| {
                 data.render_manager.add_animation(
-                    neighbor.clone(), 
-                    neighbor_rec, 
-                    focus_rec, 
-                    Duration::from_millis(30), 
-                    crate::animation::AnimationType::EaseInOutQuad
+                    neighbor.clone(),
+                    neighbor_rec,
+                    focus_rec,
+                    Duration::from_millis(30),
+                    crate::animation::AnimationType::EaseInOutQuad,
                 );
 
                 data.render_manager.add_animation(
-                    focus.clone(), 
-                    focus_rec, 
-                    neighbor_rec, 
-                    Duration::from_millis(30), 
-                    crate::animation::AnimationType::EaseInOutQuad
+                    focus.clone(),
+                    focus_rec,
+                    neighbor_rec,
+                    Duration::from_millis(30),
+                    crate::animation::AnimationType::EaseInOutQuad,
                 );
             });
         }
     }
 
-    #[cfg(feature="trace_layout")]
+    #[cfg(feature = "trace_layout")]
     pub fn print_tree(&self) {
         let root_id = match self.get_root() {
-            Some(r) => {
-                r
-            }
+            Some(r) => r,
             None => {
                 warn!("Failed to get root_id");
-                return
+                return;
             }
         };
 
@@ -589,7 +646,12 @@ impl TiledTree {
     }
 }
 
-fn recover_new_rec(rec: Rectangle<i32, Logical>, direction: &Direction, offset: Point<i32, Logical>, gap: i32) -> (Rectangle<i32, Logical>, Rectangle<i32, Logical>) {
+fn recover_new_rec(
+    rec: Rectangle<i32, Logical>,
+    direction: &Direction,
+    offset: Point<i32, Logical>,
+    gap: i32,
+) -> (Rectangle<i32, Logical>, Rectangle<i32, Logical>) {
     let mut l_rec = rec;
     let mut r_rec = rec;
 
@@ -613,13 +675,16 @@ fn recover_new_rec(rec: Rectangle<i32, Logical>, direction: &Direction, offset: 
     (l_rec, r_rec)
 }
 
-fn get_new_rec(direction: &Direction, rec: &mut Rectangle<i32, Logical>, gap: i32) -> Rectangle<i32, Logical> {
-
+fn get_new_rec(
+    direction: &Direction,
+    rec: &mut Rectangle<i32, Logical>,
+    gap: i32,
+) -> Rectangle<i32, Logical> {
     let mut new_rec = *rec;
 
     match direction {
         Direction::Left | Direction::Right => {
-            let half = (rec.size.w - gap) / 2 ;
+            let half = (rec.size.w - gap) / 2;
             new_rec.size.w = half;
             rec.size.w = half;
 
@@ -646,3 +711,4 @@ fn get_new_rec(direction: &Direction, rec: &mut Rectangle<i32, Logical>, gap: i3
         }
     }
 }
+

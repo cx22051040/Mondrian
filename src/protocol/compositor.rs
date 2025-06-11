@@ -9,8 +9,6 @@ use smithay::{
 
 use crate::state::{ClientState, GlobalData};
 
-use crate::protocol::xdg_shell;
-
 impl CompositorHandler for GlobalData {
     fn compositor_state(&mut self) -> &mut CompositorState {
         &mut self.state.compositor_state
@@ -33,19 +31,11 @@ impl CompositorHandler for GlobalData {
                 return;
             }
 
-            if let Some(window) = self
-                .workspace_manager
-                .find_window(&root)
-            {
+            if let Some(window) = self.workspace_manager.find_window(&root) {
                 window.on_commit();
             }
 
-            // TODO: if use float don't forget this
-            xdg_shell::handle_commit(
-                &mut self.popups,
-                &self.workspace_manager.current_workspace().tiled,
-                surface,
-            );
+            self.xdg_shell_handle_commit(surface);
             // resize_grab::handle_commit(&mut self.workspace_manager, surface);
         };
     }

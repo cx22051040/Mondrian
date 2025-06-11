@@ -2,7 +2,7 @@ use crate::{
     input::resize_grab::ResizeSurfaceGrab, state::GlobalData
 };
 use smithay::{
-    delegate_xdg_shell, desktop::{PopupKind, PopupManager, Space, Window}, input::{pointer::{Focus, PointerHandle}, Seat}, reexports::{
+    delegate_xdg_shell, desktop::{PopupKind, Window}, input::{pointer::{Focus, PointerHandle}, Seat}, reexports::{
         wayland_protocols::xdg::shell::server::xdg_toplevel::{self, ResizeEdge},
         wayland_server::{
             protocol::{wl_seat, wl_surface::WlSurface}, Resource
@@ -18,45 +18,6 @@ use smithay::{
     desktop::{find_popup_root_surface, get_popup_toplevel_coords},
     input::pointer::GrabStartData as PointerGrabStartData,
 };
-
-/// Should be called on `WlSurface::commit`
-pub fn handle_commit(popups: &mut PopupManager, space: &Space<Window>, surface: &WlSurface) {
-    // Handle toplevel commits.
-    if let Some(window) = space
-        .elements()
-        .find(|w| w.toplevel().unwrap().wl_surface() == surface)
-        .cloned()
-    {
-        let initial_configure_sent = with_states(surface, |states| {
-            states
-                .data_map
-                .get::<XdgToplevelSurfaceData>()
-                .unwrap()
-                .lock()
-                .unwrap()
-                .initial_configure_sent
-        });
-
-        if !initial_configure_sent {
-            window.toplevel().unwrap().send_configure();
-        }
-    }
-
-    // Handle popup commits.
-    popups.commit(surface);
-    if let Some(popup) = popups.find_popup(surface) {
-        match popup {
-            PopupKind::Xdg(ref xdg) => {
-                if !xdg.is_initial_configure_sent() {
-                    // NOTE: This should never fail as the initial configure is always
-                    // allowed.
-                    xdg.send_configure().expect("initial configure failed");
-                }
-            }
-            PopupKind::InputMethod(ref _input_method) => {}
-        }
-    }
-}
 
 impl XdgShellHandler for GlobalData {
     fn xdg_shell_state(&mut self) -> &mut XdgShellState {
@@ -88,7 +49,7 @@ impl XdgShellHandler for GlobalData {
         };
         let pointer_loc = pointer.current_location();
 
-        let edges = match self.workspace_manager.get_focus() {
+        let edges = match self.workspace_manager.current_workspace().focus() {
             Some (focus) => {
                 let window_rec = self.workspace_manager.window_geometry(focus).unwrap();
                 detect_pointer_quadrant(pointer_loc, window_rec.to_f64())
@@ -148,7 +109,7 @@ impl XdgShellHandler for GlobalData {
     }
 
     fn move_request(&mut self, surface: ToplevelSurface, seat: wl_seat::WlSeat, serial: Serial) {
-        if !self.input_manager.is_mainmod_pressed {
+        if !self.input_manager.is_mainmod_pressed() {
             return
         }
 
@@ -182,7 +143,7 @@ impl XdgShellHandler for GlobalData {
         serial: Serial,
         _edges: xdg_toplevel::ResizeEdge,
     ) {
-        if !self.input_manager.is_mainmod_pressed {
+        if !self.input_manager.is_mainmod_pressed() {
             return
         }
 
@@ -303,6 +264,44 @@ impl GlobalData {
             pointer.set_grab(self, grab, serial, Focus::Clear);
         }
     }
+
+    pub fn xdg_shell_handle_commit(&mut self, surface: &WlSurface) {
+        let popups = &mut self.popups;
+
+        // Handle toplevel commits.
+        if let Some(window) = self.workspace_manager.find_window(surface)
+        {
+            let initial_configure_sent = with_states(surface, |states| {
+                states
+                    .data_map
+                    .get::<XdgToplevelSurfaceData>()
+                    .unwrap()
+                    .lock()
+                    .unwrap()
+                    .initial_configure_sent
+            });
+
+            if !initial_configure_sent {
+                window.toplevel().unwrap().send_configure();
+            }
+        }
+
+        // Handle popup commits.
+        popups.commit(surface);
+        if let Some(popup) = popups.find_popup(surface) {
+            match popup {
+                PopupKind::Xdg(ref xdg) => {
+                    if !xdg.is_initial_configure_sent() {
+                        // NOTE: This should never fail as the initial configure is always
+                        // allowed.
+                        xdg.send_configure().expect("initial configure failed");
+                    }
+                }
+                PopupKind::InputMethod(ref _input_method) => {}
+            }
+        }
+    }
+
 }
 
 fn check_grab(

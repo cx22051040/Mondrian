@@ -3,7 +3,11 @@ use std::collections::HashMap;
 use smithay::{
     desktop::Window,
     reexports::wayland_server::protocol::wl_surface::WlSurface,
-    utils::{Logical, Size}, wayland::{compositor, foreign_toplevel_list::ForeignToplevelHandle, shell::xdg::XdgToplevelSurfaceData},
+    utils::{Logical, Size},
+    wayland::{
+        compositor, foreign_toplevel_list::ForeignToplevelHandle,
+        shell::xdg::XdgToplevelSurfaceData,
+    },
 };
 
 use crate::state::{GlobalData, State};
@@ -26,18 +30,17 @@ impl WindowExt for Window {
     }
 
     fn get_title_and_id(&self) -> Option<(Option<String>, Option<String>)> {
-        self.toplevel()
-            .and_then(|toplevel| {
-                compositor::with_states(toplevel.wl_surface(), |states| {
-                    let roll= &mut states
-                        .data_map
-                        .get::<XdgToplevelSurfaceData>()
-                        .unwrap()
-                        .lock()
-                        .unwrap();
-                    Some((roll.title.clone(), roll.app_id.clone()))
-                })
+        self.toplevel().and_then(|toplevel| {
+            compositor::with_states(toplevel.wl_surface(), |states| {
+                let roll = &mut states
+                    .data_map
+                    .get::<XdgToplevelSurfaceData>()
+                    .unwrap()
+                    .lock()
+                    .unwrap();
+                Some((roll.title.clone(), roll.app_id.clone()))
             })
+        })
     }
 }
 
@@ -65,11 +68,9 @@ impl WindowManager {
     pub fn add_window(&mut self, window: Window, workspace_id: WorkspaceId, state: &mut State) {
         let handle = state
             .foreign_toplevel_state
-            .new_toplevel::<GlobalData>(
-                "unkown", 
-                "unkown"
-            );
-        self.foreign_handle.insert(window.toplevel().unwrap().wl_surface().clone(), handle);
+            .new_toplevel::<GlobalData>("unkown", "unkown");
+        self.foreign_handle
+            .insert(window.toplevel().unwrap().wl_surface().clone(), handle);
 
         self.window_workspace.insert(window.clone(), workspace_id);
         self.windows.push(window);
@@ -80,12 +81,13 @@ impl WindowManager {
             Some(window) => window.clone(),
             None => {
                 warn!("Failed to get window");
-                return None
+                return None;
             }
         };
-        
+
         self.window_workspace.remove(&window);
-        self.foreign_handle.remove(window.toplevel().unwrap().wl_surface());
+        self.foreign_handle
+            .remove(window.toplevel().unwrap().wl_surface());
 
         if let Some(pos) = self.windows.iter().position(|w| w == &window) {
             return Some(self.windows.remove(pos));

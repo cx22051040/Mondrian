@@ -12,16 +12,21 @@ pub struct NeighborGraph {
 impl NeighborGraph {
     pub fn new() -> Self {
         Self {
-            edges: HashMap::new()
+            edges: HashMap::new(),
         }
     }
 
     pub fn get(&self, window: &Window, direction: &Direction) -> Option<&Vec<Window>> {
         self.edges.get(window)?.get(direction)
     }
-    
+
     pub fn add_window(&mut self, from: Window, direction: Direction, to: Vec<Window>) {
-        self.edges.entry(from).or_default().entry(direction).or_default().extend(to);
+        self.edges
+            .entry(from)
+            .or_default()
+            .entry(direction)
+            .or_default()
+            .extend(to);
     }
 
     pub fn remove_window(&mut self, from: &Window, direction: Direction, to: &Window) {
@@ -38,7 +43,11 @@ impl NeighborGraph {
         }
     }
 
-    pub fn remove_direction(&mut self, target: &Window, direction: &Direction) -> Option<Vec<Window>> {
+    pub fn remove_direction(
+        &mut self,
+        target: &Window,
+        direction: &Direction,
+    ) -> Option<Vec<Window>> {
         self.edges.get_mut(target)?.remove(direction)
     }
 
@@ -49,23 +58,21 @@ impl NeighborGraph {
         // new <--> orthogonal neighbors
         for d in orthogonal {
             if let Some(neighbors_orthogonal) = self.get(&from, &d).cloned() {
-                
                 for neighbor in &neighbors_orthogonal {
                     self.add_window(neighbor.clone(), d.opposite(), vec![new.clone()]);
                 }
-                
+
                 self.add_window(new.clone(), d.clone(), neighbors_orthogonal);
             }
         }
 
         // new <--> neighbors
         if let Some(neighbors_direction) = self.remove_direction(&from, &direction) {
-            
             for neighbor in &neighbors_direction {
                 self.remove_window(neighbor, opposite.clone(), &from);
                 self.add_window(neighbor.clone(), opposite.clone(), vec![new.clone()]);
             }
-            
+
             self.add_window(new.clone(), direction.clone(), neighbors_direction);
         }
 
@@ -95,7 +102,7 @@ impl NeighborGraph {
         }
     }
 
-    #[cfg(feature="trace_layout")]
+    #[cfg(feature = "trace_layout")]
     pub fn print(&self) {
         for (from, hash_map) in &self.edges {
             info!("Window {:?} connections:", from.geometry().size);
@@ -106,5 +113,5 @@ impl NeighborGraph {
             }
         }
     }
-    
 }
+

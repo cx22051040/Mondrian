@@ -10,23 +10,40 @@ use smithay::{
     reexports::{
         calloop::LoopHandle,
         wayland_server::{
-            backend::ClientData, protocol::{wl_buffer, wl_shm, wl_surface::WlSurface}, DisplayHandle, Resource
+            DisplayHandle, Resource,
+            backend::ClientData,
+            protocol::{wl_buffer, wl_shm, wl_surface::WlSurface},
         },
     },
     utils::{Clock, Monotonic, Time},
     wayland::{
-        buffer::BufferHandler, compositor::{CompositorClientState, CompositorState}, dmabuf::{DmabufGlobal, DmabufHandler, DmabufState, ImportNotifier}, foreign_toplevel_list::ForeignToplevelListState, output::OutputHandler, security_context::SecurityContext, selection::{
+        buffer::BufferHandler,
+        compositor::{CompositorClientState, CompositorState},
+        dmabuf::{DmabufGlobal, DmabufHandler, DmabufState, ImportNotifier},
+        foreign_toplevel_list::ForeignToplevelListState,
+        output::OutputHandler,
+        security_context::SecurityContext,
+        selection::{
+            SelectionHandler,
             data_device::{
-                set_data_device_focus, ClientDndGrabHandler, DataDeviceHandler, DataDeviceState, ServerDndGrabHandler
-            }, SelectionHandler
-        }, shell::{wlr_layer::WlrLayerShellState, xdg::XdgShellState}, shm::{ShmHandler, ShmState}, viewporter::ViewporterState
+                ClientDndGrabHandler, DataDeviceHandler, DataDeviceState, ServerDndGrabHandler,
+                set_data_device_focus,
+            },
+        },
+        shell::{wlr_layer::WlrLayerShellState, xdg::XdgShellState},
+        shm::{ShmHandler, ShmState},
+        viewporter::ViewporterState,
     },
 };
 
 use crate::{
-    backend::Backend, config::Configs, layout::tiled_tree::TiledScheme, manager::{
-        cursor::CursorManager, input::InputManager, output::OutputManager, render::RenderManager, window::WindowManager, workspace::WorkspaceManager
-    }
+    backend::Backend,
+    config::Configs,
+    layout::tiled_tree::TiledScheme,
+    manager::{
+        cursor::CursorManager, input::InputManager, output::OutputManager, render::RenderManager,
+        window::WindowManager, workspace::WorkspaceManager,
+    },
 };
 
 #[derive(Default)]
@@ -79,18 +96,19 @@ pub struct GlobalData {
 }
 
 impl GlobalData {
-    pub fn new (
+    pub fn new(
         loop_handle: LoopHandle<'static, GlobalData>,
         display_handle: DisplayHandle,
     ) -> anyhow::Result<Self> {
         // load configs
         let configs = Arc::new(Configs::new());
-        
+
         // init backend
         let mut backend = Backend::new(&loop_handle).context("Failed to create backend")?;
 
         // initial global state
-        let mut nuonuo_state = State::new(&display_handle).context("Failed to create global state")?;
+        let mut nuonuo_state =
+            State::new(&display_handle).context("Failed to create global state")?;
 
         // initial managers
         let mut output_manager = OutputManager::new(&display_handle, configs.clone());
@@ -98,22 +116,29 @@ impl GlobalData {
         let window_manager = WindowManager::new();
         let cursor_manager = CursorManager::new("default", 24);
         let input_manager = InputManager::new(
-            backend.seat_name(), 
-            &display_handle, 
-            "src/config/keybindings.conf"
-        ).context("Failed to create input_manager")?;
+            backend.seat_name(),
+            &display_handle,
+            "src/config/keybindings.conf",
+        )
+        .context("Failed to create input_manager")?;
         let popups = PopupManager::default();
         let render_manager = RenderManager::new();
 
         // initial backend
-        backend.init(&loop_handle, &display_handle, &mut output_manager, &render_manager, &mut nuonuo_state);
+        backend.init(
+            &loop_handle,
+            &display_handle,
+            &mut output_manager,
+            &render_manager,
+            &mut nuonuo_state,
+        );
 
         // TODO: just easy for test workspace exchange
         let output = output_manager.current_output();
         let output_geo = output_manager
             .output_geometry(output)
             .context("workspace add test error")?;
-        
+
         workspace_manager.add_workspace(output, output_geo, Some(TiledScheme::Default), true);
         workspace_manager.add_workspace(output, output_geo, Some(TiledScheme::Spiral), false);
 
@@ -121,29 +146,27 @@ impl GlobalData {
         let clock = Clock::new();
         let next_frame_target = clock.now();
 
-        Ok(
-            Self {
-                backend,
-                state: nuonuo_state,
-    
-                output_manager,
-                workspace_manager,
-                window_manager,
-                cursor_manager,
-                input_manager,
-                popups,
-                render_manager,
-    
-                loop_handle,
-                display_handle,
-    
-                configs,
-    
-                start_time,
-                clock,
-                next_frame_target,
-            }
-        )
+        Ok(Self {
+            backend,
+            state: nuonuo_state,
+
+            output_manager,
+            workspace_manager,
+            window_manager,
+            cursor_manager,
+            input_manager,
+            popups,
+            render_manager,
+
+            loop_handle,
+            display_handle,
+
+            configs,
+
+            start_time,
+            clock,
+            next_frame_target,
+        })
     }
 }
 
@@ -232,7 +255,11 @@ impl SeatHandler for GlobalData {
         set_data_device_focus(display_handle, seat, client);
     }
 
-    fn led_state_changed(&mut self, _seat: &Seat<Self>, _led_state: smithay::input::keyboard::LedState) {
+    fn led_state_changed(
+        &mut self,
+        _seat: &Seat<Self>,
+        _led_state: smithay::input::keyboard::LedState,
+    ) {
         info!("led state changed");
     }
 }
@@ -270,4 +297,3 @@ impl DmabufHandler for GlobalData {
 delegate_dmabuf!(GlobalData);
 
 delegate_viewporter!(GlobalData);
-

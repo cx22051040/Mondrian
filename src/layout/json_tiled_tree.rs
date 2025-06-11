@@ -29,20 +29,17 @@ impl From<TiledTree> for JsonTree {
     }
 }
 
+#[allow(dead_code)]
 impl JsonTree {
     pub fn from_json(path: &str) -> Option<Self> {
         match fs::read_to_string(path) {
-            Ok(data) => {
-                match serde_json::from_str(&data) {
-                    Ok(tree) => {
-                        Some(tree)
-                    }
-                    Err(err) => {
-                        warn!("Failed to deserialize JSON from {}: {:?}", path, err);
-                        None
-                    }
+            Ok(data) => match serde_json::from_str(&data) {
+                Ok(tree) => Some(tree),
+                Err(err) => {
+                    warn!("Failed to deserialize JSON from {}: {:?}", path, err);
+                    None
                 }
-            }
+            },
             Err(err) => {
                 warn!("Failed to read file: {} with err: {:?}", path, err);
                 None
@@ -51,7 +48,10 @@ impl JsonTree {
     }
 
     pub fn _to_json(&self, path: &str) {
-        match fs::write(path, serde_json::to_string(self).expect("Failed to serialize JSON")) {
+        match fs::write(
+            path,
+            serde_json::to_string(self).expect("Failed to serialize JSON"),
+        ) {
             Ok(_) => info!("Successfully wrote JSON to {}", path),
             Err(err) => warn!("Failed to write file: {} with err: {:?}", path, err),
         }
@@ -72,3 +72,4 @@ impl JsonTree {
         print(&self.tiled_tree, 1);
     }
 }
+

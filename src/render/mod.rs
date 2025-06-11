@@ -1,12 +1,15 @@
-use smithay::backend::renderer::{gles::{GlesFrame, GlesRenderer}, ExportMem, ImportAll, ImportMem, ImportMemWl, Renderer, RendererSuper, Texture};
+use smithay::backend::renderer::{
+    ExportMem, ImportAll, ImportMem, ImportMemWl, Renderer, RendererSuper, Texture,
+    gles::{GlesFrame, GlesRenderer},
+};
 
 use crate::backend::tty::{TtyFrame, TtyRenderer};
 
+pub mod background;
 pub mod border;
 pub mod elements;
-pub mod shader;
 pub mod render_elements;
-pub mod background;
+pub mod shader;
 
 /// Trait with our main renderer requirements to save on the typing.
 pub trait MondrianRenderer:
@@ -73,4 +76,3 @@ impl<'frame, 'buffer> AsGlesFrame<'frame, 'buffer> for TtyFrame<'_, 'frame, 'buf
         self.as_mut()
     }
 }
-

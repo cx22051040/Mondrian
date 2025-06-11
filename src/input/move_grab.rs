@@ -20,8 +20,7 @@ impl PointerGrab<GlobalData> for PointerMoveSurfaceGrab {
     }
 
     fn unset(&mut self, data: &mut GlobalData) {
-        data
-            .cursor_manager
+        data.cursor_manager
             .set_cursor_image(CursorImageStatus::default_named());
     }
 

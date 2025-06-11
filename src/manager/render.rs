@@ -1,25 +1,45 @@
-use std::{collections::HashMap, time::{Duration, Instant}};
+use std::{
+    collections::HashMap,
+    time::{Duration, Instant},
+};
 
 use smithay::{
     backend::renderer::{
+        Color32F,
         element::{
-            memory::MemoryRenderBufferRenderElement, surface::{render_elements_from_surface_tree, WaylandSurfaceRenderElement}, AsRenderElements, Kind
-        }, gles::{GlesRenderer, Uniform}, Color32F
-    }, desktop::{layer_map_for_output, Window}, utils::{Logical, Rectangle, Scale}, wayland::shell::wlr_layer::Layer
+            AsRenderElements, Kind,
+            memory::MemoryRenderBufferRenderElement,
+            surface::{WaylandSurfaceRenderElement, render_elements_from_surface_tree},
+        },
+        gles::{GlesRenderer, Uniform},
+    },
+    desktop::{Window, layer_map_for_output},
+    utils::{Logical, Rectangle, Scale},
+    wayland::shell::wlr_layer::Layer,
 };
 
-use crate::{animation::{Animation, AnimationState, AnimationType}, manager::window::WindowExt, render::{
-        background::{Background, BackgroundRenderElement}, border::{BorderRenderElement, BorderShader}, elements::{CustomRenderElements, OutputRenderElements, ShaderRenderElement}, MondrianRenderer
-    }};
+use crate::{
+    animation::{Animation, AnimationState, AnimationType},
+    manager::window::WindowExt,
+    render::{
+        MondrianRenderer,
+        background::{Background, BackgroundRenderElement},
+        border::{BorderRenderElement, BorderShader},
+        elements::{CustomRenderElements, OutputRenderElements, ShaderRenderElement},
+    },
+};
 
 use super::{
-    input::InputManager, output::OutputManager, workspace::WorkspaceManager, cursor::{CursorManager, RenderCursor, XCursor}
+    cursor::{CursorManager, RenderCursor, XCursor},
+    input::InputManager,
+    output::OutputManager,
+    workspace::WorkspaceManager,
 };
 
 pub struct RenderManager {
     // no need now
-    pub start_time: Instant,
-    pub animations: HashMap<Window, Animation>,
+    start_time: Instant,
+    animations: HashMap<Window, Animation>,
 }
 
 impl RenderManager {
@@ -96,7 +116,7 @@ impl RenderManager {
         // TODO: 暂时使用
         self.refresh();
 
-        let mut elements: Vec::<WaylandSurfaceRenderElement<R>> = vec![];
+        let mut elements: Vec<WaylandSurfaceRenderElement<R>> = vec![];
 
         let output = output_manager.current_output();
         let output_geo = output_manager.output_geometry(output).unwrap();
@@ -114,14 +134,13 @@ impl RenderManager {
                         (layout_rec.loc + output_geo.loc).to_physical_precise_round(output_scale),
                         Scale::from(output_scale),
                         0.85,
-                    )
+                    ),
                 );
             }
         }
 
         // windows
         for window in workspace_manager.elements() {
-
             let location = match self.animations.get_mut(window) {
                 Some(animation) => {
                     match animation.state {
@@ -137,7 +156,7 @@ impl RenderManager {
                             // info!("{:?}", rec);
                             rec.loc
                         }
-                        _ => { break }
+                        _ => break,
                     }
                 }
                 None => {
@@ -146,14 +165,12 @@ impl RenderManager {
                 }
             };
 
-            elements.extend(
-                window.render_elements::<WaylandSurfaceRenderElement<R>>(
-                    renderer, 
-                    (location - window.geometry().loc).to_physical_precise_round(output_scale),
-                    Scale::from(output_scale), 
-                    0.8
-                )
-            );
+            elements.extend(window.render_elements::<WaylandSurfaceRenderElement<R>>(
+                renderer,
+                (location - window.geometry().loc).to_physical_precise_round(output_scale),
+                Scale::from(output_scale),
+                0.8,
+            ));
         }
 
         // layer shell bottom and background
@@ -166,7 +183,7 @@ impl RenderManager {
                         (layout_rec.loc + output_geo.loc).to_physical_precise_round(output_scale),
                         Scale::from(output_scale),
                         0.85,
-                    )
+                    ),
                 );
             }
         }
@@ -274,19 +291,15 @@ impl RenderManager {
     ) -> Vec<CustomRenderElements<R>> {
         let mut elements: Vec<CustomRenderElements<R>> = vec![];
 
-        let focus = workspace_manager.get_focus();
+        let focus = workspace_manager.current_workspace().focus();
         if let Some(window) = focus {
-
             let window_rec = match self.animations.get(window) {
-                Some(animation) => {
-                    animation.current_value()
-                }
-                None => {
-                    workspace_manager.window_geometry(window).unwrap()
-                }
+                Some(animation) => animation.current_value(),
+                None => workspace_manager.window_geometry(window).unwrap(),
             };
 
-            let program = renderer.as_gles_renderer()
+            let program = renderer
+                .as_gles_renderer()
                 .egl_context()
                 .user_data()
                 .get::<BorderShader>()
@@ -305,29 +318,33 @@ impl RenderManager {
             let border_color: Color32F = Color32F::from([0.0, 0.0, 1.0, 1.0]);
             let border_thickness = 5.0;
 
-            elements.push(CustomRenderElements::Shader(
-                ShaderRenderElement::Border(
-                    BorderRenderElement::new(
-                        program,
-                        window_rec,
-                        None,
-                        1.0,
-                        vec![
-                            Uniform::new("u_resolution", (point.x as f32, point.y as f32)),
-                            Uniform::new("border_color", (border_color.r(), border_color.g(), border_color.b())), 
-                            Uniform::new("border_thickness", border_thickness),
-                            Uniform::new("u_time", self.start_time.elapsed().as_secs_f32() % (2.0 * 3.1415926)), // TODO: just a test
-                            Uniform::new("corner_radius", 10.0),
-                        ],
-                        Kind::Unspecified,
-                    )
-                )
-            ));
+            elements.push(CustomRenderElements::Shader(ShaderRenderElement::Border(
+                BorderRenderElement::new(
+                    program,
+                    window_rec,
+                    None,
+                    1.0,
+                    vec![
+                        Uniform::new("u_resolution", (point.x as f32, point.y as f32)),
+                        Uniform::new(
+                            "border_color",
+                            (border_color.r(), border_color.g(), border_color.b()),
+                        ),
+                        Uniform::new("border_thickness", border_thickness),
+                        Uniform::new(
+                            "u_time",
+                            self.start_time.elapsed().as_secs_f32() % (2.0 * 3.1415926),
+                        ), // TODO: just a test
+                        Uniform::new("corner_radius", 10.0),
+                    ],
+                    Kind::Unspecified,
+                ),
+            )));
         }
 
         elements
     }
-    
+
     pub fn _get_background_render_elements<R: MondrianRenderer>(
         &self,
         renderer: &mut R,
@@ -335,7 +352,8 @@ impl RenderManager {
     ) -> Vec<CustomRenderElements<R>> {
         let mut elements: Vec<CustomRenderElements<R>> = vec![];
 
-        let program = renderer.as_gles_renderer()
+        let program = renderer
+            .as_gles_renderer()
             .egl_context()
             .user_data()
             .get::<Background>()
@@ -343,50 +361,46 @@ impl RenderManager {
             .0
             .clone();
 
-        let output_geo = output_manager.output_geometry(output_manager.current_output()).unwrap();
+        let output_geo = output_manager
+            .output_geometry(output_manager.current_output())
+            .unwrap();
         let point = output_geo.size.to_point();
 
         elements.push(CustomRenderElements::Shader(
-            ShaderRenderElement::Background(
-                BackgroundRenderElement::new(
-                    program,
-                    output_geo,
-                    None,
-                    1.0,
-                    vec![
-                        Uniform::new("u_resolution", (point.x as f32, point.y as f32)),
-                        Uniform::new("u_time", self.start_time.elapsed().as_secs_f32() % (2.0 * 3.1415926)), // TODO: just a test
-                    ],
-                    Kind::Unspecified,
-                )
-            )
+            ShaderRenderElement::Background(BackgroundRenderElement::new(
+                program,
+                output_geo,
+                None,
+                1.0,
+                vec![
+                    Uniform::new("u_resolution", (point.x as f32, point.y as f32)),
+                    Uniform::new(
+                        "u_time",
+                        self.start_time.elapsed().as_secs_f32() % (2.0 * 3.1415926),
+                    ), // TODO: just a test
+                ],
+                Kind::Unspecified,
+            )),
         ));
-    
+
         elements
     }
 
     pub fn add_animation(
-        &mut self, 
+        &mut self,
         window: Window,
         from: Rectangle<i32, Logical>,
         to: Rectangle<i32, Logical>,
         duration: Duration,
         animation_type: AnimationType,
     ) {
-        let animation = Animation::new(
-            from, 
-            to, 
-            duration, 
-            animation_type
-        );
+        let animation = Animation::new(from, to, duration, animation_type);
         self.animations.insert(window, animation);
     }
 
     pub fn refresh(&mut self) {
         // clean dead animations
-        self.animations.retain(|_, animation| {
-            !matches!(animation.state, AnimationState::Completed)
-        });
+        self.animations
+            .retain(|_, animation| !matches!(animation.state, AnimationState::Completed));
     }
-
 }

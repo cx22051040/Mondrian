@@ -5,7 +5,10 @@ use smithay::backend::renderer::ImportEgl;
 
 use smithay::{
     backend::{
-        allocator::dmabuf::Dmabuf, egl::EGLDevice, renderer::{damage::OutputDamageTracker, gles::GlesRenderer, Color32F, ImportDma}, winit::{self, WinitEvent, WinitGraphicsBackend}
+        allocator::dmabuf::Dmabuf,
+        egl::EGLDevice,
+        renderer::{Color32F, ImportDma, damage::OutputDamageTracker, gles::GlesRenderer},
+        winit::{self, WinitEvent, WinitGraphicsBackend},
     },
     output::{Mode as OutputMode, Subpixel},
     reexports::{calloop::LoopHandle, wayland_server::DisplayHandle},
@@ -15,9 +18,8 @@ use smithay::{
 
 use crate::{
     manager::{
-        input::InputManager, output::OutputManager, render::RenderManager,
+        cursor::CursorManager, input::InputManager, output::OutputManager, render::RenderManager,
         workspace::WorkspaceManager,
-        cursor::CursorManager,
     },
     state::{GlobalData, State},
 };
@@ -27,9 +29,7 @@ pub struct Winit {
     pub backend: WinitGraphicsBackend<GlesRenderer>,
 }
 impl Winit {
-    pub fn new(
-        loop_handle: &LoopHandle<'_, GlobalData>,
-    ) -> anyhow::Result<Self> {
+    pub fn new(loop_handle: &LoopHandle<'_, GlobalData>) -> anyhow::Result<Self> {
         let (backend, winit) = winit::init::<GlesRenderer>()
             .map_err(|e| anyhow::anyhow!("Failed to initialize Winit backend: {}", e))?;
 
@@ -49,8 +49,10 @@ impl Winit {
                         let scale = data.output_manager.current_output().current_scale();
                         let scale = Scale::from(scale.integer_scale());
 
-                        data.workspace_manager
-                            .modify_windows(Rectangle::from_size(size.to_logical(scale)), &data.loop_handle);
+                        data.workspace_manager.modify_windows(
+                            Rectangle::from_size(size.to_logical(scale)),
+                            &data.loop_handle,
+                        );
                     }
                     WinitEvent::Input(event) => {
                         data.process_input_event(event);
@@ -71,15 +73,12 @@ impl Winit {
                             &data.input_manager,
                         );
 
-                        match data.backend
-                            .winit()
-                            .backend
-                            .submit(Some(&[damage])) {
-                                Ok(_) => {}
-                                Err(err) => {
-                                    warn!("Winit: Failed to submit frame: {:?}", err);
-                                }
+                        match data.backend.winit().backend.submit(Some(&[damage])) {
+                            Ok(_) => {}
+                            Err(err) => {
+                                warn!("Winit: Failed to submit frame: {:?}", err);
                             }
+                        }
 
                         // For each of the windows send the frame callbacks to tell them to draw next frame.
                         data.workspace_manager.elements().for_each(|window| {
@@ -106,15 +105,13 @@ impl Winit {
             })
             .unwrap();
 
-        Ok(Self {
-            backend,
-        })
+        Ok(Self { backend })
     }
 
     pub fn init(
-        &mut self, 
-        display_handle: &DisplayHandle, 
-        output_manager: &mut OutputManager, 
+        &mut self,
+        display_handle: &DisplayHandle,
+        output_manager: &mut OutputManager,
         render_manager: &RenderManager,
         state: &mut State,
     ) {
@@ -149,8 +146,9 @@ impl Winit {
             tracing::info!("EGL hardware-acceleration enabled");
         };
 
-        let render_node = EGLDevice::device_for_display(self.get_renderer().egl_context().display())
-            .and_then(|device| device.try_get_render_node());
+        let render_node =
+            EGLDevice::device_for_display(self.get_renderer().egl_context().display())
+                .and_then(|device| device.try_get_render_node());
 
         let dmabuf_default_feedback = match render_node {
             Ok(Some(node)) => {
@@ -172,17 +170,17 @@ impl Winit {
         };
 
         if let Some(default_feedback) = dmabuf_default_feedback {
-            let _dmabuf_global = state.dmabuf_state.create_global_with_default_feedback::<GlobalData>(
-                display_handle,
-                &default_feedback,
-            );
+            let _dmabuf_global = state
+                .dmabuf_state
+                .create_global_with_default_feedback::<GlobalData>(
+                    display_handle,
+                    &default_feedback,
+                );
         } else {
             let dmabuf_formats = self.get_renderer().dmabuf_formats();
-            let _dmabuf_global =
-                state.dmabuf_state.create_global::<GlobalData>(
-                    display_handle, 
-                    dmabuf_formats
-                );
+            let _dmabuf_global = state
+                .dmabuf_state
+                .create_global::<GlobalData>(display_handle, dmabuf_formats);
         };
 
         // compile shaders
@@ -206,7 +204,7 @@ impl Winit {
                 cursor_manager,
                 input_manager,
             );
-    
+
             let _ = damage_tracker.render_output(
                 renderer,
                 &mut framebuffer,
@@ -216,7 +214,7 @@ impl Winit {
             );
         } else {
             warn!("Winit: Failed to get renderer & framebuffer");
-            return
+            return;
         }
     }
 
@@ -234,4 +232,3 @@ impl Winit {
         }
     }
 }
-

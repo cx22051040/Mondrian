@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 
-pub mod tiled_tree;
 pub mod json_tiled_tree;
 pub mod neighbor_graph;
+pub mod tiled_tree;
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub enum Direction {

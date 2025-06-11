@@ -1,13 +1,30 @@
-use std::{hash::Hash, sync::{atomic::{AtomicUsize, Ordering}, Arc}, time::Duration};
+use std::{
+    hash::Hash,
+    sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    },
+    time::Duration,
+};
 
 use smithay::{
     desktop::{Space, Window, WindowSurfaceType},
     output::Output,
-    reexports::{calloop::LoopHandle, wayland_protocols::xdg::shell::server::xdg_toplevel::ResizeEdge, wayland_server::protocol::wl_surface::WlSurface},
+    reexports::{
+        calloop::LoopHandle, wayland_protocols::xdg::shell::server::xdg_toplevel::ResizeEdge,
+        wayland_server::protocol::wl_surface::WlSurface,
+    },
     utils::{Logical, Point, Rectangle},
 };
 
-use crate::{config::WorkspaceConfigs, layout::{tiled_tree::{TiledScheme, TiledTree}, Direction}, state::GlobalData};
+use crate::{
+    config::WorkspaceConfigs,
+    layout::{
+        Direction,
+        tiled_tree::{TiledScheme, TiledTree},
+    },
+    state::GlobalData,
+};
 
 use super::window::WindowExt;
 
@@ -29,16 +46,15 @@ impl WorkspaceId {
 
 #[derive(Debug)]
 pub struct Workspace {
-    pub id: WorkspaceId,
+    id: WorkspaceId,
 
-    pub tiled: Space<Window>,
+    tiled: Space<Window>,
     // pub floating: Space<Window>,
     // pub layout: HashMap<Window, WindowLayout>,
-
-    pub scheme: TiledScheme,
-    pub tiled_tree: Option<TiledTree>,
-    pub focus: Option<Window>,
-    pub output_geometry: Rectangle<i32, Logical>,
+    scheme: TiledScheme,
+    tiled_tree: Option<TiledTree>,
+    focus: Option<Window>,
+    output_geometry: Rectangle<i32, Logical>,
 
     configs: Arc<WorkspaceConfigs>,
 }
@@ -48,7 +64,7 @@ impl Workspace {
         output: &Output,
         output_geometry: Rectangle<i32, Logical>,
         scheme: TiledScheme,
-        configs: Arc<WorkspaceConfigs>
+        configs: Arc<WorkspaceConfigs>,
     ) -> Self {
         let mut tiled: Space<Window> = Default::default();
         let mut floating: Space<Window> = Default::default();
@@ -60,7 +76,6 @@ impl Workspace {
             tiled,
             // floating,
             // layout: HashMap::new(),
-
             scheme,
             tiled_tree: None,
             focus: None,
@@ -74,6 +89,22 @@ impl Workspace {
         self.id
     }
 
+    pub fn current_space(&self) -> &Space<Window> {
+        &self.tiled
+    }
+
+    pub fn focus(&self) -> Option<&Window> {
+        self.focus.as_ref()
+    }
+
+    pub fn elements(&self) -> impl DoubleEndedIterator<Item = &Window> {
+        self.tiled.elements()
+    }
+
+    pub fn window_geometry(&self, window: &Window) -> Option<Rectangle<i32, Logical>> {
+        self.tiled.element_geometry(window)
+    }
+
     pub fn map_element(
         &mut self,
         window: Window,
@@ -83,15 +114,18 @@ impl Workspace {
     ) {
         self.refresh();
 
-        window.toplevel().unwrap().with_pending_state(|state| {
-            state.bounds = Some(self.output_geometry.size)
-        });
+        window
+            .toplevel()
+            .unwrap()
+            .with_pending_state(|state| state.bounds = Some(self.output_geometry.size));
         window.toplevel().unwrap().send_pending_configure();
 
         if self.tiled_tree.is_none() {
             let rec = Rectangle {
                 loc: (self.configs.gap, self.configs.gap).into(),
-                size: (self.output_geometry.size - (self.configs.gap * 2, self.configs.gap * 2).into()).into()
+                size: (self.output_geometry.size
+                    - (self.configs.gap * 2, self.configs.gap * 2).into())
+                .into(),
             };
 
             window.set_rec(rec.size);
@@ -107,10 +141,10 @@ impl Workspace {
                 let mut from = rec;
                 from.loc.y += from.size.h;
                 data.render_manager.add_animation(
-                    window, 
+                    window,
                     from,
-                    rec, 
-                    Duration::from_millis(30), 
+                    rec,
+                    Duration::from_millis(30),
                     crate::animation::AnimationType::EaseInOutQuad,
                 );
             });
@@ -122,29 +156,30 @@ impl Workspace {
             TiledScheme::Default => {
                 if let Some(layout_tree) = &mut self.tiled_tree {
                     // TODO
-                    let focus_rec = self.tiled.element_geometry(self.focus.as_ref().unwrap()).unwrap();
+                    let focus_rec = self
+                        .tiled
+                        .element_geometry(self.focus.as_ref().unwrap())
+                        .unwrap();
                     let direction = if focus_rec.size.w > focus_rec.size.h {
                         match edges {
-                            ResizeEdge::TopLeft | ResizeEdge::BottomLeft => {
-                                Direction::Left
-                            }
-                            ResizeEdge::TopRight | ResizeEdge::BottomRight => {
-                                Direction::Right
-                            }
-                            _ => { Direction::default() }
+                            ResizeEdge::TopLeft | ResizeEdge::BottomLeft => Direction::Left,
+                            ResizeEdge::TopRight | ResizeEdge::BottomRight => Direction::Right,
+                            _ => Direction::default(),
                         }
                     } else {
                         match edges {
-                            ResizeEdge::TopLeft | ResizeEdge::TopRight => {
-                                Direction::Up
-                            }
-                            ResizeEdge::BottomLeft | ResizeEdge::BottomRight => {
-                                Direction::Down
-                            }
-                            _ => { Direction::default() }
+                            ResizeEdge::TopLeft | ResizeEdge::TopRight => Direction::Up,
+                            ResizeEdge::BottomLeft | ResizeEdge::BottomRight => Direction::Down,
+                            _ => Direction::default(),
                         }
                     };
-                    layout_tree.insert_window(self.focus.as_ref(), window.clone(), direction, &mut self.tiled, loop_handle);
+                    layout_tree.insert_window(
+                        self.focus.as_ref(),
+                        window.clone(),
+                        direction,
+                        &mut self.tiled,
+                        loop_handle,
+                    );
 
                     #[cfg(feature = "trace_layout")]
                     layout_tree.print_tree();
@@ -184,45 +219,22 @@ impl Workspace {
         self.tiled.unmap_elem(window);
     }
 
-    pub fn refresh(&mut self) {
-        self.tiled.refresh();
-        // self.floating.refresh();
-    }
-
-    pub fn window_under(
-        &self,
-        position: Point<f64, Logical>,
-    ) -> Option<(&Window, Point<i32, Logical>)> {
-        self.tiled.element_under(position)
-    }
-
-    pub fn elements(&self) -> impl DoubleEndedIterator<Item = &Window> {
-        self.tiled.elements()
-    }
-
-    pub fn raise_element(&mut self, window: &Window, activate: bool) {
-        self.tiled.raise_element(window, activate)
-    }
-
-    pub fn deactivate(&mut self) {
-        for window in self.tiled.elements() {
-            window.set_activated(false);
-            window.toplevel().unwrap().send_pending_configure();
-        }
-    }
-
     pub fn invert_window(&mut self, loop_handle: &LoopHandle<'_, GlobalData>) {
         if let Some(layout_tree) = &mut self.tiled_tree {
             if let Some(focus) = &self.focus {
                 layout_tree.invert_window(focus, &mut self.tiled, loop_handle);
-        
+
                 #[cfg(feature = "trace_layout")]
                 layout_tree.print_tree();
             }
         }
     }
 
-    pub fn exchange_window(&mut self, direction: &Direction, loop_handle: &LoopHandle<'_, GlobalData>) {
+    pub fn exchange_window(
+        &mut self,
+        direction: &Direction,
+        loop_handle: &LoopHandle<'_, GlobalData>,
+    ) {
         if let Some(layout_tree) = &mut self.tiled_tree {
             if let Some(focus) = &self.focus {
                 layout_tree.exchange(focus, direction, &mut self.tiled, loop_handle);
@@ -230,7 +242,26 @@ impl Workspace {
         }
     }
 
-    pub fn modify_windows(&mut self, rec: Rectangle<i32, Logical>, loop_handle: &LoopHandle<'_, GlobalData>) {
+    pub fn tiled_expansion(&mut self, loop_handle: &LoopHandle<'_, GlobalData>) {
+        if let Some(layout_tree) = &self.tiled_tree {
+            layout_tree.expansion(&mut self.tiled, loop_handle);
+        }
+    }
+
+    pub fn tiled_recover(&mut self, loop_handle: &LoopHandle<'_, GlobalData>) {
+        if let Some(layout_tree) = &mut self.tiled_tree {
+            layout_tree.recover(&mut self.tiled, loop_handle);
+        }
+    }
+
+    // pub fn _resize(&mut self, offset: Point<i32, Logical>, edges: &ResizeEdge, rec: &mut Rectangle<i32, Logical>) {
+    // }
+
+    pub fn modify_windows(
+        &mut self,
+        rec: Rectangle<i32, Logical>,
+        loop_handle: &LoopHandle<'_, GlobalData>,
+    ) {
         self.output_geometry = rec;
         if let Some(layout_tree) = &mut self.tiled_tree {
             let root_id = layout_tree.get_root().unwrap();
@@ -245,9 +276,6 @@ impl Workspace {
             );
         }
     }
-
-    // pub fn _resize(&mut self, offset: Point<i32, Logical>, edges: &ResizeEdge, rec: &mut Rectangle<i32, Logical>) {
-    // }
 
     pub fn set_focus(&mut self, window: Option<Window>) {
         match window {
@@ -265,24 +293,43 @@ impl Workspace {
         }
     }
 
-    pub fn get_focus(&self) -> &Option<Window> {
-        &self.focus
+    pub fn window_under(
+        &self,
+        position: Point<f64, Logical>,
+    ) -> Option<(&Window, Point<i32, Logical>)> {
+        self.tiled.element_under(position)
     }
 
-    pub fn current_space(&self) -> &Space<Window> {
-        &self.tiled
+    pub fn surface_under(
+        &mut self,
+        position: Point<f64, Logical>,
+        need_focus: bool,
+    ) -> Option<(WlSurface, Point<f64, Logical>)> {
+        if let Some((window, window_loc)) = self.window_under(position).map(|(w, p)| (w.clone(), p))
+        {
+            if let Some((surface, surface_loc)) = window
+                .surface_under(position - window_loc.to_f64(), WindowSurfaceType::ALL)
+                .map(|(surface, surface_loc)| (surface, surface_loc))
+            {
+                if need_focus {
+                    self.set_focus(Some(window));
+                }
+
+                return Some((surface, (surface_loc + window_loc).to_f64()));
+            }
+        }
+        None
     }
 
-    pub fn window_geometry(&self, window: &Window) -> Option<Rectangle<i32, Logical>> {
-        self.tiled.element_geometry(window)
-    }
-
-    pub fn find_window(&self, surface: &WlSurface) ->Option<&Window> {
+    pub fn find_window(&self, surface: &WlSurface) -> Option<&Window> {
         self.elements()
             .find(|w| w.toplevel().unwrap().wl_surface() == surface)
     }
 
-    pub fn check_grab(&mut self, surface: &WlSurface) -> Option<(&Window, Rectangle<i32, Logical>)> {
+    pub fn check_grab(
+        &mut self,
+        surface: &WlSurface,
+    ) -> Option<(&Window, Rectangle<i32, Logical>)> {
         // TODO: check window's lock state
         let window = self.find_window(surface)?;
 
@@ -290,46 +337,31 @@ impl Workspace {
             warn!("Failed to get window's geometry");
             None
         })?;
-    
+
         Some((window, rec))
     }
 
-    pub fn tiled_expansion(&mut self, loop_handle: &LoopHandle<'_, GlobalData>) {
-        if let Some(layout_tree) = &self.tiled_tree {
-            layout_tree.expansion(&mut self.tiled, loop_handle);
+    fn refresh(&mut self) {
+        self.tiled.refresh();
+        // self.floating.refresh();
+    }
+
+    fn deactivate(&mut self) {
+        for window in self.tiled.elements() {
+            window.set_activated(false);
+            window.toplevel().unwrap().send_pending_configure();
         }
     }
 
-    pub fn tiled_recover(&mut self, loop_handle: &LoopHandle<'_, GlobalData>) {
-        if let Some(layout_tree) = &mut self.tiled_tree {
-            layout_tree.recover(&mut self.tiled, loop_handle);
-        }
-    }
-
-    pub fn surface_under(&mut self, position: Point<f64, Logical>, need_focus: bool) -> Option<(WlSurface, Point<f64, Logical>)> {
-        if let Some((window, window_loc)) = self
-            .window_under(position)
-            .map(|(w, p)| (w.clone(), p))
-        {
-            if let Some((surface, surface_loc)) = window
-                .surface_under(position - window_loc.to_f64(), WindowSurfaceType::ALL)
-                .map(|(surface, surface_loc)| (surface, surface_loc)) {
-
-                    if need_focus {
-                        self.set_focus(Some(window));
-                    }
-        
-                    return Some((surface, (surface_loc + window_loc).to_f64()))
-                }
-        }
-        None
+    fn raise_element(&mut self, window: &Window, activate: bool) {
+        self.tiled.raise_element(window, activate)
     }
 }
 
 #[derive(Debug)]
 pub struct WorkspaceManager {
-    pub workspaces: Vec<Workspace>,
-    pub activated_workspace: Option<WorkspaceId>,
+    workspaces: Vec<Workspace>,
+    activated_workspace: Option<WorkspaceId>,
     configs: Arc<WorkspaceConfigs>,
 }
 
@@ -380,6 +412,10 @@ impl WorkspaceManager {
         todo!()
     }
 
+    pub fn current_space(&self) -> &Space<Window> {
+        self.current_workspace().current_space()
+    }
+
     pub fn current_workspace(&self) -> &Workspace {
         self.activated_workspace
             .and_then(|id| self.workspaces.iter().find(|w| w.id() == id))
@@ -392,58 +428,45 @@ impl WorkspaceManager {
             .expect("no current_workspace")
     }
 
-    pub fn map_element(&mut self, window: Window, edges: ResizeEdge, activate: bool, loop_handle: &LoopHandle<'_, GlobalData>) {
-        self.current_workspace_mut()
-            .map_element(window, edges, activate, loop_handle);
-    }
-
-    pub fn refresh(&mut self) {
-        self.current_workspace_mut().refresh();
+    pub fn _workspaces_counts(&self) -> usize {
+        self.workspaces.iter().count()
     }
 
     pub fn elements(&self) -> impl DoubleEndedIterator<Item = &Window> {
         self.current_workspace().elements()
     }
 
-    pub fn find_window(&self, surface: &WlSurface) -> Option<&Window> {
-        // TODO: maybe can use hashmap to store the surface
-         self.current_workspace().find_window(surface)
+    pub fn window_geometry(&self, window: &Window) -> Option<Rectangle<i32, Logical>> {
+        self.current_workspace().window_geometry(window)
     }
 
-    pub fn _workspaces_counts(&self) -> usize {
-        self.workspaces.iter().count()
+    pub fn map_element(
+        &mut self,
+        window: Window,
+        edges: ResizeEdge,
+        activate: bool,
+        loop_handle: &LoopHandle<'_, GlobalData>,
+    ) {
+        self.current_workspace_mut()
+            .map_element(window, edges, activate, loop_handle);
     }
 
     pub fn unmap_element(&mut self, window: &Window, loop_handle: &LoopHandle<'_, GlobalData>) {
-        self.current_workspace_mut().unmap_element(window, loop_handle);
+        self.current_workspace_mut()
+            .unmap_element(window, loop_handle);
     }
 
     pub fn invert_window(&mut self, loop_handle: &LoopHandle<'_, GlobalData>) {
         self.current_workspace_mut().invert_window(loop_handle);
     }
 
-    pub fn modify_windows(&mut self, rec: Rectangle<i32, Logical>, loop_handle: &LoopHandle<'_, GlobalData>) {
-        self.current_workspace_mut().modify_windows(rec, loop_handle);
-    }
-
-    // pub fn resize(&mut self, offset: Point<i32, Logical>, edges: &ResizeEdge, rec: &mut Rectangle<i32, Logical>) {
-    //     self.current_workspace_mut().resize(offset, edges, rec);
-    // }
-
-    pub fn get_focus(&self) -> &Option<Window> {
-        &self.current_workspace().get_focus()
-    }
-
-    pub fn current_space(&self) -> &Space<Window> {
-        self.current_workspace().current_space()
-    }
-
-    pub fn window_geometry(&self, window: &Window) -> Option<Rectangle<i32, Logical>> {
-        self.current_workspace().window_geometry(window)
-    }
-
-    pub fn check_grab(&mut self, surface: &WlSurface) -> Option<(&Window, Rectangle<i32, Logical>)> {
-        self.current_workspace_mut().check_grab(surface)
+    pub fn exchange_window(
+        &mut self,
+        direction: &Direction,
+        loop_handle: &LoopHandle<'_, GlobalData>,
+    ) {
+        self.current_workspace_mut()
+            .exchange_window(direction, loop_handle);
     }
 
     pub fn tiled_expansion(&mut self, loop_handle: &LoopHandle<'_, GlobalData>) {
@@ -454,11 +477,41 @@ impl WorkspaceManager {
         self.current_workspace_mut().tiled_recover(loop_handle);
     }
 
-    pub fn exchange_window(&mut self, direction: &Direction, loop_handle: &LoopHandle<'_, GlobalData>) {
-        self.current_workspace_mut().exchange_window(direction, loop_handle);
+    // pub fn resize(&mut self, offset: Point<i32, Logical>, edges: &ResizeEdge, rec: &mut Rectangle<i32, Logical>) {
+    //     self.current_workspace_mut().resize(offset, edges, rec);
+    // }
+
+    pub fn modify_windows(
+        &mut self,
+        rec: Rectangle<i32, Logical>,
+        loop_handle: &LoopHandle<'_, GlobalData>,
+    ) {
+        self.current_workspace_mut()
+            .modify_windows(rec, loop_handle);
     }
 
-    pub fn surface_under(&mut self, position: Point<f64, Logical>, need_focus: bool) -> Option<(WlSurface, Point<f64, Logical>)> {
-        self.current_workspace_mut().surface_under(position, need_focus)
+    pub fn surface_under(
+        &mut self,
+        position: Point<f64, Logical>,
+        need_focus: bool,
+    ) -> Option<(WlSurface, Point<f64, Logical>)> {
+        self.current_workspace_mut()
+            .surface_under(position, need_focus)
+    }
+
+    pub fn find_window(&self, surface: &WlSurface) -> Option<&Window> {
+        // TODO: maybe can use hashmap to store the surface
+        self.current_workspace().find_window(surface)
+    }
+
+    pub fn check_grab(
+        &mut self,
+        surface: &WlSurface,
+    ) -> Option<(&Window, Rectangle<i32, Logical>)> {
+        self.current_workspace_mut().check_grab(surface)
+    }
+
+    pub fn refresh(&mut self) {
+        self.current_workspace_mut().refresh();
     }
 }

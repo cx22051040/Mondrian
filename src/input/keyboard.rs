@@ -1,12 +1,17 @@
 use smithay::{
-    backend::input::{
-            Event, InputBackend, KeyState, KeyboardKeyEvent
-        }, input::keyboard::{
-        xkb::keysym_get_name, FilterResult
-    }, reexports::wayland_server::protocol::wl_surface::WlSurface, utils::{Serial, SERIAL_COUNTER}
+    backend::input::{Event, InputBackend, KeyState, KeyboardKeyEvent},
+    input::keyboard::{FilterResult, xkb::keysym_get_name},
+    reexports::wayland_server::protocol::wl_surface::WlSurface,
+    utils::{SERIAL_COUNTER, Serial},
 };
 
-use crate::{manager::{input::{FunctionEnum, KeyAction}, workspace::WorkspaceId}, state::GlobalData};
+use crate::{
+    manager::{
+        input::{FunctionEnum, KeyAction},
+        workspace::WorkspaceId,
+    },
+    state::GlobalData,
+};
 
 impl GlobalData {
     pub fn on_keyboard_key_event<I: InputBackend>(&mut self, event: I::KeyboardKeyEvent) {
@@ -43,17 +48,16 @@ impl GlobalData {
                                         if name == "Control_L" {
                                             #[cfg(feature = "trace_input")]
                                             info!("mainmod_pressed: true");
-                                            
-                                            data.input_manager.is_mainmod_pressed = true;
+
+                                            data.input_manager.set_mainmode(true);
                                         }
                                         name
                                     })
                                     .collect()
                             });
 
-                        pressed_keys_name.sort_by_key(|key| {
-                            priority_map.get(key).cloned().unwrap_or(3)
-                        });
+                        pressed_keys_name
+                            .sort_by_key(|key| priority_map.get(key).cloned().unwrap_or(3));
 
                         let keys = pressed_keys_name.join("+");
 
@@ -69,7 +73,7 @@ impl GlobalData {
                             #[cfg(feature = "trace_input")]
                             info!("mainmod_pressed: false");
 
-                            data.input_manager.is_mainmod_pressed = false;
+                            data.input_manager.set_mainmode(false);
                         }
                     }
                 }
@@ -78,7 +82,7 @@ impl GlobalData {
         );
     }
 
-    pub fn action_keys(&mut self, keys: String, serial: Serial) {     
+    pub fn action_keys(&mut self, keys: String, serial: Serial) {
         let keybindings = self.input_manager.get_keybindings();
 
         if let Some(command) = keybindings.get(&keys) {
@@ -99,9 +103,14 @@ impl GlobalData {
                             info!("Command spawned with PID: {}", child.id());
                         }
                         Err(e) => {
-                            error!("Failed to execute command '{} {}': {}", cmd, args.join(" "), e);
+                            error!(
+                                "Failed to execute command '{} {}': {}",
+                                cmd,
+                                args.join(" "),
+                                e
+                            );
                         }
-                        #[cfg(not(feature="trace_input"))]
+                        #[cfg(not(feature = "trace_input"))]
                         _ => {}
                     }
                 }
@@ -124,17 +133,18 @@ impl GlobalData {
                         self.workspace_manager.tiled_recover(&self.loop_handle);
                     }
                     FunctionEnum::Quit => {
-                        if let Some(focus) = &self.workspace_manager.current_workspace().focus {
+                        if let Some(focus) = &self.workspace_manager.current_workspace().focus() {
                             info!("quit");
                             let toplevel = focus.toplevel().unwrap();
                             toplevel.send_close();
                         }
                     }
-                    FunctionEnum::Up(direction) 
-                        | FunctionEnum::Down(direction) 
-                        | FunctionEnum::Left(direction)
-                        | FunctionEnum::Right(direction) => {
-                            self.workspace_manager.exchange_window(&direction, &self.loop_handle);
+                    FunctionEnum::Up(direction)
+                    | FunctionEnum::Down(direction)
+                    | FunctionEnum::Left(direction)
+                    | FunctionEnum::Right(direction) => {
+                        self.workspace_manager
+                            .exchange_window(&direction, &self.loop_handle);
                     }
                     FunctionEnum::Kill => {
                         info!("Kill the full compositor");
@@ -142,9 +152,6 @@ impl GlobalData {
                     }
                     FunctionEnum::Json => {
                         // TODO
-                        if let Some(tiled_tree) = &mut self.workspace_manager.current_workspace_mut().tiled_tree.as_mut() {
-                            tiled_tree.from_json("src/config/group.json");
-                        }
                     }
                 },
             }
@@ -164,3 +171,4 @@ impl GlobalData {
         keyboard.set_focus(self, surface, serial);
     }
 }
+

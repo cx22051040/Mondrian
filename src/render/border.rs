@@ -1,12 +1,10 @@
 use smithay::{
     backend::renderer::{
-        element::{
-            Element, Id, Kind, RenderElement, UnderlyingStorage
-        }, 
+        element::{Element, Id, Kind, RenderElement, UnderlyingStorage},
         gles::{
-            GlesError, GlesFrame, GlesPixelProgram, GlesRenderer, Uniform, UniformName, UniformType
-        }, 
-        utils::{CommitCounter, OpaqueRegions}, 
+            GlesError, GlesFrame, GlesPixelProgram, GlesRenderer, Uniform, UniformName, UniformType,
+        },
+        utils::{CommitCounter, OpaqueRegions},
     },
     utils::{Buffer, Logical, Physical, Rectangle, Scale, Transform},
 };
@@ -18,7 +16,7 @@ use super::AsGlesFrame;
 pub struct BorderShader(pub GlesPixelProgram);
 
 #[derive(Debug)]
-pub struct BorderRenderElement{
+pub struct BorderRenderElement {
     id: Id,
     shader: GlesPixelProgram,
     commit_counter: CommitCounter,
@@ -45,7 +43,10 @@ impl BorderRenderElement {
             area,
             opaque_regions: opaque_regions.unwrap_or_default(),
             alpha,
-            additional_uniforms: additional_uniforms.into_iter().map(|u| u.into_owned()).collect(),
+            additional_uniforms: additional_uniforms
+                .into_iter()
+                .map(|u| u.into_owned())
+                .collect(),
             kind,
         }
     }
@@ -90,7 +91,10 @@ impl BorderRenderElement {
     ///
     /// This replaces the stored uniforms, you have to update all of them, partial updates are not possible.
     pub fn _update_uniforms(&mut self, additional_uniforms: Vec<Uniform<'_>>) {
-        self.additional_uniforms = additional_uniforms.into_iter().map(|u| u.into_owned()).collect();
+        self.additional_uniforms = additional_uniforms
+            .into_iter()
+            .map(|u| u.into_owned())
+            .collect();
         self.commit_counter.increment();
     }
 }
@@ -169,9 +173,13 @@ impl<'render> RenderElement<TtyRenderer<'render>> for BorderRenderElement {
         Ok(())
     }
 
-    fn underlying_storage(&self, _renderer: &mut TtyRenderer<'render>) -> Option<UnderlyingStorage> {
+    fn underlying_storage(
+        &self,
+        _renderer: &mut TtyRenderer<'render>,
+    ) -> Option<UnderlyingStorage> {
         // If scanout for things other than Wayland buffers is implemented, this will need to take
         // the target GPU into account.
         None
     }
 }
+

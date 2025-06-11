@@ -12,10 +12,9 @@ pub struct WorkspaceConfigs {
 
 impl WorkspaceConfigs {
     fn default() -> Self {
-        Self { 
+        Self {
             gap: 12,
             scheme: TiledScheme::Default,
-
         }
     }
 }
@@ -43,14 +42,13 @@ impl Configs {
             if line.is_empty() || line.starts_with('#') {
                 continue;
             }
-        
+
             if let Some(cap) = re_exec.captures(line) {
                 let mut parts = cap[1].trim().split_whitespace();
                 let cmd = parts.next().unwrap_or("").to_string();
                 let args: Vec<String> = parts.map(|s| s.to_string()).collect();
 
                 exec_once_cmds.push((cmd, args));
-
             } else if let Some(cap) = re_env.captures(line) {
                 let key = cap[1].trim();
                 let val = cap[2].trim();
@@ -70,13 +68,13 @@ impl Configs {
         for (cmd, args) in &self.exec_once_cmds {
             let mut command = std::process::Command::new(cmd);
             command.args(args);
-            
+
             match command.spawn() {
-                #[cfg(feature="trace_input")]
+                #[cfg(feature = "trace_input")]
                 Ok(child) => info!("Spawned: {} (PID: {})", cmd, child.id()),
                 Err(e) => error!("Failed to run '{}': {}", cmd, e),
-                #[cfg(not(feature="trace_input"))]
-                _ => { }
+                #[cfg(not(feature = "trace_input"))]
+                _ => {}
             }
         }
 

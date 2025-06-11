@@ -1,16 +1,13 @@
 use smithay::{
-    backend::renderer::{
-        element::{
-            memory::MemoryRenderBufferRenderElement, 
-            surface::WaylandSurfaceRenderElement
-        },
+    backend::renderer::element::{
+        memory::MemoryRenderBufferRenderElement, surface::WaylandSurfaceRenderElement,
     },
     desktop::space::SpaceRenderElements,
 };
 
 use crate::niri_render_elements;
 
-use super::{border::BorderRenderElement, background::BackgroundRenderElement};
+use super::{background::BackgroundRenderElement, border::BorderRenderElement};
 
 niri_render_elements! {
     ShaderRenderElement => {
@@ -33,4 +30,3 @@ niri_render_elements! {
         Custom=CustomRenderElements<R>,
     }
 }
-

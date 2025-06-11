@@ -23,9 +23,10 @@ use std::sync::Arc;
 
 use smithay::{
     reexports::{
-        calloop::{generic::Generic, EventLoop, Interest, Mode, PostAction},
+        calloop::{EventLoop, Interest, Mode, PostAction, generic::Generic},
         wayland_server::Display,
-    }, wayland::socket::ListeningSocketSource
+    },
+    wayland::socket::ListeningSocketSource,
 };
 
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
@@ -48,10 +49,12 @@ fn main() -> anyhow::Result<()> {
         .finish()
         .with(fmt_layer);
 
-    tracing::subscriber::set_global_default(subscriber).anyhow_err("Failed to init tracing subscriber")?;
+    tracing::subscriber::set_global_default(subscriber)
+        .anyhow_err("Failed to init tracing subscriber")?;
 
     // initial main event loop
-    let mut event_loop: EventLoop<'_, GlobalData> = EventLoop::try_new().anyhow_err("Failed to init main event loop")?;
+    let mut event_loop: EventLoop<'_, GlobalData> =
+        EventLoop::try_new().anyhow_err("Failed to init main event loop")?;
     let display: Display<GlobalData> = Display::new().anyhow_err("Failed to init display")?;
 
     // initial the server source
@@ -63,7 +66,10 @@ fn main() -> anyhow::Result<()> {
             |_, display, data| {
                 // Safety: we don't drop the display
                 unsafe {
-                    display.get_mut().dispatch_clients(data).expect("Failed to dispatch clients");
+                    display
+                        .get_mut()
+                        .dispatch_clients(data)
+                        .expect("Failed to dispatch clients");
                 }
                 Ok(PostAction::Continue)
             },
@@ -84,8 +90,9 @@ fn main() -> anyhow::Result<()> {
     info!(name = socket_name, "Listening on wayland socket.");
 
     // initial the main data
-    let mut global_data = GlobalData::new(loop_handle, display_handle).anyhow_err("Failed to init global data")?;
-    
+    let mut global_data =
+        GlobalData::new(loop_handle, display_handle).anyhow_err("Failed to init global data")?;
+
     unsafe { std::env::set_var("WAYLAND_DISPLAY", &socket_name) };
 
     global_data.configs.init();
@@ -109,8 +116,9 @@ fn main() -> anyhow::Result<()> {
             // running
         })
         .anyhow_err("Failed to run event loop")?;
-    
+
     info!("Event loop exited, exiting the program.");
 
     Ok(())
 }
+

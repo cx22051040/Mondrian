@@ -5,7 +5,7 @@ use regex::Regex;
 
 use smithay::{
     input::{
-        keyboard::KeyboardHandle, pointer::PointerHandle, touch::TouchHandle, Seat, SeatState
+        Seat, SeatState, keyboard::KeyboardHandle, pointer::PointerHandle, touch::TouchHandle,
     },
     reexports::wayland_server::DisplayHandle,
 };
@@ -36,24 +36,29 @@ pub enum KeyAction {
 
 pub struct InputManager {
     pub seat_state: SeatState<GlobalData>,
-    pub seat: Seat<GlobalData>,
+    seat: Seat<GlobalData>,
 
     // keyboard
-    pub keybindings: HashMap<String, KeyAction>,
-    pub priority_map: HashMap<String, i32>,
+    keybindings: HashMap<String, KeyAction>,
+    priority_map: HashMap<String, i32>,
 
     // global data
-    pub is_mainmod_pressed: bool
+    is_mainmod_pressed: bool,
 }
 
 impl InputManager {
-    pub fn new(seat_name: String, display_handle: &DisplayHandle, keybindgings_path: &str) -> anyhow::Result<Self> {
+    pub fn new(
+        seat_name: String,
+        display_handle: &DisplayHandle,
+        keybindgings_path: &str,
+    ) -> anyhow::Result<Self> {
         let mut seat_state = SeatState::new();
         let seat_name = seat_name;
         info!("seat_name: {:?}", seat_name);
         let mut seat = seat_state.new_wl_seat(display_handle, seat_name);
 
-        seat.add_keyboard(Default::default(), 200, 25).anyhow_err("Failed to add keyboard")?;
+        seat.add_keyboard(Default::default(), 200, 25)
+            .anyhow_err("Failed to add keyboard")?;
         seat.add_pointer();
 
         let keybindings = Self::load_keybindings(keybindgings_path)?;
@@ -71,7 +76,21 @@ impl InputManager {
         .map(|(k, v)| (k.to_string(), v))
         .collect();
 
-        Ok ( Self { seat_state, seat, keybindings, priority_map, is_mainmod_pressed: false } )
+        Ok(Self {
+            seat_state,
+            seat,
+            keybindings,
+            priority_map,
+            is_mainmod_pressed: false,
+        })
+    }
+
+    pub fn set_mainmode(&mut self, activate: bool) {
+        self.is_mainmod_pressed = activate;
+    }
+
+    pub fn is_mainmod_pressed(&self) -> bool {
+        self.is_mainmod_pressed
     }
 
     pub fn get_keybindings(&self) -> &HashMap<String, KeyAction> {
@@ -135,7 +154,7 @@ impl InputManager {
                         let args: Vec<String> = parts.map(|s| s.to_string()).collect();
 
                         KeyAction::Command(cmd, args)
-                    },
+                    }
                     "exec" => {
                         let internal_action = match command.trim() {
                             "workspace-1" => FunctionEnum::SwitchWorkspace1,
@@ -171,7 +190,7 @@ impl InputManager {
         for (key, action) in &bindings {
             tracing::info!(%key, action = ?action, "Keybinding registered");
         }
-        
+
         Ok(bindings)
     }
 
@@ -187,4 +206,3 @@ impl InputManager {
         self.seat.get_touch()
     }
 }
-
