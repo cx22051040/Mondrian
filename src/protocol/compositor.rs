@@ -40,6 +40,7 @@ impl CompositorHandler for GlobalData {
                 window.on_commit();
             }
 
+            // TODO: if use float don't forget this
             xdg_shell::handle_commit(
                 &mut self.popups,
                 &self.workspace_manager.current_workspace().tiled,

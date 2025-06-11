@@ -75,6 +75,7 @@ impl Configs {
                 #[cfg(feature="trace_input")]
                 Ok(child) => info!("Spawned: {} (PID: {})", cmd, child.id()),
                 Err(e) => error!("Failed to run '{}': {}", cmd, e),
+                #[cfg(not(feature="trace_input"))]
                 _ => { }
             }
         }

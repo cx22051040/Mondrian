@@ -107,10 +107,11 @@ impl RenderManager {
 
         for layer in [Layer::Overlay, Layer::Top] {
             for layer_surface in layer_map.layers_on(layer) {
+                let layout_rec = layer_map.layer_geometry(layer_surface).unwrap();
                 elements.extend(
                     layer_surface.render_elements::<WaylandSurfaceRenderElement<R>>(
                         renderer,
-                        output_geo.loc.to_physical_precise_round(output_scale),
+                        (layout_rec.loc + output_geo.loc).to_physical_precise_round(output_scale),
                         Scale::from(output_scale),
                         0.85,
                     )
@@ -158,10 +159,11 @@ impl RenderManager {
         // layer shell bottom and background
         for layer in [Layer::Bottom, Layer::Background] {
             for layer_surface in layer_map.layers_on(layer) {
+                let layout_rec = layer_map.layer_geometry(layer_surface).unwrap();
                 elements.extend(
                     layer_surface.render_elements::<WaylandSurfaceRenderElement<R>>(
                         renderer,
-                        output_geo.loc.to_physical_precise_round(output_scale),
+                        (layout_rec.loc + output_geo.loc).to_physical_precise_round(output_scale),
                         Scale::from(output_scale),
                         0.85,
                     )

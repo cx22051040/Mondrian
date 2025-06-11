@@ -276,8 +276,8 @@ impl TiledTree {
                     new_window,
                     from,
                     new_rec,
-                    Duration::from_millis(30),
-                    crate::animation::AnimationType::EaseInOutQuad,
+                    Duration::from_millis(60),
+                    crate::animation::AnimationType::OvershootBounce,
                 );
             });
 
@@ -619,7 +619,7 @@ fn get_new_rec(direction: &Direction, rec: &mut Rectangle<i32, Logical>, gap: i3
 
     match direction {
         Direction::Left | Direction::Right => {
-            let half = rec.size.w / 2 - gap;
+            let half = (rec.size.w - gap) / 2 ;
             new_rec.size.w = half;
             rec.size.w = half;
 
@@ -632,7 +632,7 @@ fn get_new_rec(direction: &Direction, rec: &mut Rectangle<i32, Logical>, gap: i3
             new_rec
         }
         Direction::Up | Direction::Down => {
-            let half = rec.size.h / 2 - gap;
+            let half = (rec.size.h - gap) / 2;
             new_rec.size.h = half;
             rec.size.h = half;
 

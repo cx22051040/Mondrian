@@ -6,7 +6,6 @@ pub enum AnimationType {
     #[allow(dead_code)]
     Linear,
     EaseInOutQuad,
-    #[allow(dead_code)]
     OvershootBounce,
 }
 
@@ -30,19 +29,12 @@ impl AnimationType {
             }
 
             AnimationType::OvershootBounce => {
-                // 类似 easeOutBack 的效果 + 回落
-                // overshoot 控制“超出”程度
-                let overshoot = 1.70158;
-                if t < 0.8 {
-                    // 前段：从 0 上升至 >1.0
-                    let s = t / 0.8;
-                    s * s * ((overshoot + 1.0) * s - overshoot)
-                } else {
-                    // 后段：缓慢下降回 1.0
-                    let s = (t - 0.8) / 0.2;
-                    1.0 - (1.0 - s) * (1.0 - s) * 0.5
-                }
+                let c1 = 1.70158;
+                let c3 = c1 + 1.0;
+            
+                1.0 + c3 * (t - 1.0).powi(3) + c1 * (t - 1.0).powi(2)
             }
+            
         }
     }
 }

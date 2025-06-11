@@ -101,6 +101,7 @@ impl GlobalData {
                         Err(e) => {
                             error!("Failed to execute command '{} {}': {}", cmd, args.join(" "), e);
                         }
+                        #[cfg(not(feature="trace_input"))]
                         _ => {}
                     }
                 }

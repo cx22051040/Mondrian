@@ -1,7 +1,7 @@
 use std::{hash::Hash, sync::{atomic::{AtomicUsize, Ordering}, Arc}, time::Duration};
 
 use smithay::{
-    desktop::{Space, Window},
+    desktop::{Space, Window, WindowSurfaceType},
     output::Output,
     reexports::{calloop::LoopHandle, wayland_protocols::xdg::shell::server::xdg_toplevel::ResizeEdge, wayland_server::protocol::wl_surface::WlSurface},
     utils::{Logical, Point, Rectangle},
@@ -305,6 +305,25 @@ impl Workspace {
             layout_tree.recover(&mut self.tiled, loop_handle);
         }
     }
+
+    pub fn surface_under(&mut self, position: Point<f64, Logical>, need_focus: bool) -> Option<(WlSurface, Point<f64, Logical>)> {
+        if let Some((window, window_loc)) = self
+            .window_under(position)
+            .map(|(w, p)| (w.clone(), p))
+        {
+            if let Some((surface, surface_loc)) = window
+                .surface_under(position - window_loc.to_f64(), WindowSurfaceType::ALL)
+                .map(|(surface, surface_loc)| (surface, surface_loc)) {
+
+                    if need_focus {
+                        self.set_focus(Some(window));
+                    }
+        
+                    return Some((surface, (surface_loc + window_loc).to_f64()))
+                }
+        }
+        None
+    }
 }
 
 #[derive(Debug)]
@@ -382,14 +401,6 @@ impl WorkspaceManager {
         self.current_workspace_mut().refresh();
     }
 
-    pub fn window_under(
-        &self,
-        position: Point<f64, Logical>,
-    ) -> Option<(&Window, Point<i32, Logical>)> {
-        self.current_workspace()
-            .window_under(position)
-    }
-
     pub fn elements(&self) -> impl DoubleEndedIterator<Item = &Window> {
         self.current_workspace().elements()
     }
@@ -419,10 +430,6 @@ impl WorkspaceManager {
     //     self.current_workspace_mut().resize(offset, edges, rec);
     // }
 
-    pub fn set_focus(&mut self, window: Option<Window>) {
-        self.current_workspace_mut().set_focus(window);
-    }
-
     pub fn get_focus(&self) -> &Option<Window> {
         &self.current_workspace().get_focus()
     }
@@ -449,5 +456,9 @@ impl WorkspaceManager {
 
     pub fn exchange_window(&mut self, direction: &Direction, loop_handle: &LoopHandle<'_, GlobalData>) {
         self.current_workspace_mut().exchange_window(direction, loop_handle);
+    }
+
+    pub fn surface_under(&mut self, position: Point<f64, Logical>, need_focus: bool) -> Option<(WlSurface, Point<f64, Logical>)> {
+        self.current_workspace_mut().surface_under(position, need_focus)
     }
 }

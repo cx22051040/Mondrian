@@ -15,6 +15,7 @@ use crate::backend::tty::{TtyFrame, TtyRenderer, TtyRendererError};
 
 use super::AsGlesFrame;
 
+#[allow(dead_code)]
 pub struct Background(pub GlesPixelProgram);
 
 #[derive(Debug)]
@@ -29,6 +30,7 @@ pub struct BackgroundRenderElement{
     kind: Kind,
 }
 
+#[allow(dead_code)]
 impl BackgroundRenderElement {
     pub fn new(
         shader: GlesPixelProgram,
