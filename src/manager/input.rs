@@ -65,12 +65,13 @@ impl InputManager {
 
         // priority: Ctrl > Shift > Alt
         let priority_map: HashMap<String, i32> = [
-            ("Control_L", 0),
-            ("Control_R", 0),
-            ("Shift_L", 1),
-            ("Shift_R", 1),
-            ("Alt_L", 2),
-            ("Alt_R", 2),
+            ("Super_L", 0),
+            ("Control_L", 1),
+            ("Control_R", 1),
+            ("Shift_L", 2),
+            ("Shift_R", 2),
+            ("Alt_L", 3),
+            ("Alt_R", 3),
         ]
         .into_iter()
         .map(|(k, v)| (k.to_string(), v))

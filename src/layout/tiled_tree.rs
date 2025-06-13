@@ -285,7 +285,7 @@ impl TiledTree {
                     new_window,
                     from,
                     new_rec,
-                    Duration::from_millis(60),
+                    Duration::from_millis(30),
                     crate::animation::AnimationType::OvershootBounce,
                 );
             });
