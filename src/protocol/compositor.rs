@@ -19,6 +19,8 @@ impl CompositorHandler for GlobalData {
     }
 
     fn commit(&mut self, surface: &WlSurface) {
+        let _span = tracy_client::span!("commit_all");
+
         on_commit_buffer_handler::<Self>(surface);
         self.backend.early_import(surface);
         if !is_sync_subsurface(surface) {

@@ -39,6 +39,10 @@ impl OutputElement {
     pub fn output(&self) -> &Output {
         &self.output
     }
+
+    pub fn current_refresh(&self) -> i32 {
+        self.output.current_mode().unwrap().refresh
+    }
 }
 pub struct OutputManager {
     pub outputs: Vec<OutputElement>,
@@ -131,5 +135,9 @@ impl OutputManager {
 
     pub fn output_geometry(&self, output: &Output) -> Option<Rectangle<i32, Logical>> {
         self.output_space.output_geometry(output)
+    }
+
+    pub fn current_refresh(&self) -> i32 {
+        self.outputs.iter().find(|o| o.activate).unwrap().current_refresh()
     }
 }

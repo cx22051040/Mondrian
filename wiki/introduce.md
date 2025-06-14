@@ -2,7 +2,7 @@
 
 <div style="text-align: center; margin-top: 100px; margin-bottom: 300px;">
     <div>
-        <img src = "introduce/HDU_logo.png" width="300px">
+        <img src = "introduce/HDU_logo.png" width="300px" style="display: inline-block;">
     </div>
     <h1 style="font-size: 36px; font-weight: bold; margin-top: 60px;">Wayland平铺式桌面管理器实现</h1>
     <p style="font-size: 20px; margin-top: 60px;">队伍名：进栈不排队</p>
@@ -12,6 +12,32 @@
 </div>
 
 <!-- pages -->
+
+## 目录：
+- [目录：](#目录)
+- [1. 项目介绍](#1-项目介绍)
+  - [1.1 项目简介](#11-项目简介)
+  - [1.2 项目开发进度](#12-项目开发进度)
+- [2. 赛题描述](#2-赛题描述)
+  - [2.1 Linux 图形栈](#21-linux-图形栈)
+  - [2.2 X11 协议](#22-x11-协议)
+  - [2.3 Wayland 协议](#23-wayland-协议)
+  - [2.4 平铺式桌面布局协议](#24-平铺式桌面布局协议)
+- [3. 项目设计与实现](#3-项目设计与实现)
+  - [3.1 技术选型： Rust 与 Smithay](#31-技术选型-rust-与-smithay)
+  - [3.2 最小 wayland compositor 实现](#32-最小-wayland-compositor-实现)
+  - [3.3 键盘输入快捷键匹配](#33-键盘输入快捷键匹配)
+  - [3.4 tty 裸机直连](#34-tty-裸机直连)
+  - [3.5 平铺式布局算法](#35-平铺式布局算法)
+  - [3.6 动画效果](#36-动画效果)
+  - [3.7 拓展协议实现](#37-拓展协议实现)
+- [4. 项目测试与性能分析](#4-项目测试与性能分析)
+  - [4.1 Rust tracing](#41-rust-tracing)
+  - [4.2 帧率测试](#42-帧率测试)
+  - [4.3 GPU 压力测试](#43-gpu-压力测试)
+
+<div style="text-align: center; margin-top: 100px; margin-bottom: 400px;">
+</div>
 
 ## 1. 项目介绍
 

@@ -30,7 +30,7 @@ use smithay::{
 };
 
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
-use tracing_subscriber::{self, FmtSubscriber, layer::SubscriberExt};
+use tracing_subscriber::{self, layer::SubscriberExt, FmtSubscriber};
 
 use state::{ClientState, GlobalData};
 use utils::errors::AnyHowErr;
@@ -51,6 +51,8 @@ fn main() -> anyhow::Result<()> {
 
     tracing::subscriber::set_global_default(subscriber)
         .anyhow_err("Failed to init tracing subscriber")?;
+
+    tracy_client::Client::start();
 
     // initial main event loop
     let mut event_loop: EventLoop<'_, GlobalData> =

@@ -15,7 +15,7 @@ use smithay::{
             protocol::{wl_buffer, wl_shm, wl_surface::WlSurface},
         },
     },
-    utils::{Clock, Monotonic, Time},
+    utils::{Clock, Monotonic},
     wayland::{
         buffer::BufferHandler,
         compositor::{CompositorClientState, CompositorState},
@@ -54,14 +54,14 @@ pub struct ClientState {
 
 impl ClientData for ClientState {
     fn initialized(&self, client_id: smithay::reexports::wayland_server::backend::ClientId) {
-        tracing::info!("client initialized: {:?}", client_id);
+        tracing::debug!("client initialized: {:?}", client_id);
     }
     fn disconnected(
         &self,
         client_id: smithay::reexports::wayland_server::backend::ClientId,
         reason: smithay::reexports::wayland_server::backend::DisconnectReason,
     ) {
-        tracing::info!(
+        tracing::debug!(
             "client disconnected: {:?}, the reason: {:?}",
             client_id,
             reason
@@ -92,7 +92,6 @@ pub struct GlobalData {
     // global data
     pub start_time: std::time::Instant,
     pub clock: Clock<Monotonic>,
-    pub next_frame_target: Time<Monotonic>,
 }
 
 impl GlobalData {
@@ -144,7 +143,6 @@ impl GlobalData {
 
         let start_time = std::time::Instant::now();
         let clock = Clock::new();
-        let next_frame_target = clock.now();
 
         Ok(Self {
             backend,
@@ -165,7 +163,6 @@ impl GlobalData {
 
             start_time,
             clock,
-            next_frame_target,
         })
     }
 }

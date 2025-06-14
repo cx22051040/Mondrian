@@ -83,6 +83,8 @@ impl GlobalData {
     }
 
     pub fn action_keys(&mut self, keys: String, serial: Serial) {
+        let _span = tracy_client::span!("keyboard_action");
+
         let keybindings = self.input_manager.get_keybindings();
 
         if let Some(command) = keybindings.get(&keys) {

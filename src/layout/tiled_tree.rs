@@ -66,6 +66,8 @@ impl TiledTree {
     }
 
     pub fn expansion(&self, space: &mut Space<Window>, loop_handle: &LoopHandle<'_, GlobalData>) {
+        let _span = tracy_client::span!("expansion_window");
+
         if let Some(bound) = self.get_root_rec(space) {
             let width = (bound.size.w - 2 * self.gap) / 3;
             let height = bound.size.h;
@@ -103,6 +105,8 @@ impl TiledTree {
     }
 
     pub fn recover(&mut self, space: &mut Space<Window>, loop_handle: &LoopHandle<'_, GlobalData>) {
+        let _span = tracy_client::span!("recover_window");
+
         if let Some(root_id) = self.get_root() {
             match self.nodes[root_id] {
                 NodeData::Split { rec, .. } => {
@@ -187,6 +191,8 @@ impl TiledTree {
         space: &mut Space<Window>,
         loop_handle: &LoopHandle<'_, GlobalData>,
     ) -> bool {
+        let _span = tracy_client::span!("insert_window");
+
         let target = match target {
             Some(window) => window.clone(),
             None => match self.get_first_window() {
@@ -334,6 +340,8 @@ impl TiledTree {
         space: &mut Space<Window>,
         loop_handle: &LoopHandle<'_, GlobalData>,
     ) -> bool {
+        let _span = tracy_client::span!("remove_window");
+
         let target_id = match self.find_node(target) {
             Some(r) => r,
             None => {
@@ -480,6 +488,8 @@ impl TiledTree {
         space: &mut Space<Window>,
         loop_handle: &LoopHandle<'_, GlobalData>,
     ) {
+        let _span = tracy_client::span!("invert_window");
+
         let target_id = match self.find_node(target) {
             Some(r) => r,
             None => {
@@ -567,6 +577,8 @@ impl TiledTree {
         space: &mut Space<Window>,
         loop_handle: &LoopHandle<'_, GlobalData>,
     ) {
+        let _span = tracy_client::span!("exchange_window");
+
         if let Some(neighbor) = self.neighbor_graph.get(focus, direction) {
             let neighbor = neighbor.first().unwrap();
 

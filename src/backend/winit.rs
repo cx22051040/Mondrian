@@ -196,6 +196,8 @@ impl Winit {
         cursor_manager: &mut CursorManager,
         input_manager: &InputManager,
     ) {
+        let _span = tracy_client::span!("winit_render");
+
         if let Ok((renderer, mut framebuffer)) = self.backend.bind() {
             let elements = render_manager.get_render_elements(
                 renderer,

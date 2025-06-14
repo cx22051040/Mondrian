@@ -25,6 +25,8 @@ impl XdgShellHandler for GlobalData {
     }
 
     fn new_toplevel(&mut self, surface: ToplevelSurface) {
+        let _span = tracy_client::span!("new_xdg_toplevel");
+
         let window = Window::new_wayland_window(surface.clone());
 
         self.window_manager.add_window(

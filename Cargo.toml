@@ -16,7 +16,7 @@ tokio = "1.44.1"
 tracing = "0.1.41"
 tracing-appender = "0.2.3"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
-tracy-client = "0.18.0"
+tracy-client = "0.18.1"
 xcursor = "0.3.8"
 
 

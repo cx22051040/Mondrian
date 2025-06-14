@@ -63,6 +63,8 @@ impl RenderManager {
         cursor_manager: &mut CursorManager,
         input_manager: &InputManager,
     ) -> Vec<OutputRenderElements<R>> {
+        let _span = tracy_client::span!("get_render_elements");
+
         let mut output_elements = vec![];
 
         // First is Cursor
@@ -113,6 +115,8 @@ impl RenderManager {
         output_manager: &OutputManager,
         workspace_manager: &WorkspaceManager,
     ) -> Vec<CustomRenderElements<R>> {
+        let _span = tracy_client::span!("get_windows_render_elements");
+
         // TODO: 暂时使用
         self.refresh();
 
@@ -201,6 +205,8 @@ impl RenderManager {
         cursor_manager: &mut CursorManager,
         input_manager: &InputManager,
     ) -> Vec<CustomRenderElements<R>> {
+        let _span = tracy_client::span!("get_cursor_render_elements");
+
         cursor_manager.check_cursor_image_surface_alive();
 
         let output = output_manager.current_output();
@@ -289,6 +295,8 @@ impl RenderManager {
         renderer: &mut R,
         workspace_manager: &WorkspaceManager,
     ) -> Vec<CustomRenderElements<R>> {
+        let _span = tracy_client::span!("get_border_render_elements");
+
         let mut elements: Vec<CustomRenderElements<R>> = vec![];
 
         let focus = workspace_manager.current_workspace().focus();
