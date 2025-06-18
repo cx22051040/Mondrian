@@ -2,38 +2,18 @@ use std::sync::Arc;
 
 use anyhow::Context;
 use smithay::{
-    backend::allocator::dmabuf::Dmabuf,
-    delegate_data_device, delegate_dmabuf, delegate_output, delegate_seat, delegate_shm,
-    delegate_viewporter,
-    desktop::PopupManager,
-    input::{Seat, SeatHandler, SeatState},
-    reexports::{
+    backend::allocator::dmabuf::Dmabuf, delegate_data_device, delegate_dmabuf, delegate_drm_syncobj, delegate_output, delegate_seat, delegate_shm, delegate_viewporter, desktop::PopupManager, input::{Seat, SeatHandler, SeatState}, reexports::{
         calloop::LoopHandle,
         wayland_server::{
-            DisplayHandle, Resource,
-            backend::ClientData,
-            protocol::{wl_buffer, wl_shm, wl_surface::WlSurface},
+            backend::ClientData, protocol::{wl_buffer, wl_shm, wl_surface::WlSurface}, DisplayHandle, Resource
         },
-    },
-    utils::{Clock, Monotonic},
-    wayland::{
-        buffer::BufferHandler,
-        compositor::{CompositorClientState, CompositorState},
-        dmabuf::{DmabufGlobal, DmabufHandler, DmabufState, ImportNotifier},
-        foreign_toplevel_list::ForeignToplevelListState,
-        output::OutputHandler,
-        security_context::SecurityContext,
-        selection::{
-            SelectionHandler,
+    }, utils::{Clock, Monotonic}, wayland::{
+        buffer::BufferHandler, compositor::{CompositorClientState, CompositorState}, dmabuf::{DmabufGlobal, DmabufHandler, DmabufState, ImportNotifier}, drm_syncobj::{DrmSyncobjHandler, DrmSyncobjState}, foreign_toplevel_list::ForeignToplevelListState, output::OutputHandler, security_context::SecurityContext, selection::{
             data_device::{
-                ClientDndGrabHandler, DataDeviceHandler, DataDeviceState, ServerDndGrabHandler,
-                set_data_device_focus,
-            },
-        },
-        shell::{wlr_layer::WlrLayerShellState, xdg::XdgShellState},
-        shm::{ShmHandler, ShmState},
-        viewporter::ViewporterState,
-    },
+                set_data_device_focus, ClientDndGrabHandler, DataDeviceHandler, DataDeviceState, ServerDndGrabHandler
+            }, SelectionHandler
+        }, shell::{wlr_layer::WlrLayerShellState, xdg::XdgShellState}, shm::{ShmHandler, ShmState}, viewporter::ViewporterState
+    }
 };
 
 use crate::{
@@ -173,6 +153,7 @@ pub struct State {
     pub data_device_state: DataDeviceState,
     pub shm_state: ShmState,
     pub dmabuf_state: DmabufState,
+    pub syncobj_state: Option<DrmSyncobjState>,
 
     // protocol state
     pub xdg_shell_state: XdgShellState,
@@ -203,6 +184,7 @@ impl State {
             data_device_state,
             shm_state,
             dmabuf_state,
+            syncobj_state: None,
 
             xdg_shell_state,
             layer_shell_state,
@@ -272,6 +254,13 @@ impl ShmHandler for GlobalData {
     }
 }
 delegate_shm!(GlobalData);
+
+impl DrmSyncobjHandler for GlobalData {
+    fn drm_syncobj_state(&mut self) -> &mut DrmSyncobjState {
+        self.state.syncobj_state.as_mut().unwrap()
+    }
+}
+delegate_drm_syncobj!(GlobalData);
 
 impl DmabufHandler for GlobalData {
     fn dmabuf_state(&mut self) -> &mut DmabufState {

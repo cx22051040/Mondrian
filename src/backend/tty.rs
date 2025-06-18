@@ -1,20 +1,24 @@
 use anyhow::Context;
 use smithay::backend::allocator::dmabuf::Dmabuf;
 use smithay::backend::allocator::format::FormatSet;
-use smithay::backend::drm::compositor::DrmCompositor;
+use smithay::backend::drm::compositor::{DrmCompositor, PrimaryPlaneElement};
+use smithay::backend::drm::DrmSurface;
+use smithay::backend::renderer::element::default_primary_scanout_output_compare;
 use smithay::backend::renderer::multigpu::MultiFrame;
 use smithay::backend::renderer::{ImportDma, ImportEgl, ImportMemWl, RendererSuper};
+use smithay::desktop::utils::update_surface_primary_scanout_output;
 use smithay::output::OutputModeSource;
 use smithay::reexports::calloop::RegistrationToken;
 use smithay::reexports::drm::control::ModeTypeFlags;
 use smithay::reexports::drm::Device;
 use smithay::reexports::gbm::Modifier;
 use smithay::reexports::input::DeviceCapability;
-use smithay::reexports::wayland_protocols::wp::linux_dmabuf::zv1::server::zwp_linux_dmabuf_feedback_v1::TrancheFlags;
+use smithay::reexports::wayland_protocols::wp::linux_dmabuf::zv1::server::zwp_linux_dmabuf_feedback_v1;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::reexports::wayland_server::DisplayHandle;
 use smithay::utils::Time;
 use smithay::wayland::dmabuf::{DmabufFeedback, DmabufFeedbackBuilder, DmabufGlobal};
+use smithay::wayland::drm_syncobj::{supports_syncobj_eventfd, DrmSyncobjState};
 use smithay::{
     desktop::utils::{
         OutputPresentationFeedback, surface_presentation_feedback_flags_from_states,
@@ -261,8 +265,6 @@ impl Tty {
                     node,
                     &path,
                     output_manager,
-                    render_manager,
-                    state,
                     loop_handle,
                     display_handle,
                 ) {
@@ -270,17 +272,57 @@ impl Tty {
                 }
             }
         }
-
         let mut renderer = self
             .gpu_manager
             .single_renderer(&self.primary_render_node)
             .unwrap();
 
+        // initial shader
+        render_manager.compile_shaders(&mut renderer.as_gles_renderer());
+    
         state.shm_state.update_formats(renderer.shm_formats());
 
         match renderer.bind_wl_display(display_handle) {
             Ok(_) => info!("EGL hardware-acceleration enabled"),
             Err(err) => info!(?err, "Failed to initialize EGL hardware-acceleration"),
+        }
+
+        // create dmabuf
+        let dmabuf_formats = renderer.dmabuf_formats();
+        let default_feedback =
+            DmabufFeedbackBuilder::new(self.primary_render_node.dev_id(), dmabuf_formats.clone())
+                .build()
+                .expect("Failed building default dmabuf feedback");
+    
+        let dmabuf_global = state
+            .dmabuf_state
+            .create_global_with_default_feedback::<GlobalData>(
+                display_handle,
+                &default_feedback,
+            );
+        self.dmabuf_global = Some(dmabuf_global);
+    
+        // Update the dmabuf feedbacks for all surfaces
+        for device in self.devices.values_mut() {
+            for surface in device.surfaces.values_mut() {
+                surface.dmabuf_feedback = surface_dmabuf_feedback(
+                    surface.compositor.surface(), 
+                    &self.primary_render_node, 
+                    &surface.render_node, 
+                    &mut self.gpu_manager
+                )
+            }
+        }
+
+        // Expose syncobj protocol if supported by primary GPU
+        if let Some(device) = self.devices.get(&self.primary_node) {
+            let import_device = device.drm.device_fd().clone();
+            if supports_syncobj_eventfd(&import_device) {
+                info!("syncobj enabled");
+                let syncobj_state =
+                    DrmSyncobjState::new::<GlobalData>(&display_handle, import_device);
+                state.syncobj_state = Some(syncobj_state);
+            }
         }
 
         loop_handle
@@ -291,8 +333,6 @@ impl Tty {
                             node,
                             &path,
                             &mut data.output_manager,
-                            &data.render_manager,
-                            &mut data.state,
                             &data.loop_handle,
                             &data.display_handle,
                         ) {
@@ -330,8 +370,6 @@ impl Tty {
         node: DrmNode,
         path: &Path,
         output_manager: &mut OutputManager,
-        render_manager: &RenderManager,
-        state: &mut State,
         loop_handle: &LoopHandle<'_, GlobalData>,
         display_handle: &DisplayHandle,
     ) -> anyhow::Result<()> {
@@ -374,55 +412,6 @@ impl Tty {
             .as_mut()
             .add_node(render_node, gbm.clone())
             .context("error adding render node to GPU manager")?;
-
-        // Only the main GPU should create the dmabuf feedback
-        if node == self.primary_node || render_node == self.primary_render_node {
-            if node == self.primary_node {
-                info!("this is the primary node");
-            }
-            if render_node == self.primary_render_node {
-                info!("this is the primary render node");
-            }
-
-            let mut renderer = self.gpu_manager.single_renderer(&render_node).unwrap();
-
-            let render_formats = renderer.dmabuf_formats();
-
-            // initial shader
-            render_manager.compile_shaders(&mut renderer.as_gles_renderer());
-
-            // create dmabuf
-            let default_feedback =
-                DmabufFeedbackBuilder::new(render_node.dev_id(), render_formats.clone())
-                    .build()
-                    .context("Failed building default dmabuf feedback")?;
-
-            let dmabuf_global = state
-                .dmabuf_state
-                .create_global_with_default_feedback::<GlobalData>(
-                    display_handle,
-                    &default_feedback,
-                );
-            self.dmabuf_global = Some(dmabuf_global);
-
-            // Update the dmabuf feedbacks for all surfaces
-            for device in self.devices.values_mut() {
-                for surface in device.surfaces.values_mut() {
-                    match surface_dmabuf_feedback(
-                        surface,
-                        render_formats.clone(),
-                        self.primary_render_node,
-                    ) {
-                        Ok(dmabuf_feedback) => {
-                            surface.dmabuf_feedback = Some(dmabuf_feedback);
-                        }
-                        Err(err) => {
-                            warn!("error creating dmabuf feedback: {:?}", err);
-                        }
-                    }
-                }
-            }
-        }
 
         self.devices.insert(
             node,
@@ -650,38 +639,10 @@ impl Tty {
         };
 
         if schedule_render {
-            // frame_callback
-            loop_handle.insert_idle(|data| {
-                // For each of the windows send the frame callbacks to tell them to draw next frame.
-                data.workspace_manager.elements().for_each(|window| {
-                    window.send_frame(
-                        data.output_manager.current_output(),
-                        data.start_time.elapsed(),
-                        Some(Duration::ZERO),
-                        |_, _| Some(data.output_manager.current_output().clone()),
-                    )
-                });
-            });
-
             let next_frame_target = clock + frame_duration;
-            let repaint_delay = Duration::from_secs_f64(frame_duration.as_secs_f64() * 0.6f64);
-            
-            let timer = if self.primary_node != surface.render_node {
-                // However, if we need to do a copy, that might not be enough.
-                // (And without actual comparision to previous frames we cannot really know.)
-                // So lets ignore that in those cases to avoid thrashing performance.
-                debug!("scheduling repaint timer immediately on {:?}", crtc);
-                Timer::immediate()
-            } else {
-                debug!(
-                    "scheduling repaint timer with delay {:?} on {:?}",
-                    repaint_delay,
-                    crtc
-                );
-                Timer::from_duration(repaint_delay)
-            };
 
-            loop_handle.insert_source(timer, move |_, _, data| {
+            loop_handle.insert_idle(move |data| {
+                
                 data.backend.tty().render_output(
                     node,
                     crtc,
@@ -695,12 +656,11 @@ impl Tty {
                     &data.loop_handle,
                 );
 
-                data.workspace_manager.refresh();
-                data.popups.cleanup();
-                data.display_handle.flush_clients().unwrap();
+                data.post_repaint(next_frame_target);
 
-                TimeoutAction::Drop
-            }).unwrap();
+                let _span = tracy_client::span!("flush_clients");
+                data.display_handle.flush_clients().unwrap();
+            });
         }
     }
 
@@ -925,41 +885,32 @@ impl Tty {
                 }
             };
 
-            let mut surface = Surface {
+            let dmabuf_feedback = surface_dmabuf_feedback(
+                compositor.surface(), 
+                &self.primary_render_node,
+                &device.render_node,
+                &mut self.gpu_manager
+            );
+
+            let surface = Surface {
                 output: output_manager.current_output().clone(),
                 device_id: node,
                 render_node: device.render_node,
                 compositor,
-                dmabuf_feedback: None,
+                dmabuf_feedback,
             };
-
-            match self.gpu_manager.single_renderer(&self.primary_render_node) {
-                Ok(primary_renderer) => {
-                    let primary_formats = primary_renderer.dmabuf_formats();
-
-                    match surface_dmabuf_feedback(
-                        &surface,
-                        primary_formats,
-                        self.primary_render_node,
-                    ) {
-                        Ok(dmabuf_feedback) => {
-                            surface.dmabuf_feedback = Some(dmabuf_feedback);
-                        }
-                        Err(err) => {
-                            warn!("error creating dmabuf feedback: {:?}", err);
-                            return;
-                        }
-                    }
-                }
-                Err(err) => {
-                    warn!("error getting renderer for primary GPU: {:?}", err);
-                    return;
-                }
-            }
 
             device.surfaces.insert(crtc, surface);
 
-            // kick-off rendering
+            loop_handle.insert_idle(|data| {
+                data.workspace_manager.refresh();
+                data.popups.cleanup();
+    
+                let _span = tracy_client::span!("flush_clients");
+                data.display_handle.flush_clients().unwrap();
+            });
+
+            // kick-off rendering 
             loop_handle.insert_idle(move |data| {
                 data.backend.tty().render_output(
                     node,
@@ -973,10 +924,6 @@ impl Tty {
                     &data.clock,
                     &data.loop_handle,
                 );
-
-                data.workspace_manager.refresh();
-                data.popups.cleanup();
-                data.display_handle.flush_clients().unwrap();
             });
         }
     }
@@ -1060,6 +1007,9 @@ impl Tty {
             .compositor
             .render_frame(&mut renderer, &elements, [0.; 4], FrameFlags::DEFAULT)
             .map(|render_frame_result| {
+                if let PrimaryPlaneElement::Swapchain(element) = render_frame_result.primary_element {
+                    element.sync.wait().unwrap();
+                }
                 (!render_frame_result.is_empty, render_frame_result.states)
             })
             .map_err(|err| match err {
@@ -1071,13 +1021,20 @@ impl Tty {
                 ) => SwapBuffersError::from(err),
                 _ => unreachable!(),
             }) {
-            Ok((rendered, states)) => {
+            Ok((rendered, render_element_states)) => {
                 if rendered {
+
+                    update_primary_scanout_output(
+                        workspace_manager.current_space(), 
+                        output_manager.current_output(), 
+                        &render_element_states
+                    );
+
                     // need queue_frame to switch buffer
                     let output_presentation_feedback = take_presentation_feedback(
                         output_manager.current_output(),
                         workspace_manager.current_space(),
-                        &states,
+                        &render_element_states,
                     );
 
                     // queue_frame will arise vlbank
@@ -1090,17 +1047,19 @@ impl Tty {
                         Err(err) => {
                             warn!("error queue frame: {:?}", err);
                             match err {
-                                SwapBuffersError::AlreadySwapped => {}
+                                SwapBuffersError::AlreadySwapped => {
+                                    panic!("AlreadySwapped: {}", err);
+                                }
                                 SwapBuffersError::TemporaryFailure(err) => {
                                     if matches!(
                                         err.downcast_ref::<DrmError>(),
                                         Some(&DrmError::DeviceInactive)
                                     ) {
-                                        return;
+                                        panic!("TemporaryFailure: {}", err);
                                     }
                                 }
                                 SwapBuffersError::ContextLost(err) => {
-                                    panic!("Rendering loop lost: {}", err)
+                                    panic!("ContextLost: {}", err)
                                 }
                             }
                         }
@@ -1117,7 +1076,7 @@ impl Tty {
                         crtc,
                     );
                     let timer = Timer::from_duration(reschedule_timeout);
-                    
+
                     loop_handle
                         .insert_source(timer, move |_, _, data| {
                             data.backend.tty().render_output(
@@ -1132,10 +1091,6 @@ impl Tty {
                                 &data.clock,
                                 &data.loop_handle,
                             );
-                            
-                            data.workspace_manager.refresh();
-                            data.popups.cleanup();
-                            data.display_handle.flush_clients().unwrap();
                             TimeoutAction::Drop
                         })
                         .expect("failed to schedule frame timer");
@@ -1195,75 +1150,59 @@ impl Tty {
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct SurfaceDmabufFeedback {
-    pub render: DmabufFeedback,
-    pub scanout: DmabufFeedback,
+    pub render_feedback: DmabufFeedback,
+    pub scanout_feedback: DmabufFeedback,
 }
 
 fn surface_dmabuf_feedback(
-    surface: &Surface,
-    primary_formats: FormatSet,
-    primary_render_node: DrmNode,
-) -> anyhow::Result<SurfaceDmabufFeedback> {
-    let drm_surface = surface.compositor.surface();
-    let planes = drm_surface.planes();
+    drm_surface: &DrmSurface,
+    primary_render_node: &DrmNode,
+    render_node: &DrmNode,
+    gpu_manager: &mut GpuManager<GbmGlesBackend<GlesRenderer, DrmDeviceFd>>,
+) -> Option<SurfaceDmabufFeedback> {
+    let primary_formats = gpu_manager.single_renderer(&primary_render_node).ok()?.dmabuf_formats();
+    let render_formats = gpu_manager.single_renderer(&render_node).ok()?.dmabuf_formats();
 
-    let primary_plane_formats = drm_surface.plane_info().formats.clone();
-    let primary_or_overlay_plane_formats = primary_plane_formats
+    let all_render_formats = primary_formats
         .iter()
-        .chain(planes.overlay.iter().flat_map(|p| p.formats.iter()))
+        .chain(render_formats.iter())
         .copied()
         .collect::<FormatSet>();
 
-    // We limit the scan-out trache to formats we can also render from so that there is always a
-    // fallback render path available in case the supplied buffer can not be scanned out directly.
-    let mut primary_scanout_formats = primary_plane_formats
-        .intersection(&primary_formats)
-        .copied()
-        .collect::<Vec<_>>();
-    let mut primary_or_overlay_scanout_formats = primary_or_overlay_plane_formats
-        .intersection(&primary_formats)
-        .copied()
-        .collect::<Vec<_>>();
+    let planes = drm_surface.planes().clone();
 
-    // HACK: AMD iGPU + dGPU systems share some modifiers between the two, and yet cross-device
-    // buffers produce a glitched scanout if the modifier is not Linear...
-    if primary_render_node != surface.render_node {
-        primary_scanout_formats.retain(|f| f.modifier == Modifier::Linear);
-        primary_or_overlay_scanout_formats.retain(|f| f.modifier == Modifier::Linear);
-    }
+    // We limit the scan-out tranche to formats we can also render from
+    // so that there is always a fallback render path available in case
+    // the supplied buffer can not be scanned out directly
+    let planes_formats = drm_surface
+        .plane_info()
+        .formats
+        .iter()
+        .copied()
+        .chain(planes.overlay.into_iter().flat_map(|p| p.formats))
+        .collect::<FormatSet>()
+        .intersection(&all_render_formats)
+        .copied()
+        .collect::<FormatSet>();
+
     let builder = DmabufFeedbackBuilder::new(primary_render_node.dev_id(), primary_formats);
-    info!(
-        "primary scanout formats: {}, overlay adds: {}",
-        primary_scanout_formats.len(),
-        primary_or_overlay_scanout_formats.len() - primary_scanout_formats.len(),
-    );
-
-    // Prefer the primary-plane-only formats, then primary-or-overlay-plane formats. This will
-    // increase the chance of scanning out a client even with our disabled-by-default overlay
-    // planes
-    let scanout = builder
+    let render_feedback = builder
         .clone()
+        .add_preference_tranche(render_node.dev_id(), None, render_formats.clone())
+        .build()
+        .unwrap();
+    
+    let scanout_feedback = builder
         .add_preference_tranche(
-            surface.render_node.dev_id(),
-            Some(TrancheFlags::Scanout),
-            primary_scanout_formats,
+            drm_surface.device_fd().dev_id().unwrap(),
+            Some(zwp_linux_dmabuf_feedback_v1::TrancheFlags::Scanout),
+            planes_formats,
         )
-        .add_preference_tranche(
-            surface.render_node.dev_id(),
-            Some(TrancheFlags::Scanout),
-            primary_or_overlay_scanout_formats,
-        )
-        .build()?;
-
-    // If this is the primary node surface, send scanout formats in both tranches to avoid
-    // duplication
-    let render = if primary_render_node == surface.render_node {
-        scanout.clone()
-    } else {
-        builder.build()?
-    };
-
-    Ok(SurfaceDmabufFeedback { render, scanout })
+        .add_preference_tranche(render_node.dev_id(), None, render_formats)
+        .build()
+        .unwrap();
+    
+    Some(SurfaceDmabufFeedback { render_feedback, scanout_feedback })
 }
 
 pub fn take_presentation_feedback(
@@ -1298,3 +1237,32 @@ pub fn take_presentation_feedback(
     output_presentation_feedback
 }
 
+pub fn update_primary_scanout_output(
+    space: &Space<Window>,
+    output: &Output,
+    render_element_states: &RenderElementStates,
+) {
+    space.elements().for_each(|window| {
+        window.with_surfaces(|surface, states| {
+            update_surface_primary_scanout_output(
+                surface,
+                output,
+                states,
+                render_element_states,
+                default_primary_scanout_output_compare,
+            );
+        });
+    });
+    let map = smithay::desktop::layer_map_for_output(output);
+    for layer_surface in map.layers() {
+        layer_surface.with_surfaces(|surface, states| {
+            update_surface_primary_scanout_output(
+                surface,
+                output,
+                states,
+                render_element_states,
+                default_primary_scanout_output_compare,
+            );
+        });
+    }
+}

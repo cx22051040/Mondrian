@@ -1,11 +1,12 @@
 pub mod tty;
 pub mod winit;
 
+use std::time::Duration;
+
 use smithay::{
-    backend::allocator::dmabuf::Dmabuf,
-    reexports::{
+    backend::allocator::dmabuf::Dmabuf, desktop::utils::surface_primary_scanout_output, reexports::{
         calloop::LoopHandle,
-        wayland_server::{DisplayHandle, protocol::wl_surface::WlSurface},
+        wayland_server::{protocol::wl_surface::WlSurface, DisplayHandle},
     },
 };
 
@@ -13,9 +14,7 @@ use tty::Tty;
 use winit::Winit;
 
 use crate::{
-    manager::{output::OutputManager, render::RenderManager},
-    state::{GlobalData, State},
-    utils::errors::AnyHowErr,
+    manager::{output::OutputManager, render::RenderManager}, state::{GlobalData, State}, utils::errors::AnyHowErr
 };
 
 pub enum Backend {
@@ -103,6 +102,28 @@ impl Backend {
         match self {
             Backend::Tty(tty) => tty.early_import(surface),
             Backend::Winit(_) => {}
+        }
+    }
+}
+
+impl GlobalData {
+    pub fn post_repaint(
+        &mut self,
+        time: impl Into<Duration>,
+    ) {
+        let _span = tracy_client::span!("post_repaint");
+
+        let time = time.into();
+        let throttle = Some(Duration::from_secs(1));
+
+        let output = self.output_manager.current_output();
+
+        self.workspace_manager.elements().for_each(|window| {
+            window.send_frame(output, time, throttle, surface_primary_scanout_output);
+        });
+        let map = smithay::desktop::layer_map_for_output(output);
+        for layer_surface in map.layers() {
+            layer_surface.send_frame(output, time, throttle, surface_primary_scanout_output);
         }
     }
 }
