@@ -12,7 +12,7 @@ use smithay::{
     },
     output::{Mode as OutputMode, Subpixel},
     reexports::{calloop::LoopHandle, wayland_server::DisplayHandle},
-    utils::{Rectangle, Scale, Transform},
+    utils::{Rectangle, Transform},
     wayland::dmabuf::DmabufFeedbackBuilder,
 };
 
@@ -46,13 +46,8 @@ impl Winit {
                             None,
                             None,
                         );
-                        let scale = data.output_manager.current_output().current_scale();
-                        let scale = Scale::from(scale.integer_scale());
 
-                        data.workspace_manager.modify_windows(
-                            Rectangle::from_size(size.to_logical(scale)),
-                            &data.loop_handle,
-                        );
+                        data.update_output_size();
                     }
                     WinitEvent::Input(event) => {
                         data.process_input_event(event);
@@ -93,8 +88,6 @@ impl Winit {
                         // Refresh space nuonuo_state and handle certain events like enter/leave for outputs/windows
                         data.workspace_manager.refresh();
                         data.popups.cleanup();
-                        // Flush the outgoing buffers caontaining events so the clients get them.
-                        let _ = data.display_handle.flush_clients();
 
                         // Ask for redraw to schedule new frame.
                         data.backend.winit().backend.window().request_redraw();

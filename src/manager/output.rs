@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
 use smithay::{
-    desktop::{Space, Window},
+    desktop::{layer_map_for_output, Space, Window},
     output::{Mode, Output, PhysicalProperties, Scale, Subpixel},
     reexports::wayland_server::DisplayHandle,
     utils::{Logical, Point, Raw, Rectangle, Size, Transform},
-    wayland::output::OutputManagerState,
+    wayland::{compositor::send_surface_state, fractional_scale::with_fractional_scale, output::OutputManagerState},
 };
 
 use crate::{config::Configs, state::GlobalData};
@@ -139,5 +139,29 @@ impl OutputManager {
 
     pub fn current_refresh(&self) -> i32 {
         self.outputs.iter().find(|o| o.activate).unwrap().current_refresh()
+    }
+}
+
+impl GlobalData {
+    pub fn update_output_size(&mut self) {
+        let output = self.output_manager.current_output();
+        let scale = output.current_scale();
+        let transform = output.current_transform();
+    
+        let mut layer_map = layer_map_for_output(output);
+        for layer in layer_map.layers() {
+            layer.with_surfaces(|surface, data| {
+                send_surface_state(surface, data, scale.integer_scale(), transform);
+                with_fractional_scale(data, |fractional| {
+                    fractional.set_preferred_scale(scale.fractional_scale());
+                });
+            });
+        }
+
+        layer_map.arrange();
+
+        let output_working_geo = layer_map.non_exclusive_zone();
+
+        self.workspace_manager.update_output_geo(output_working_geo, &self.loop_handle);
     }
 }

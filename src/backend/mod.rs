@@ -112,6 +112,9 @@ impl GlobalData {
         time: impl Into<Duration>,
     ) {
         let _span = tracy_client::span!("post_repaint");
+        
+        self.workspace_manager.refresh();
+        self.popups.cleanup();
 
         let time = time.into();
         let throttle = Some(Duration::from_secs(1));

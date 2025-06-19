@@ -54,7 +54,7 @@ pub struct Workspace {
     scheme: TiledScheme,
     tiled_tree: Option<TiledTree>,
     focus: Option<Window>,
-    output_geometry: Rectangle<i32, Logical>,
+    output_working_geometry: Rectangle<i32, Logical>,
 
     configs: Arc<WorkspaceConfigs>,
 }
@@ -79,7 +79,7 @@ impl Workspace {
             scheme,
             tiled_tree: None,
             focus: None,
-            output_geometry,
+            output_working_geometry: output_geometry,
 
             configs,
         }
@@ -117,13 +117,16 @@ impl Workspace {
         window
             .toplevel()
             .unwrap()
-            .with_pending_state(|state| state.bounds = Some(self.output_geometry.size));
+            .with_pending_state(|state| state.bounds = Some(self.output_working_geometry.size));
         window.toplevel().unwrap().send_pending_configure();
 
         if self.tiled_tree.is_none() {
             let rec = Rectangle {
-                loc: (self.configs.gap, self.configs.gap).into(),
-                size: (self.output_geometry.size
+                loc: (
+                    self.output_working_geometry.loc.x + self.configs.gap, 
+                    self.output_working_geometry.loc.y + self.configs.gap
+                ).into(),
+                size: (self.output_working_geometry.size
                     - (self.configs.gap * 2, self.configs.gap * 2).into())
                 .into(),
             };
@@ -257,18 +260,22 @@ impl Workspace {
     // pub fn _resize(&mut self, offset: Point<i32, Logical>, edges: &ResizeEdge, rec: &mut Rectangle<i32, Logical>) {
     // }
 
-    pub fn modify_windows(
+    pub fn update_output_geo(
         &mut self,
         rec: Rectangle<i32, Logical>,
         loop_handle: &LoopHandle<'_, GlobalData>,
     ) {
-        self.output_geometry = rec;
+        if self.output_working_geometry == rec {
+            return;
+        }
+
+        self.output_working_geometry = rec;
         if let Some(layout_tree) = &mut self.tiled_tree {
             let root_id = layout_tree.get_root().unwrap();
             layout_tree.modify(
                 root_id,
                 Rectangle::new(
-                    (self.configs.gap, self.configs.gap).into(),
+                    (rec.loc.x + self.configs.gap, rec.loc.y + self.configs.gap).into(),
                     (rec.size - (self.configs.gap * 2, self.configs.gap * 2).into()).into(),
                 ),
                 &mut self.tiled,
@@ -481,13 +488,13 @@ impl WorkspaceManager {
     //     self.current_workspace_mut().resize(offset, edges, rec);
     // }
 
-    pub fn modify_windows(
+    pub fn update_output_geo(
         &mut self,
         rec: Rectangle<i32, Logical>,
         loop_handle: &LoopHandle<'_, GlobalData>,
     ) {
         self.current_workspace_mut()
-            .modify_windows(rec, loop_handle);
+            .update_output_geo(rec, loop_handle);
     }
 
     pub fn surface_under(

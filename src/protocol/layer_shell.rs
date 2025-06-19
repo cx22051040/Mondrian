@@ -50,6 +50,9 @@ impl WlrLayerShellHandler for GlobalData {
             .cloned();
         let (mut map, layer) = layer.map(|layer| (map, layer)).unwrap();
         map.unmap_layer(&layer);
+
+        let output_working_geo = map.non_exclusive_zone();
+        self.workspace_manager.update_output_geo(output_working_geo, &self.loop_handle);
     }
 
     fn new_popup(
@@ -83,6 +86,7 @@ impl GlobalData {
             });
 
             map.arrange();
+
             if !initial_configure_sent {
                 let layer = map
                     .layer_for_surface(surface, WindowSurfaceType::TOPLEVEL)
@@ -90,6 +94,9 @@ impl GlobalData {
 
                 layer.layer_surface().send_configure();
             }
+
+            let output_working_geo = map.non_exclusive_zone();
+            self.workspace_manager.update_output_geo(output_working_geo, &self.loop_handle);
 
             return true;
         }

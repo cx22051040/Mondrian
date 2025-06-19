@@ -657,9 +657,6 @@ impl Tty {
                 );
 
                 data.post_repaint(next_frame_target);
-
-                let _span = tracy_client::span!("flush_clients");
-                data.display_handle.flush_clients().unwrap();
             });
         }
     }
