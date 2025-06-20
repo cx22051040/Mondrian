@@ -6,11 +6,7 @@ use smithay::{
 };
 
 use crate::{
-    manager::{
-        input::{FunctionEnum, KeyAction},
-        workspace::WorkspaceId,
-    },
-    state::GlobalData,
+    config::keybinding::{FunctionEnum, KeyAction}, manager::workspace::WorkspaceId, state::GlobalData
 };
 
 impl GlobalData {

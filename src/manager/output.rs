@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use smithay::{
     desktop::{layer_map_for_output, Space, Window},
     output::{Mode, Output, PhysicalProperties, Scale, Subpixel},
@@ -8,7 +6,7 @@ use smithay::{
     wayland::{compositor::send_surface_state, fractional_scale::with_fractional_scale, output::OutputManagerState},
 };
 
-use crate::{config::Configs, state::GlobalData};
+use crate::state::GlobalData;
 
 #[derive(Debug)]
 pub struct OutputElement {
@@ -51,13 +49,10 @@ pub struct OutputManager {
     // This space does not actually contain any windows, but all outputs are
     // mapped into it
     pub output_space: Space<Window>,
-
-    #[allow(dead_code)]
-    pub configs: Arc<Configs>,
 }
 
 impl OutputManager {
-    pub fn new(display_handle: &DisplayHandle, configs: Arc<Configs>) -> Self {
+    pub fn new(display_handle: &DisplayHandle) -> Self {
         let output_manager_state =
             OutputManagerState::new_with_xdg_output::<GlobalData>(display_handle);
         let output_space: Space<Window> = Default::default();
@@ -66,7 +61,6 @@ impl OutputManager {
             outputs: Vec::new(),
             output_manager_state,
             output_space,
-            configs,
         }
     }
 

@@ -18,7 +18,7 @@ use smithay::{
 };
 
 use crate::{
-    config::WorkspaceConfigs,
+    config::workspace::WorkspaceConfigs,
     layout::{
         Direction,
         tiled_tree::{TiledScheme, TiledTree},

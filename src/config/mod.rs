@@ -1,66 +1,115 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{fs, sync::Arc};
 
 use regex::Regex;
 
-use crate::layout::tiled_tree::TiledScheme;
+use crate::config::{keybinding::KeybindingConfigs, workspace::WorkspaceConfigs};
 
-#[derive(Debug, Clone)]
-pub struct WorkspaceConfigs {
-    pub gap: i32,
-    pub scheme: TiledScheme,
-}
-
-impl WorkspaceConfigs {
-    fn default() -> Self {
-        Self {
-            gap: 12,
-            scheme: TiledScheme::Default,
-        }
-    }
-}
+pub mod keybinding;
+pub mod workspace;
 
 #[derive(Debug, Clone)]
 pub struct Configs {
+    #[allow(dead_code)]
+    pub home: String,
+
     pub exec_once_cmds: Vec<(String, Vec<String>)>,
-    pub env_vars: HashMap<String, String>,
 
     pub conf_workspaces: Arc<WorkspaceConfigs>,
+    pub conf_keybindings: Arc<KeybindingConfigs>,
 }
 
 impl Configs {
     pub fn new() -> Self {
-        let content = include_str!("./mondrian.conf").to_string();
-
+        let content = fs::read_to_string("/home/alvin/Investigation/Wayland/Mondrian/configs/mondrian.conf");
+        
         let re_exec = Regex::new(r#"^\s*exec-once\s*=\s*(.+)$"#).unwrap();
         let re_env = Regex::new(r#"^\s*env\s*=\s*([^,\s]+)\s*,\s*(.+)$"#).unwrap();
+        let re_source = Regex::new(r#"^\s*source\s*=\s*([^\s#]+)"#).unwrap();
+
+        let home = dirs::home_dir()
+            .and_then(|path| path.to_str().map(String::from)).unwrap();
 
         let mut exec_once_cmds = Vec::new();
-        let mut env_vars = HashMap::new();
 
-        for line in content.lines() {
-            let line = line.trim();
-            if line.is_empty() || line.starts_with('#') {
-                continue;
+        let mut conf_workspaces = WorkspaceConfigs::default();
+        let mut conf_keybindings = KeybindingConfigs::default();
+
+        if let Ok(content) = content {
+            for line in content.lines() {
+                let line = line.trim();
+                if line.is_empty() || line.starts_with('#') {
+                    continue;
+                }
+    
+                // handle environment variable
+                let re = Regex::new(r#"\$\{([^}]+)\}"#).unwrap();
+
+                let mut missing = false;
+                for caps in re.captures_iter(line) {
+                    let var_name = &caps[1];
+                    if std::env::var(var_name).is_err() {
+                        warn!("Environment variable `{}` is not set, skipping line", var_name);
+                        missing = true;
+                        break;
+                    }
+                }
+                if missing {
+                    continue;
+                }
+            
+                let line = &re.replace_all(line, |caps: &regex::Captures| {
+                    let var_name = &caps[1];
+                    std::env::var(var_name).unwrap()
+                }).to_string();
+
+                if let Some(cap) = re_exec.captures(line) {
+                    let mut parts = cap[1].trim().split_whitespace();
+                    let cmd = parts.next().unwrap_or("").to_string();
+                    let args: Vec<String> = parts.map(|s| s.to_string()).collect();
+    
+                    exec_once_cmds.push((cmd, args));
+                } else if let Some(cap) = re_env.captures(line) {
+                    let key = cap[1].trim();
+                    let val = cap[2].trim();
+
+                    #[cfg(feature = "trace_config")]
+                    info!("set {} = {}", key, val);
+                    
+                    unsafe {
+                        std::env::set_var(key, val);
+                    }
+                    
+                } else if let Some(cap) = re_source.captures(line) {
+                    let source_file = cap[1].trim();
+    
+                    #[cfg(feature = "trace_config")]
+                    info!("Loading source file: {}", source_file);
+    
+                    if source_file.contains("workspace") {
+                        match conf_workspaces.load_configs(source_file) {
+                            Ok(_) => info!("Loaded workspace configs from {}", source_file),
+                            Err(e) => error!("Failed to load workspace configs: {}", e),
+                        }
+                    } else if source_file.contains("keybinding") {
+                        match conf_keybindings.load_configs(source_file) {
+                            Ok(_) => info!("Loaded keybindings configs from {}", source_file),
+                            Err(e) => error!("Failed to load keybindings configs: {}", e),
+                        }
+                    }
+                }
             }
-
-            if let Some(cap) = re_exec.captures(line) {
-                let mut parts = cap[1].trim().split_whitespace();
-                let cmd = parts.next().unwrap_or("").to_string();
-                let args: Vec<String> = parts.map(|s| s.to_string()).collect();
-
-                exec_once_cmds.push((cmd, args));
-            } else if let Some(cap) = re_env.captures(line) {
-                let key = cap[1].trim();
-                let val = cap[2].trim();
-
-                env_vars.insert(key.to_string(), val.to_string());
-            }
+        } else {
+            warn!("Failed to read mondrian.conf, using default configurations");
         }
 
+        info!("Using home directory: {}", home);
+
         Self {
+            home,
+
             exec_once_cmds,
-            env_vars,
-            conf_workspaces: Arc::new(WorkspaceConfigs::default()),
+            conf_workspaces: Arc::new(conf_workspaces),
+            conf_keybindings: Arc::new(conf_keybindings),
         }
     }
 
@@ -73,15 +122,9 @@ impl Configs {
                 #[cfg(feature = "trace_input")]
                 Ok(child) => info!("Spawned: {} (PID: {})", cmd, child.id()),
                 Err(e) => error!("Failed to run '{}': {}", cmd, e),
+
                 #[cfg(not(feature = "trace_input"))]
                 _ => {}
-            }
-        }
-
-        for (key, val) in &self.env_vars {
-            unsafe {
-                info!("set {} = {}", key, val);
-                std::env::set_var(key, val);
             }
         }
     }

@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 anyhow = "1.0.97"
 bitflags = "2.9.0"
+dirs = "6.0.0"
 itertools = "0.14.0"
 regex = "1.11.1"
 serde = {version = "1.0.219", features = ["derive"]}
@@ -27,11 +28,12 @@ features = ["wayland_frontend", "desktop"]
 git = "https://github.com/Smithay/smithay.git"
 
 [features]
-default = ["winit", "tty", "egl"]
+default = ["winit", "tty", "egl", "trace_input"]
 egl = ["smithay/use_system_lib", "smithay/backend_egl"]
 winit = ["smithay/backend_winit", "smithay/backend_drm"]
 trace_input = []
 trace_layout = []
+trace_config = []
 xwayland = []
 tty = [
     "smithay-drm-extras",
