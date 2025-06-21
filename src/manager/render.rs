@@ -83,22 +83,12 @@ impl RenderManager {
 
         // Then fullscreen
 
-        // Then Border
-        output_elements.extend(
-            self.get_border_render_elements(renderer, workspace_manager)
-                .into_iter()
-                .map(OutputRenderElements::Custom),
-        );
-
-        // Then common Windows
+        // Then Windows, Borders and Layer-shell
         output_elements.extend(
             self.get_windows_render_elements(renderer, output_manager, workspace_manager)
                 .into_iter()
                 .map(OutputRenderElements::Custom),
         );
-
-        // Then Shader and CustomRenderElements
-        // TODO:
 
         // output_elements.extend(
         //     self.get_background_render_elements(renderer, output_manager)
@@ -117,10 +107,9 @@ impl RenderManager {
     ) -> Vec<CustomRenderElements<R>> {
         let _span = tracy_client::span!("get_windows_render_elements");
 
-        // TODO: 暂时使用
         self.refresh();
 
-        let mut elements: Vec<WaylandSurfaceRenderElement<R>> = vec![];
+        let mut elements: Vec<CustomRenderElements<R>> = vec![];
 
         let output = output_manager.current_output();
         let output_geo = output_manager.output_geometry(output).unwrap();
@@ -138,10 +127,13 @@ impl RenderManager {
                         (layout_rec.loc + output_geo.loc).to_physical_precise_round(output_scale),
                         Scale::from(output_scale),
                         0.85,
-                    ),
+                    ).into_iter().map(CustomRenderElements::Surface)
                 );
             }
         }
+
+        // windows border
+        elements.extend(self.get_border_render_elements(renderer, workspace_manager));
 
         // windows
         for window in workspace_manager.elements() {
@@ -169,12 +161,14 @@ impl RenderManager {
                 }
             };
 
-            elements.extend(window.render_elements::<WaylandSurfaceRenderElement<R>>(
-                renderer,
-                (location - window.geometry().loc).to_physical_precise_round(output_scale),
-                Scale::from(output_scale),
-                0.8,
-            ));
+            elements.extend(window
+                .render_elements::<WaylandSurfaceRenderElement<R>>(
+                    renderer,
+                    (location - window.geometry().loc).to_physical_precise_round(output_scale),
+                    Scale::from(output_scale),
+                    0.8,
+                ).into_iter().map(CustomRenderElements::Surface)
+            );
         }
 
         // layer shell bottom and background
@@ -187,15 +181,12 @@ impl RenderManager {
                         (layout_rec.loc + output_geo.loc).to_physical_precise_round(output_scale),
                         Scale::from(output_scale),
                         0.85,
-                    ),
+                    ).into_iter().map(CustomRenderElements::Surface),
                 );
             }
         }
 
         elements
-            .into_iter()
-            .map(CustomRenderElements::Surface)
-            .collect()
     }
 
     pub fn get_cursor_render_elements<R: MondrianRenderer>(

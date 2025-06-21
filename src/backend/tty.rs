@@ -119,11 +119,11 @@ pub struct Tty {
     pub gpu_manager: GpuManager<GbmGlesBackend<GlesRenderer, DrmDeviceFd>>,
     pub primary_node: DrmNode,
     pub primary_render_node: DrmNode,
-    pub devices: HashMap<DrmNode, OutputDevice>,
+    pub devices: HashMap<DrmNode, GpuDevice>,
     pub seat_name: String,
     pub dmabuf_global: Option<DmabufGlobal>,
 }
-pub struct OutputDevice {
+pub struct GpuDevice {
     token: RegistrationToken,
     render_node: DrmNode,
     drm_scanner: DrmScanner,
@@ -191,9 +191,42 @@ impl Tty {
                 SessionEvent::ActivateSession => {
                     info!("Session activated");
                     if data.backend.tty().libinput.resume().is_err() {
-                        warn!("error resuming libinput session");
+                        error!("error resuming libinput session");
                     };
-                    
+                    for (node, device) in data
+                        .backend
+                        .tty()
+                        .devices
+                        .iter_mut()
+                        .map(|(node, device)| (*node, device)) 
+                    {
+                        device.drm.activate(false).expect("failed to activate drm backend");
+                        data.loop_handle.insert_idle(move |data| {
+
+                            let device: &mut GpuDevice = if let Some(device) = data.backend.tty().devices.get_mut(&node) {
+                                device
+                            } else {
+                                warn!("not change because of unknown device");
+                                return;
+                            };
+
+                            let crtcs: Vec<_> = device.surfaces.keys().copied().collect();
+                            for crtc in crtcs {
+                                data.backend.tty().render_output(
+                                    node,
+                                    crtc,
+                                    data.clock.now(),
+                                    &mut data.render_manager,
+                                    &data.output_manager,
+                                    &data.workspace_manager,
+                                    &mut data.cursor_manager,
+                                    &data.input_manager,
+                                    &data.clock,
+                                    &data.loop_handle,
+                                );
+                            }
+                        });
+                    }
                 }
                 SessionEvent::PauseSession => {
                     info!("Session paused");
@@ -415,7 +448,7 @@ impl Tty {
 
         self.devices.insert(
             node,
-            OutputDevice {
+            GpuDevice {
                 token,
                 drm_scanner: DrmScanner::new(),
                 non_desktop_connectors: HashSet::new(),
@@ -441,7 +474,7 @@ impl Tty {
         loop_handle: &LoopHandle<'_, GlobalData>
     ) {
         info!("device changed: {:?}", node);
-        let device: &mut OutputDevice = if let Some(device) = self.devices.get_mut(&node) {
+        let device: &mut GpuDevice = if let Some(device) = self.devices.get_mut(&node) {
             device
         } else {
             warn!("not change because of unknown device");
@@ -485,7 +518,7 @@ impl Tty {
     ) {
         info!("device removed: {:?}", node);
 
-        let device: &mut OutputDevice = if let Some(device) = self.devices.get_mut(&node) {
+        let device: &mut GpuDevice = if let Some(device) = self.devices.get_mut(&node) {
             device
         } else {
             warn!("not change because of unknown device");
@@ -899,14 +932,6 @@ impl Tty {
 
             device.surfaces.insert(crtc, surface);
 
-            loop_handle.insert_idle(|data| {
-                data.workspace_manager.refresh();
-                data.popups.cleanup();
-    
-                let _span = tracy_client::span!("flush_clients");
-                data.display_handle.flush_clients().unwrap();
-            });
-
             // kick-off rendering 
             loop_handle.insert_idle(move |data| {
                 data.backend.tty().render_output(
@@ -932,7 +957,7 @@ impl Tty {
         crtc: crtc::Handle,
         output_manager: &mut OutputManager,
     ) {
-        let device: &mut OutputDevice = if let Some(device) = self.devices.get_mut(&node) {
+        let device: &mut GpuDevice = if let Some(device) = self.devices.get_mut(&node) {
             device
         } else {
             warn!("not change because of unknown device");
@@ -974,7 +999,7 @@ impl Tty {
     ) {
         let _span = tracy_client::span!("tty_render");
 
-        let device: &mut OutputDevice = if let Some(device) = self.devices.get_mut(&node) {
+        let device: &mut GpuDevice = if let Some(device) = self.devices.get_mut(&node) {
             device
         } else {
             warn!("not change because of unknown device");
@@ -1140,6 +1165,12 @@ impl Tty {
             surface,
         ) {
             warn!("error doing early import: {err:?}");
+        }
+    }
+
+    pub fn change_vt(&mut self, vt: i32) {
+        if let Err(err) = self.session.change_vt(vt) {
+            warn!("error changing VT: {err}");
         }
     }
 }

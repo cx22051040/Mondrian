@@ -25,6 +25,8 @@ impl GlobalData {
             }
         };
 
+        let main_mod = self.input_manager.get_mainmode().clone();
+
         keyboard.input::<(), _>(
             self,
             event.key_code(),
@@ -41,11 +43,14 @@ impl GlobalData {
                                     .map(|keysym_handle| {
                                         let keysym_value = keysym_handle.modified_sym();
                                         let name = keysym_get_name(keysym_value);
-                                        if name == "Control_L" {
+                                        if name == main_mod {
                                             #[cfg(feature = "trace_input")]
                                             info!("mainmod_pressed: true");
 
-                                            data.input_manager.set_mainmode(true);
+                                            data.input_manager.set_mainmod(true);
+                                        } else if let Some(cap) = name.strip_prefix("XF86Switch_VT_") {
+                                            let vt = cap.parse::<usize>().unwrap_or(1);
+                                            data.backend.change_vt(vt as i32);
                                         }
                                         name
                                     })
@@ -65,11 +70,11 @@ impl GlobalData {
                     KeyState::Released => {
                         let keysym_value = keysym_handle.modified_sym();
                         let name = keysym_get_name(keysym_value);
-                        if name == "Control_L" {
+                        if name == main_mod {
                             #[cfg(feature = "trace_input")]
                             info!("mainmod_pressed: false");
 
-                            data.input_manager.set_mainmode(false);
+                            data.input_manager.set_mainmod(false);
                         }
                     }
                 }
@@ -113,14 +118,6 @@ impl GlobalData {
                     }
                 }
                 KeyAction::Internal(func) => match func {
-                    FunctionEnum::SwitchWorkspace1 => {
-                        self.set_keyboard_focus(None, serial);
-                        self.workspace_manager.set_activated(WorkspaceId::new(1));
-                    }
-                    FunctionEnum::SwitchWorkspace2 => {
-                        self.set_keyboard_focus(None, serial);
-                        self.workspace_manager.set_activated(WorkspaceId::new(2));
-                    }
                     FunctionEnum::InvertWindow => {
                         self.workspace_manager.invert_window(&self.loop_handle);
                     }
@@ -150,6 +147,17 @@ impl GlobalData {
                     }
                     FunctionEnum::Json => {
                         // TODO
+                    }
+
+                    FunctionEnum::SwitchWorkspace(id) => {
+                        let output = self.output_manager.current_output();
+                        let output_geo = self.output_manager
+                            .output_geometry(output).unwrap();
+
+                        self.workspace_manager.switch_workspace(WorkspaceId::new(*id), output, output_geo, &self.loop_handle);
+
+                        self.update_output_size();
+                        self.set_keyboard_focus(None, serial);
                     }
                 },
             }

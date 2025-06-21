@@ -1,10 +1,7 @@
 use std::{
-    hash::Hash,
-    sync::{
-        Arc,
-        atomic::{AtomicUsize, Ordering},
-    },
-    time::Duration,
+    collections::HashMap, hash::Hash, sync::{
+        atomic::{AtomicUsize, Ordering}, Arc
+    }, time::Duration
 };
 
 use smithay::{
@@ -103,6 +100,14 @@ impl Workspace {
 
     pub fn window_geometry(&self, window: &Window) -> Option<Rectangle<i32, Logical>> {
         self.tiled.element_geometry(window)
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.tiled_tree.is_none()
+    }
+
+    pub fn _clear(&mut self) {
+        // Clear the workspace, remove all elements, send to else workspace
     }
 
     pub fn map_element(
@@ -367,7 +372,7 @@ impl Workspace {
 
 #[derive(Debug)]
 pub struct WorkspaceManager {
-    workspaces: Vec<Workspace>,
+    workspaces: HashMap<WorkspaceId, Workspace>,
     activated_workspace: Option<WorkspaceId>,
     configs: Arc<WorkspaceConfigs>,
 }
@@ -375,13 +380,12 @@ pub struct WorkspaceManager {
 impl WorkspaceManager {
     pub fn new(configs: Arc<WorkspaceConfigs>) -> Self {
         Self {
-            workspaces: vec![],
+            workspaces: HashMap::new(),
             activated_workspace: None,
             configs,
         }
     }
 
-    // TODO: allow more output binds
     pub fn add_workspace(
         &mut self,
         output: &Output,
@@ -396,14 +400,14 @@ impl WorkspaceManager {
             self.configs.clone(),
         );
 
-        if activate {
-            self.set_activated(workspace.id());
-        }
+        self.set_activate(workspace.id(), activate);
 
-        self.workspaces.push(workspace);
+        self.workspaces.insert(workspace.id(), workspace);
+
+        self.refresh();
     }
 
-    pub fn set_activated(&mut self, workspace_id: WorkspaceId) {
+    pub fn set_activate(&mut self, workspace_id: WorkspaceId, _activate: bool) {
         if let Some(id) = self.activated_workspace {
             if id != workspace_id {
                 self.current_workspace_mut().deactivate();
@@ -414,9 +418,76 @@ impl WorkspaceManager {
         }
     }
 
-    pub fn _remove_workspace(&mut self, _workspace_id: usize) {
-        // move windows
-        todo!()
+    pub fn switch_workspace(&mut self, workspace_id: WorkspaceId, output: &Output, output_geometry: Rectangle<i32, Logical>, loop_handle: &LoopHandle<'_, GlobalData>) {
+        if !self.workspaces.contains_key(&workspace_id) {
+            self.add_workspace(
+                output, 
+                output_geometry, 
+                None, 
+                true
+            );
+        } else if let Some(id) = self.activated_workspace {
+            if id != workspace_id {
+                self.current_workspace_mut().deactivate();
+                self.activated_workspace = Some(workspace_id);
+
+                loop_handle.insert_idle(move |data| {
+                    for window in data.workspace_manager.current_workspace().elements() {
+                        let width = data.workspace_manager.current_workspace().output_working_geometry.size.w;
+    
+                        let mut from = data.workspace_manager.window_geometry(window).unwrap();
+                        from.loc.x = if workspace_id.0 > id.0 {
+                            from.loc.x + width
+                        } else {
+                            from.loc.x - width
+                        };
+    
+                        let to = data.workspace_manager.window_geometry(window).unwrap();
+    
+                        data.render_manager.add_animation(
+                            window.clone(), 
+                            from, 
+                            to, 
+                            Duration::from_millis(30), 
+                            crate::animation::AnimationType::EaseInOutQuad,
+                        );
+                    }
+                });
+            }
+        } else {
+            self.activated_workspace = Some(workspace_id);
+        }
+
+        self.refresh();
+    }
+
+    pub fn remove_workspace(&mut self, workspace_id: WorkspaceId) {
+        if self.workspaces.iter().count() <= 1 {
+            warn!("Cannot remove the last workspace: {:?}", workspace_id);
+            return;
+        }
+        
+        self.workspaces.remove(&workspace_id);
+
+        if self.activated_workspace == Some(workspace_id) {
+            self.activated_workspace = Some(WorkspaceId(1));
+        }
+    }
+
+    pub fn refresh(&mut self) {
+        let mut to_remove = vec![];
+
+        for workspace in self.workspaces.values_mut() {
+            if self.activated_workspace == Some(workspace.id()) {
+                workspace.refresh();
+            } else if workspace.is_empty() {
+                to_remove.push(workspace.id());
+            }
+        }
+        
+        for id in to_remove {
+            self.remove_workspace(id);
+        }
     }
 
     pub fn current_space(&self) -> &Space<Window> {
@@ -425,13 +496,13 @@ impl WorkspaceManager {
 
     pub fn current_workspace(&self) -> &Workspace {
         self.activated_workspace
-            .and_then(|id| self.workspaces.iter().find(|w| w.id() == id))
+            .and_then(|id| self.workspaces.get(&id))
             .expect("no current_workspace")
     }
 
     pub fn current_workspace_mut(&mut self) -> &mut Workspace {
         self.activated_workspace
-            .and_then(|id| self.workspaces.iter_mut().find(|w| w.id() == id))
+            .and_then(|id| self.workspaces.get_mut(&id))
             .expect("no current_workspace")
     }
 
@@ -516,9 +587,5 @@ impl WorkspaceManager {
         surface: &WlSurface,
     ) -> Option<(&Window, Rectangle<i32, Logical>)> {
         self.current_workspace_mut().check_grab(surface)
-    }
-
-    pub fn refresh(&mut self) {
-        self.current_workspace_mut().refresh();
     }
 }

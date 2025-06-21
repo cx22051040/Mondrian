@@ -7,8 +7,6 @@ use crate::layout::Direction;
 
 #[derive(Debug, Clone)]
 pub enum FunctionEnum {
-    SwitchWorkspace1,
-    SwitchWorkspace2,
     InvertWindow,
     Expansion,
     Recover,
@@ -19,6 +17,8 @@ pub enum FunctionEnum {
     Down(Direction),
     Left(Direction),
     Right(Direction),
+
+    SwitchWorkspace(usize),
 }
 
 #[derive(Debug, Clone)]
@@ -29,6 +29,8 @@ pub enum KeyAction {
 
 #[derive(Debug)]
 pub struct KeybindingConfigs {
+    pub mainmod: String,
+
     pub keybindings: HashMap<String, KeyAction>,
     pub priority_map: HashMap<String, i32>,
 }
@@ -50,6 +52,7 @@ impl KeybindingConfigs {
             .collect();
 
         Self {
+            mainmod: "Super".to_string(),
             keybindings: HashMap::new(),
             priority_map,
         }
@@ -60,7 +63,14 @@ impl KeybindingConfigs {
         let content = fs::read_to_string(path)?;
         let mut bindings = HashMap::<String, KeyAction>::new();
 
-        let re =
+        let re_mainmod = Regex::new(r#"^\s*mainMod\s*=\s*([^\s#]+)"#).unwrap();
+        if let Some(cap) = re_mainmod.captures(&content) {
+            self.mainmod = cap[1].to_string();
+        } else {
+            warn!("No mainMod found in the configuration file, use default Super");
+        }
+
+        let re_bindings =
             // bind = Ctrl + t, command, "kitty"
             // bind = Ctrl + 1, exec, "func1"
             Regex::new(r#"(?m)^\s*bind\s*=\s*([^,]+?),\s*(command|exec),\s*"([^"]+)"(?:\s*#.*)?$"#)
@@ -79,11 +89,13 @@ impl KeybindingConfigs {
             (";", vec!["semicolon"]),
             (".", vec!["period"]),
             ("'", vec!["apostrophe"]),
+            ("{NUM}", vec!["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"]),
+            ("{FNUM}", vec!["F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12"]),
         ]
         .into_iter()
         .collect();
 
-        for cap in re.captures_iter(&content) {
+        for cap in re_bindings.captures_iter(&content) {
             let keybind = &cap[1]; // Ctrl+t / Alt+Enter
             let action = &cap[2]; // exec / command
             let command = &cap[3]; // kitty / rofi -show drun
@@ -137,8 +149,6 @@ impl KeybindingConfigs {
                     }
                     "exec" => {
                         let internal_action = match command.trim() {
-                            "workspace-1" => FunctionEnum::SwitchWorkspace1,
-                            "workspace-2" => FunctionEnum::SwitchWorkspace2,
                             "invert" => FunctionEnum::InvertWindow,
                             "recover" => FunctionEnum::Recover,
                             "expansion" => FunctionEnum::Expansion,
@@ -149,6 +159,18 @@ impl KeybindingConfigs {
                             "down" => FunctionEnum::Down(Direction::Down),
                             "left" => FunctionEnum::Left(Direction::Left),
                             "right" => FunctionEnum::Right(Direction::Right),
+                            "switch workspace" => {
+                                let id = key.split('+').find_map(|s| {
+                                    s.trim().parse::<usize>().ok()
+                                }).unwrap_or(1);
+
+                                // workspace start from 1
+                                if id < 1 {
+                                    continue;
+                                }
+
+                                FunctionEnum::SwitchWorkspace(id)
+                            },
                             _ => {
                                 tracing::info!(
                                     "Warning: No registered function for exec '{}'",

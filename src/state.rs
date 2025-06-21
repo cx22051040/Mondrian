@@ -110,14 +110,13 @@ impl GlobalData {
             &mut nuonuo_state,
         );
 
-        // TODO: just easy for test workspace exchange
+        // 
         let output = output_manager.current_output();
         let output_geo = output_manager
             .output_geometry(output)
             .context("workspace add test error")?;
 
         workspace_manager.add_workspace(output, output_geo, Some(TiledScheme::Default), true);
-        workspace_manager.add_workspace(output, output_geo, Some(TiledScheme::Spiral), false);
 
         let start_time = std::time::Instant::now();
         let clock = Clock::new();

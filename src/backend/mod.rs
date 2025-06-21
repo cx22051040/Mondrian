@@ -104,6 +104,15 @@ impl Backend {
             Backend::Winit(_) => {}
         }
     }
+
+    pub fn change_vt(&mut self, vt: i32) {
+        match self {
+            Backend::Tty(tty) => tty.change_vt(vt),
+            Backend::Winit(_) => {
+                error!("Winit cannot change VT in Winit backend");
+            }
+        }
+    }
 }
 
 impl GlobalData {

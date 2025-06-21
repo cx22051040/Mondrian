@@ -9,8 +9,6 @@ use smithay::{
 
 use crate::{config::keybinding::{KeyAction, KeybindingConfigs}, state::GlobalData, utils::errors::AnyHowErr};
 
-
-
 pub struct InputManager {
     pub seat_state: SeatState<GlobalData>,
     seat: Seat<GlobalData>,
@@ -44,7 +42,7 @@ impl InputManager {
         })
     }
 
-    pub fn set_mainmode(&mut self, activate: bool) {
+    pub fn set_mainmod(&mut self, activate: bool) {
         self.is_mainmod_pressed = activate;
     }
 
@@ -58,6 +56,10 @@ impl InputManager {
 
     pub fn get_priority_map(&self) -> &HashMap<String, i32> {
         &self.configs.priority_map
+    }
+
+    pub fn get_mainmode(&self) -> &String {
+        &self.configs.mainmod
     }
 
     pub fn get_keyboard(&self) -> Option<KeyboardHandle<GlobalData>> {

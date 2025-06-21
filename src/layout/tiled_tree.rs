@@ -18,6 +18,7 @@ use super::json_tiled_tree::JsonTree;
 #[derive(Debug, Clone)]
 pub enum TiledScheme {
     Default,
+    #[allow(dead_code)]
     Spiral,
 }
 
