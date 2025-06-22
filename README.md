@@ -42,9 +42,7 @@
 
 本项目基于 [Smithay](https://github.com/Smithay/smithay.git) 使用 `Rust` 开发了一个使用 `Wayland` 协议的平铺式桌面管理器。项目能够在裸机终端中自行初始化 `DRM/KMS` 图形管线，并通过 `GBM` 和 `EGL` 建立 `GPU` 渲染上下文，使用 `OpenGLES` 进行硬件加速合成显示。启动后该 `Compositor` 接管系统图形输出，并成为客户端程序（如终端模拟器、浏览器）的 `Wayland` 显示服务。
 
-<div style="text-align: center;">
-    <img src = "wiki/README/introduce.png" width="1000px">
-</div>
+![introduce](wiki/README/introduce.png)
 
 - **设计哲学**
   
@@ -79,6 +77,8 @@
 ![show2](wiki/README/show2.png)
 
 ![show3](wiki/README/show3.png)
+
+![show4](wiki/README/show4.png)
 
 ### 项目运行
 

@@ -6,7 +6,7 @@ use smithay::{
             backend::ClientData, protocol::{wl_buffer, wl_shm, wl_surface::WlSurface}, DisplayHandle, Resource
         },
     }, utils::{Clock, Monotonic}, wayland::{
-        buffer::BufferHandler, compositor::{CompositorClientState, CompositorState}, dmabuf::{DmabufGlobal, DmabufHandler, DmabufState, ImportNotifier}, drm_syncobj::{DrmSyncobjHandler, DrmSyncobjState}, foreign_toplevel_list::ForeignToplevelListState, output::OutputHandler, security_context::SecurityContext, selection::{
+        buffer::BufferHandler, compositor::{CompositorClientState, CompositorState}, dmabuf::{DmabufGlobal, DmabufHandler, DmabufState, ImportNotifier}, drm_syncobj::{DrmSyncobjHandler, DrmSyncobjState}, foreign_toplevel_list::ForeignToplevelListState, output::{OutputHandler, OutputManagerState}, security_context::SecurityContext, selection::{
             data_device::{
                 set_data_device_focus, ClientDndGrabHandler, DataDeviceHandler, DataDeviceState, ServerDndGrabHandler
             }, SelectionHandler
@@ -20,7 +20,7 @@ use crate::{
     layout::tiled_tree::TiledScheme,
     manager::{
         cursor::CursorManager, input::InputManager, output::OutputManager, render::RenderManager,
-        window::WindowManager, workspace::WorkspaceManager,
+        window::WindowManager, workspace::{WorkspaceId, WorkspaceManager},
     },
 };
 
@@ -88,7 +88,7 @@ impl GlobalData {
             State::new(&display_handle).context("Failed to create global state")?;
 
         // initial managers
-        let mut output_manager = OutputManager::new(&display_handle);
+        let mut output_manager = OutputManager::new();
         let mut workspace_manager = WorkspaceManager::new(configs.conf_workspaces.clone());
         let window_manager = WindowManager::new();
         let cursor_manager = CursorManager::new("default", 24);
@@ -110,13 +110,12 @@ impl GlobalData {
             &mut nuonuo_state,
         );
 
-        // 
         let output = output_manager.current_output();
         let output_geo = output_manager
             .output_geometry(output)
             .context("workspace add test error")?;
 
-        workspace_manager.add_workspace(output, output_geo, Some(TiledScheme::Default), true);
+        workspace_manager.add_workspace(WorkspaceId::next(), output, output_geo, Some(TiledScheme::Default), true);
 
         let start_time = std::time::Instant::now();
         let clock = Clock::new();
@@ -148,6 +147,8 @@ pub struct State {
     // smithay state
     pub compositor_state: CompositorState,
     pub data_device_state: DataDeviceState,
+    #[allow(dead_code)]
+    pub output_manager_state: OutputManagerState,
     pub shm_state: ShmState,
     pub dmabuf_state: DmabufState,
     pub syncobj_state: Option<DrmSyncobjState>,
@@ -165,6 +166,8 @@ impl State {
         // init smithay state
         let compositor_state = CompositorState::new::<GlobalData>(display_handle);
         let data_device_state = DataDeviceState::new::<GlobalData>(display_handle);
+        let output_manager_state =
+            OutputManagerState::new_with_xdg_output::<GlobalData>(display_handle);
         let shm_state = ShmState::new::<GlobalData>(
             display_handle,
             vec![wl_shm::Format::Argb8888, wl_shm::Format::Xrgb8888],
@@ -179,6 +182,7 @@ impl State {
         Ok(State {
             compositor_state,
             data_device_state,
+            output_manager_state,
             shm_state,
             dmabuf_state,
             syncobj_state: None,

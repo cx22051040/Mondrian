@@ -3,15 +3,16 @@ use smithay::{
     output::{Mode, Output, PhysicalProperties, Scale, Subpixel},
     reexports::wayland_server::DisplayHandle,
     utils::{Logical, Point, Raw, Rectangle, Size, Transform},
-    wayland::{compositor::send_surface_state, fractional_scale::with_fractional_scale, output::OutputManagerState},
+    wayland::{compositor::send_surface_state, fractional_scale::with_fractional_scale},
 };
 
 use crate::state::GlobalData;
 
 #[derive(Debug)]
 pub struct OutputElement {
-    pub output: Output,
-    pub activate: bool,
+    output: Output,
+
+    activate: bool,
 }
 
 impl OutputElement {
@@ -44,22 +45,18 @@ impl OutputElement {
 }
 pub struct OutputManager {
     pub outputs: Vec<OutputElement>,
-    #[allow(dead_code)]
-    pub output_manager_state: OutputManagerState,
+
     // This space does not actually contain any windows, but all outputs are
     // mapped into it
     pub output_space: Space<Window>,
 }
 
 impl OutputManager {
-    pub fn new(display_handle: &DisplayHandle) -> Self {
-        let output_manager_state =
-            OutputManagerState::new_with_xdg_output::<GlobalData>(display_handle);
+    pub fn new() -> Self {
         let output_space: Space<Window> = Default::default();
 
         Self {
             outputs: Vec::new(),
-            output_manager_state,
             output_space,
         }
     }

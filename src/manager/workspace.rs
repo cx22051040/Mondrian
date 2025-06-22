@@ -43,7 +43,7 @@ impl WorkspaceId {
 
 #[derive(Debug)]
 pub struct Workspace {
-    id: WorkspaceId,
+    workspace_id: WorkspaceId,
 
     tiled: Space<Window>,
     // pub floating: Space<Window>,
@@ -58,6 +58,7 @@ pub struct Workspace {
 
 impl Workspace {
     pub fn new(
+        workspace_id: WorkspaceId,
         output: &Output,
         output_geometry: Rectangle<i32, Logical>,
         scheme: TiledScheme,
@@ -69,7 +70,7 @@ impl Workspace {
         floating.map_output(output, output_geometry.loc);
 
         Self {
-            id: WorkspaceId::next(),
+            workspace_id,
             tiled,
             // floating,
             // layout: HashMap::new(),
@@ -83,7 +84,7 @@ impl Workspace {
     }
 
     pub fn id(&self) -> WorkspaceId {
-        self.id
+        self.workspace_id
     }
 
     pub fn current_space(&self) -> &Space<Window> {
@@ -388,12 +389,14 @@ impl WorkspaceManager {
 
     pub fn add_workspace(
         &mut self,
+        workspace_id: WorkspaceId,
         output: &Output,
         output_geometry: Rectangle<i32, Logical>,
         scheme: Option<TiledScheme>,
         activate: bool,
     ) {
         let workspace = Workspace::new(
+            workspace_id,
             output,
             output_geometry,
             scheme.unwrap_or_else(|| self.configs.scheme.clone()),
@@ -421,6 +424,7 @@ impl WorkspaceManager {
     pub fn switch_workspace(&mut self, workspace_id: WorkspaceId, output: &Output, output_geometry: Rectangle<i32, Logical>, loop_handle: &LoopHandle<'_, GlobalData>) {
         if !self.workspaces.contains_key(&workspace_id) {
             self.add_workspace(
+                workspace_id,
                 output, 
                 output_geometry, 
                 None, 

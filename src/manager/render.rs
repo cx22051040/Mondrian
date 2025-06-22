@@ -126,7 +126,7 @@ impl RenderManager {
                         renderer,
                         (layout_rec.loc + output_geo.loc).to_physical_precise_round(output_scale),
                         Scale::from(output_scale),
-                        0.85,
+                        1.0,
                     ).into_iter().map(CustomRenderElements::Surface)
                 );
             }
@@ -166,7 +166,7 @@ impl RenderManager {
                     renderer,
                     (location - window.geometry().loc).to_physical_precise_round(output_scale),
                     Scale::from(output_scale),
-                    0.8,
+                    0.85,
                 ).into_iter().map(CustomRenderElements::Surface)
             );
         }
@@ -180,7 +180,7 @@ impl RenderManager {
                         renderer,
                         (layout_rec.loc + output_geo.loc).to_physical_precise_round(output_scale),
                         Scale::from(output_scale),
-                        0.85,
+                        1.0,
                     ).into_iter().map(CustomRenderElements::Surface),
                 );
             }
