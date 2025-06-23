@@ -47,7 +47,7 @@ impl Winit {
                             None,
                         );
 
-                        data.update_output_size();
+                        data.update_output_working_size();
                     }
                     WinitEvent::Input(event) => {
                         data.process_input_event(event);

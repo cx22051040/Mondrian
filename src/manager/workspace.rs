@@ -65,9 +65,9 @@ impl Workspace {
         configs: Arc<WorkspaceConfigs>,
     ) -> Self {
         let mut tiled: Space<Window> = Default::default();
-        let mut floating: Space<Window> = Default::default();
+        // let mut floating: Space<Window> = Default::default();
         tiled.map_output(output, output_geometry.loc);
-        floating.map_output(output, output_geometry.loc);
+        // floating.map_output(output, output_geometry.loc);
 
         Self {
             workspace_id,

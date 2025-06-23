@@ -117,11 +117,13 @@ impl OutputManager {
         scale: Option<Scale>,
         location: Option<Point<i32, Logical>>,
     ) {
-        self.outputs
+        let output_element = self.outputs
             .iter_mut()
             .find(|o| o.activate)
-            .unwrap()
-            .change_current_state(mode, transform, scale, location);
+            .unwrap();
+
+        output_element.change_current_state(mode, transform, scale, location);
+        self.output_space.map_output(output_element.output(), location.unwrap_or_default());
     }
 
     pub fn output_geometry(&self, output: &Output) -> Option<Rectangle<i32, Logical>> {
@@ -134,7 +136,7 @@ impl OutputManager {
 }
 
 impl GlobalData {
-    pub fn update_output_size(&mut self) {
+    pub fn update_output_working_size(&mut self) {
         let output = self.output_manager.current_output();
         let scale = output.current_scale();
         let transform = output.current_transform();

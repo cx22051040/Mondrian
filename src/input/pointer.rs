@@ -18,7 +18,7 @@ use smithay::{
     },
 };
 
-use crate::state::GlobalData;
+use crate::{protocol::xdg_shell::FullscreenSurface, state::GlobalData};
 
 const BUTTON_LEFT: u32 = 272;
 const BUTTON_RIGHT: u32 = 273;
@@ -332,6 +332,21 @@ impl GlobalData {
                 return Some((surface, surface_loc.to_f64() + layer_loc));
             }
         }
+        
+        // fullscreen surface
+        else if let Some((window, _)) = output
+            .user_data()
+            .get::<FullscreenSurface>()
+            .and_then(|f| f.get())
+        {
+            if let Some((surface, surface_loc)) = window
+                .surface_under(position, WindowSurfaceType::ALL)
+                .map(|(surface, surface_loc)| (surface, surface_loc))
+            {
+                return Some((surface, surface_loc.to_f64()));
+            }
+        }
+
         // The window
         else if let Some((surface, surface_loc)) =
             self.workspace_manager.surface_under(position, need_focus)

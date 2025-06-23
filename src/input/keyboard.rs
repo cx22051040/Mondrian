@@ -156,7 +156,7 @@ impl GlobalData {
 
                         self.workspace_manager.switch_workspace(WorkspaceId::new(*id), output, output_geo, &self.loop_handle);
 
-                        self.update_output_size();
+                        self.update_output_working_size();
                         self.set_keyboard_focus(None, serial);
                     }
                 },

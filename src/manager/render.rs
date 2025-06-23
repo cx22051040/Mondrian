@@ -5,28 +5,19 @@ use std::{
 
 use smithay::{
     backend::renderer::{
-        Color32F,
         element::{
-            AsRenderElements, Kind,
-            memory::MemoryRenderBufferRenderElement,
-            surface::{WaylandSurfaceRenderElement, render_elements_from_surface_tree},
-        },
-        gles::{GlesRenderer, Uniform},
+            memory::MemoryRenderBufferRenderElement, surface::{render_elements_from_surface_tree, WaylandSurfaceRenderElement}, AsRenderElements, Kind
+        }, gles::{GlesRenderer, Uniform}, Color32F
     },
-    desktop::{Window, layer_map_for_output},
-    utils::{Logical, Rectangle, Scale},
+    desktop::{layer_map_for_output, Window},
+    utils::{IsAlive, Logical, Point, Rectangle, Scale},
     wayland::shell::wlr_layer::Layer,
 };
 
 use crate::{
-    animation::{Animation, AnimationState, AnimationType},
-    manager::window::WindowExt,
-    render::{
-        MondrianRenderer,
-        background::{Background, BackgroundRenderElement},
-        border::{BorderRenderElement, BorderShader},
-        elements::{CustomRenderElements, OutputRenderElements, ShaderRenderElement},
-    },
+    animation::{Animation, AnimationState, AnimationType}, manager::window::WindowExt, protocol::xdg_shell::FullscreenSurface, render::{
+        background::{Background, BackgroundRenderElement}, border::{BorderRenderElement, BorderShader}, elements::{CustomRenderElements, OutputRenderElements, ShaderRenderElement}, MondrianRenderer
+    }
 };
 
 use super::{
@@ -81,8 +72,6 @@ impl RenderManager {
 
         // Then Some Control elements
 
-        // Then fullscreen
-
         // Then Windows, Borders and Layer-shell
         output_elements.extend(
             self.get_windows_render_elements(renderer, output_manager, workspace_manager)
@@ -107,7 +96,7 @@ impl RenderManager {
     ) -> Vec<CustomRenderElements<R>> {
         let _span = tracy_client::span!("get_windows_render_elements");
 
-        self.refresh();
+        self.refresh(output_manager);
 
         let mut elements: Vec<CustomRenderElements<R>> = vec![];
 
@@ -117,7 +106,6 @@ impl RenderManager {
 
         // layer shell top and overlap
         let layer_map = layer_map_for_output(output);
-
         for layer in [Layer::Overlay, Layer::Top] {
             for layer_surface in layer_map.layers_on(layer) {
                 let layout_rec = layer_map.layer_geometry(layer_surface).unwrap();
@@ -130,6 +118,25 @@ impl RenderManager {
                     ).into_iter().map(CustomRenderElements::Surface)
                 );
             }
+        }
+
+        // fullscreen surface
+        if let Some((window, _)) = output
+            .user_data()
+            .get::<FullscreenSurface>()
+            .and_then(|f| f.get())
+        {
+            let location: Point<i32, Logical> = (0, 0).into();
+            elements.extend(window
+                .render_elements::<WaylandSurfaceRenderElement<R>>(
+                    renderer,
+                    (location - window.geometry().loc).to_physical_precise_round(output_scale),
+                    Scale::from(output_scale),
+                    1.0,
+                ).into_iter().map(CustomRenderElements::Surface)
+            );
+
+            return elements;
         }
 
         // windows border
@@ -397,7 +404,25 @@ impl RenderManager {
         self.animations.insert(window, animation);
     }
 
-    pub fn refresh(&mut self) {
+    pub fn refresh(&mut self, output_manager: &OutputManager) {
+        let output = output_manager.current_output();
+
+        if let Some(fullscreen_data) = output
+            .user_data()
+            .get::<FullscreenSurface>()
+        {
+            if let Some((window, layer_surfaces)) = fullscreen_data.get() {
+                if !window.alive() {
+
+                    let mut map = layer_map_for_output(output);
+                    for layer_surface in &layer_surfaces {
+                        map.map_layer(layer_surface).unwrap();
+                    }
+                    fullscreen_data.clear();
+                }
+            }
+        }
+
         // clean dead animations
         self.animations
             .retain(|_, animation| !matches!(animation.state, AnimationState::Completed));

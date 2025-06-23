@@ -1,23 +1,43 @@
+use std::cell::RefCell;
+
 use crate::{
     input::resize_grab::ResizeSurfaceGrab, state::GlobalData
 };
 use smithay::{
-    delegate_xdg_shell, desktop::{PopupKind, Window}, input::{pointer::{Focus, PointerHandle}, Seat}, reexports::{
+    delegate_xdg_shell, desktop::{layer_map_for_output, LayerSurface, PopupKind, Window}, input::{pointer::{Focus, PointerHandle}, Seat}, output::Output, reexports::{
         wayland_protocols::xdg::shell::server::xdg_toplevel::{self, ResizeEdge},
         wayland_server::{
-            protocol::{wl_seat, wl_surface::WlSurface}, Resource
+            protocol::{wl_output::WlOutput, wl_seat, wl_surface::WlSurface}, Resource
         },
     }, utils::{Logical, Point, Rectangle, Serial, SERIAL_COUNTER}, wayland::{
         compositor::{self, with_states},
-        shell::xdg::{
+        shell::{wlr_layer::Layer, xdg::{
             PopupSurface, PositionerState, ToplevelSurface, XdgShellHandler, XdgShellState, XdgToplevelSurfaceData
-        },
+        }},
     }
 };
 use smithay::{
     desktop::{find_popup_root_surface, get_popup_toplevel_coords},
     input::pointer::GrabStartData as PointerGrabStartData,
 };
+
+#[derive(Default)]
+pub struct FullscreenSurface(RefCell<Option<(Window, Vec<LayerSurface>)>>);
+
+impl FullscreenSurface {
+    pub fn set(&self, window: Window, layer_surfaces: Vec<LayerSurface>) {
+        *self.0.borrow_mut() = Some((window, layer_surfaces));
+    }
+
+    pub fn get(&self) -> Option<(Window, Vec<LayerSurface>)> {
+        self.0.borrow_mut().clone()
+    }
+
+    pub fn clear(&self) -> Option<(Window, Vec<LayerSurface>)> {
+        self.0.borrow_mut().take()
+    }
+}
+
 
 impl XdgShellHandler for GlobalData {
     fn xdg_shell_state(&mut self) -> &mut XdgShellState {
@@ -90,6 +110,114 @@ impl XdgShellHandler for GlobalData {
         });
         self.unconstrain_popup(&surface);
         surface.send_repositioned(token);
+    }
+
+    fn fullscreen_request(&mut self, surface: ToplevelSurface, mut wl_output: Option<WlOutput>) {
+        if surface
+            .current_state()
+            .capabilities
+            .contains(xdg_toplevel::WmCapabilities::Fullscreen)
+        {
+            let wl_surface = surface.wl_surface();
+
+            let output = wl_output
+                .as_ref()
+                .and_then(|wl_output| Output::from_resource(&wl_output))
+                .or_else(|| {
+                    // If no output was specified, use the current output
+                    Some(self.output_manager.current_output().clone())
+                });
+
+            if let Some(output) = output {
+                let output_geo = self.output_manager.output_geometry(&output).unwrap();
+                let client = match self.display_handle.get_client(wl_surface.id()) {
+                    Ok(client) => client,
+                    Err(err) => {
+                        warn!("Failed to get client for surface {:?}: {:?}", wl_surface, err);
+                        return;
+                    }
+                };
+
+                for client_output in output.client_outputs(&client) {
+                    wl_output = Some(client_output);
+                }
+
+                let window = self.workspace_manager.find_window(wl_surface).unwrap();
+
+                surface.with_pending_state(|state| {
+                    state.states.set(xdg_toplevel::State::Fullscreen);
+                    state.size = Some(output_geo.size);
+                    state.fullscreen_output = wl_output;
+                });
+                
+                output.user_data().insert_if_missing(FullscreenSurface::default);
+
+                // hide layer-shell surface
+                let mut map = layer_map_for_output(&output);
+                let mut layer_surfaces = vec![];
+                
+                for level in [Layer::Overlay, Layer::Top] {
+                    layer_surfaces.extend(
+                        map.layers_on(level).cloned()
+                    );
+                }
+                for layer_surface in &layer_surfaces {
+                    map.unmap_layer(layer_surface);
+                }
+                
+                output
+                    .user_data()
+                    .get::<FullscreenSurface>()
+                    .unwrap()
+                    .set(window.clone(), layer_surfaces);
+            }
+
+            // The protocol demands us to always reply with a configure,
+            // regardless of we fulfilled the request or not
+            if surface.is_initial_configure_sent() {
+                surface.send_configure();
+            } else {
+                // Will be sent during initial configure
+            }
+        }
+    }
+
+    fn unfullscreen_request(&mut self, surface: ToplevelSurface) {
+        if !surface
+            .current_state()
+            .states
+            .contains(xdg_toplevel::State::Fullscreen)
+        {
+            return;
+        }
+
+        let ret = surface.with_pending_state(|state| {
+            state.states.unset(xdg_toplevel::State::Fullscreen);
+            state.size = None;
+            state.fullscreen_output.take()
+        });
+
+        if let Some(wl_output) = ret {
+            let output = Output::from_resource(&wl_output).unwrap();
+            if let Some(fullscreen) = output.user_data().get::<FullscreenSurface>() {
+                if let Some((_, layer_surfaces)) = fullscreen.get() {
+                    // restore layer-shell surfaces
+                    let mut map = layer_map_for_output(&output);
+
+                    for layer_surface in &layer_surfaces {
+                        map.map_layer(layer_surface).unwrap();
+                    }
+
+                    let output_working_geo = map.non_exclusive_zone();
+                    self.workspace_manager
+                        .update_output_geo(output_working_geo, &self.loop_handle);
+                }
+
+                fullscreen.clear();
+            }
+        }
+
+        surface.send_pending_configure();
     }
 
     fn toplevel_destroyed(&mut self, surface: ToplevelSurface) {
