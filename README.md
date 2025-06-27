@@ -40,7 +40,7 @@
 
 > 本项目的详细技术文档目录在 wiki 中，其中包含了详细的模块设计，解释，测试评估等内容。
 
-本项目基于 [Smithay](https://github.com/Smithay/smithay.git) 使用 `Rust` 开发了一个使用 `Wayland` 协议的平铺式桌面管理器。项目能够在裸机终端中自行初始化 `DRM/KMS` 图形管线，并通过 `GBM` 和 `EGL` 建立 `GPU` 渲染上下文，使用 `OpenGLES` 进行硬件加速合成显示。启动后该 `Compositor` 接管系统图形输出，并成为客户端程序（如终端模拟器、浏览器）的 `Wayland` 显示服务。
+本项目基于 [Smithay](https://github.com/Smithay/smithay.git) 使用 Rust 开发了一个使用 Wayland 协议的平铺式桌面显示系统。项目能够在裸机终端中自行初始化 DRM/KMS 图形管线，并通过 GBM 和 EGL 建立 GPU 渲染上下文，使用 OpenGLES 进行硬件加速合成显示。启动后该 Compositor 接管系统图形输出，并成为客户端程序（如终端模拟器、浏览器）的 Wayland 显示服务。
 
 ![introduce](wiki/README/introduce.png)
 
