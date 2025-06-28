@@ -257,8 +257,8 @@ impl ShmHandler for GlobalData {
 delegate_shm!(GlobalData);
 
 impl DrmSyncobjHandler for GlobalData {
-    fn drm_syncobj_state(&mut self) -> &mut DrmSyncobjState {
-        self.state.syncobj_state.as_mut().unwrap()
+    fn drm_syncobj_state(&mut self) -> Option<&mut DrmSyncobjState> {
+        self.state.syncobj_state.as_mut()
     }
 }
 delegate_drm_syncobj!(GlobalData);

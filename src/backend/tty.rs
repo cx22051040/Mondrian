@@ -2,6 +2,7 @@ use anyhow::Context;
 use smithay::backend::allocator::dmabuf::Dmabuf;
 use smithay::backend::allocator::format::FormatSet;
 use smithay::backend::drm::compositor::{DrmCompositor, PrimaryPlaneElement};
+use smithay::backend::drm::exporter::gbm::GbmFramebufferExporter;
 use smithay::backend::drm::DrmSurface;
 use smithay::backend::renderer::element::default_primary_scanout_output_compare;
 use smithay::backend::renderer::multigpu::MultiFrame;
@@ -149,7 +150,7 @@ pub struct Surface {
 
 type GbmDrmCompositor = DrmCompositor<
     GbmAllocator<DrmDeviceFd>,
-    GbmDevice<DrmDeviceFd>,
+    GbmFramebufferExporter<DrmDeviceFd>,
     Option<OutputPresentationFeedback>,
     DrmDeviceFd,
 >;
@@ -902,7 +903,7 @@ impl Tty {
                 drm_surface,
                 None,
                 allocator.clone(),
-                device.gbm.clone(),
+                GbmFramebufferExporter::new(device.gbm.clone(), Some(device.render_node)),
                 SUPPORTED_COLOR_FORMATS,
                 render_formats,
                 device.drm.cursor_size(),
