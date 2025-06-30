@@ -715,7 +715,6 @@ event_loop
 - 快捷键响应链：  
   `键盘事件 → 按键状态判定（按下/释放） → 匹配组合键 → 执行对应指令`
 
-\ \
 === 正则匹配：解析指令或快捷命令
 
 用户定义的快捷指令存储在 /keybindings.conf 文件中，例如：
@@ -1094,10 +1093,6 @@ KMS 将整个显示控制器的显示 pipeline 抽象成以下几个部分：
   表示实际的物理接口（如 HDMI 接口、DisplayPort 接口），对应连接的显示设备（monitor）。
 
 > 🔄 工作流程示意：*_Plane → CRTC → Encoder → Connector → Monitor_*
-
-
-#pagebreak()
-
 
 === Wayland 通信流程与显示流程
 
@@ -1603,7 +1598,7 @@ pub struct TiledTree {
 - `gap`：样式设置信息，窗口间距。
 
 #figure(
-  image("introduce/slotmap.png", width: 70%),
+  image("introduce/slotmap.png", width: 60%),
   caption: "slotmap 示意图"
 )
 
@@ -1628,7 +1623,7 @@ pub struct NeighborGraph {
 - 删除窗口时：寻找其父节点与兄弟节点，依据兄弟节点类型进行树结构调整（详见删除操作逻辑）。
 
 #figure(
-  image("introduce/focus.png", width: 70%),
+  image("introduce/focus.png", width: 60%),
   caption: "focus 布局示意图"
 )
 
@@ -1640,7 +1635,7 @@ pub struct NeighborGraph {
 - 删除窗口时：遵循相同的父子结构替换逻辑，但在后续窗口重排时尽可能维持已有平衡性。
 
 #figure(
-  image("introduce/grid.png", width: 70%),
+  image("introduce/grid.png", width: 60%),
   caption: "grid 布局示意图"
 )
 
@@ -1652,7 +1647,7 @@ pub struct NeighborGraph {
 - 删除窗口时：若删除窗口为 `sprial_node` 则设置其兄弟节点为新的 `sprial_node`。
 
 #figure(
-  image("introduce/sprial.png", width: 70%),
+  image("introduce/sprial.png", width: 60%),
   caption: "sprial 布局示意图"
 )
 
@@ -2031,7 +2026,7 @@ impl GlobalData {
 
 
 
-= 性能测试与分析
+= 性能测试与分析(仍在优化，决赛期间完成)
 
 == Rust Tracy 跟踪分析 
 
