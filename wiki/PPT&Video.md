@@ -1,2 +1,1 @@
-ppt与视频链接：[https://www.alipan.com/s/3TTTscPaeHB](https://www.alipan.com/s/3TTTscPaeHB)
-提取码: i60e
+ppt与视频链接：[https://pan.baidu.com/s/1feyGCrzNOLBnzJwYhJpEuA?pwd=y8f2](https://pan.baidu.com/s/1feyGCrzNOLBnzJwYhJpEuA?pwd=y8f2)
