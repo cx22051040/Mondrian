@@ -46,8 +46,9 @@
 ppt与视频链接：[https://www.alipan.com/s/3TTTscPaeHB](https://www.alipan.com/s/3TTTscPaeHB)
 提取码: i60e
 
-![introduce](wiki/README/introduce.png)
+![frame](wiki/README/frame.png)
 
+![introduce](wiki/README/introduce.png)
 
 - **设计哲学**
   
