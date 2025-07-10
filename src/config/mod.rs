@@ -20,21 +20,24 @@ pub struct Configs {
 
 impl Configs {
     pub fn new() -> Self {
-        let content = fs::read_to_string("/home/alvin/Investigation/Wayland/Mondrian/configs/mondrian.conf");
-        
         let re_exec = Regex::new(r#"^\s*exec-once\s*=\s*(.+)$"#).unwrap();
         let re_env = Regex::new(r#"^\s*env\s*=\s*([^,\s]+)\s*,\s*(.+)$"#).unwrap();
         let re_source = Regex::new(r#"^\s*source\s*=\s*([^\s#]+)"#).unwrap();
-
+        
         let home = dirs::home_dir()
             .and_then(|path| path.to_str().map(String::from)).unwrap();
-
+        info!("Using home directory: {}", home);
+        
+        let config_path = home.clone() + "/.config/Mondrian/mondrian.conf";
+        let content = fs::read_to_string(&config_path);
+    
         let mut exec_once_cmds = Vec::new();
 
         let mut conf_workspaces = WorkspaceConfigs::default();
         let mut conf_keybindings = KeybindingConfigs::default();
 
         if let Ok(content) = content {
+            info!("using config from {:?}", config_path);
             for line in content.lines() {
                 let line = line.trim();
                 if line.is_empty() || line.starts_with('#') {
@@ -101,8 +104,6 @@ impl Configs {
         } else {
             warn!("Failed to read mondrian.conf, using default configurations");
         }
-
-        info!("Using home directory: {}", home);
 
         Self {
             home,
