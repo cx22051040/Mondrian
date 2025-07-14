@@ -17,7 +17,7 @@ use smithay::{
 use crate::{
     backend::Backend,
     config::Configs,
-    layout::tiled_tree::TiledScheme,
+    // layout::tiled_tree::TiledScheme,
     manager::{
         cursor::CursorManager, input::InputManager, output::OutputManager, render::RenderManager,
         window::WindowManager, workspace::{WorkspaceId, WorkspaceManager},
@@ -115,7 +115,7 @@ impl GlobalData {
             .output_geometry(output)
             .context("workspace add test error")?;
 
-        workspace_manager.add_workspace(WorkspaceId::next(), output, output_geo, Some(TiledScheme::Default), true);
+        workspace_manager.add_workspace(WorkspaceId::next(), output, output_geo, None, true);
 
         let start_time = std::time::Instant::now();
         let clock = Clock::new();

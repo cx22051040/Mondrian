@@ -1,11 +1,11 @@
 use std::cell::RefCell;
 
 use crate::{
-    input::resize_grab::ResizeSurfaceGrab, state::GlobalData
+    input::resize_grab::ResizeSurfaceGrab, layout::ResizeEdge, manager::window::WindowExt, state::GlobalData
 };
 use smithay::{
     delegate_xdg_shell, desktop::{layer_map_for_output, LayerSurface, PopupKind, Window}, input::{pointer::{Focus, PointerHandle}, Seat}, output::Output, reexports::{
-        wayland_protocols::xdg::shell::server::xdg_toplevel::{self, ResizeEdge},
+        wayland_protocols::xdg::shell::server::xdg_toplevel,
         wayland_server::{
             protocol::{wl_output::WlOutput, wl_seat, wl_surface::WlSurface}, Resource
         },
@@ -71,10 +71,10 @@ impl XdgShellHandler for GlobalData {
         };
         let pointer_loc = pointer.current_location();
 
-        let edges = match self.workspace_manager.current_workspace().focus() {
+        let edge = match self.workspace_manager.current_workspace().focus() {
             Some (focus) => {
-                let window_rec = self.workspace_manager.window_geometry(focus).unwrap();
-                detect_pointer_quadrant(pointer_loc, window_rec.to_f64())
+                let window_rect = focus.get_rect();
+                detect_pointer_quadrant(pointer_loc, window_rect.to_f64())
             }
             None => {
                 ResizeEdge::None
@@ -84,7 +84,7 @@ impl XdgShellHandler for GlobalData {
         self.workspace_manager
             .map_element(
                 window.clone(),
-                edges,
+                edge,
                 true,
                 &self.loop_handle,
             );
@@ -95,6 +95,24 @@ impl XdgShellHandler for GlobalData {
     fn new_popup(&mut self, surface: PopupSurface, _positioner: PositionerState) {
         self.unconstrain_popup(&surface);
         let _ = self.popups.track_popup(PopupKind::Xdg(surface));
+    }
+
+    fn toplevel_destroyed(&mut self, surface: ToplevelSurface) {
+        let wl_surface = surface.wl_surface();
+
+        self.window_manager.get_foreign_handle(wl_surface)
+            .map(|handle| {
+                handle.send_closed();
+            });
+
+        match self.window_manager.remove_window(wl_surface) {
+            Some(window) => {
+                self.workspace_manager.unmap_element(window, &self.loop_handle);
+            }
+            None => {
+                warn!("Failed to find window for toplevel destroy");
+            }
+        }
     }
 
     fn reposition_request(
@@ -210,7 +228,7 @@ impl XdgShellHandler for GlobalData {
 
                     let output_working_geo = map.non_exclusive_zone();
                     self.workspace_manager
-                        .update_output_geo(output_working_geo, &self.loop_handle);
+                        .update_output_rect(output_working_geo, &self.loop_handle);
                 }
 
                 fullscreen.clear();
@@ -218,24 +236,6 @@ impl XdgShellHandler for GlobalData {
         }
 
         surface.send_pending_configure();
-    }
-
-    fn toplevel_destroyed(&mut self, surface: ToplevelSurface) {
-        let wl_surface = surface.wl_surface();
-
-        self.window_manager.get_foreign_handle(wl_surface)
-            .map(|handle| {
-                handle.send_closed();
-            });
-
-        match self.window_manager.remove_window(wl_surface) {
-            Some(window) => {
-                self.workspace_manager.unmap_element(&window, &self.loop_handle);
-            }
-            None => {
-                warn!("Failed to find window for toplevel destroy");
-            }
-        }
     }
 
     fn move_request(&mut self, surface: ToplevelSurface, seat: wl_seat::WlSeat, serial: Serial) {
@@ -351,44 +351,38 @@ impl GlobalData {
             }
         };
 
-        let window_geo = match self.workspace_manager.window_geometry(window) {
-            Some(g) => g,
-            None => {
-                warn!("Failed to get window {:?} geometry", window);
-                return;
-            }
-        };
+        let window_rect = window.get_rect();
 
         // The target geometry for the positioner should be relative to its parent's geometry, so
         // we will compute that here.
         let mut target = output_geo;
         target.loc -= get_popup_toplevel_coords(&PopupKind::Xdg(popup.clone()));
-        target.loc -= window_geo.loc;
+        target.loc -= window_rect.loc;
         
         popup.with_pending_state(|state| {
             state.geometry = state.positioner.get_unconstrained_geometry(target);
         });
     }
 
-    pub fn grab_move_request(&mut self, wl_surface: &WlSurface, _pointer: &PointerHandle<GlobalData>, _start_data: PointerGrabStartData<GlobalData>, _serial: Serial) {
-        if let Some((..)) = self.workspace_manager.check_grab(wl_surface) {
-            // TODO
-        }
+    pub fn grab_move_request(&mut self, _wl_surface: &WlSurface, _pointer: &PointerHandle<GlobalData>, _start_data: PointerGrabStartData<GlobalData>, _serial: Serial) {
+        // TODO
     }
 
     pub fn resize_move_request(&mut self, wl_surface: &WlSurface, pointer: &PointerHandle<GlobalData>, start_data: PointerGrabStartData<GlobalData>, serial: Serial) {
-        if let Some((window, window_rec)) = self.workspace_manager.check_grab(wl_surface) {
+        if let Some(window) = self.workspace_manager.find_window(wl_surface) {
             let window = window.clone();
+            let window_rect = window.get_rect();
+            
             let pointer_loc = start_data.location;
 
-            let edges = detect_pointer_quadrant(pointer_loc, window_rec.to_f64());
+            let edge = detect_pointer_quadrant(pointer_loc, window_rect.to_f64());
 
             // set pointer state
             let grab = ResizeSurfaceGrab::start(
                 start_data,
                 window,
-                edges,
-                window_rec,
+                edge,
+                window_rect,
             );
             
             pointer.set_grab(self, grab, serial, Focus::Clear);
@@ -471,10 +465,10 @@ fn check_grab(
 
 fn detect_pointer_quadrant(
     pointer_loc: Point<f64, Logical>,
-    window_rec: Rectangle<f64, Logical>,
+    window_rect: Rectangle<f64, Logical>,
 ) -> ResizeEdge {
-    let center_x = window_rec.loc.x + window_rec.size.w / 2.0;
-    let center_y = window_rec.loc.y + window_rec.size.h / 2.0;
+    let center_x = window_rect.loc.x + window_rect.size.w / 2.0;
+    let center_y = window_rect.loc.y + window_rect.size.h / 2.0;
 
     let dx = pointer_loc.x - center_x;
     let dy = pointer_loc.y - center_y;

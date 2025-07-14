@@ -295,6 +295,23 @@ impl GlobalData {
         }
     }
 
+    pub fn re_focus(&mut self) {
+        let serial = SERIAL_COUNTER.next_serial();
+
+        let pointer = self.input_manager.get_pointer();
+        let pointer = match pointer {
+            Some(k) => k,
+            None => {
+                error!("get pointer error");
+                return;
+            }
+        };
+
+        let position = pointer.current_location();
+
+        let _ = self.surface_under(position, serial, true);
+    }
+
     fn surface_under(
         &mut self,
         position: Point<f64, Logical>,
@@ -313,7 +330,6 @@ impl GlobalData {
 
         let layer_map = layer_map_for_output(&output);
 
-        // TODO: First is full screen
         // The layer
         if let Some(layer) = layer_map
             .layer_under(WlrLayer::Overlay, position - output_geo.loc.to_f64())

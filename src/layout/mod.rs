@@ -1,59 +1,105 @@
-use serde::{Deserialize, Serialize};
+// pub mod json_tiled_tree;
+// pub mod neighbor_graph;
+// pub mod tiled_tree;
 
-pub mod json_tiled_tree;
-pub mod neighbor_graph;
-pub mod tiled_tree;
+use smithay::utils::{Logical, Rectangle};
 
-#[derive(Debug, Hash, PartialEq, Eq, Clone, Serialize, Deserialize)]
+pub mod container_tree;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Direction {
-    Left,
-    Up,
-    Right,
-    Down,
+    Horizontal,
+    Vertical,
 }
 
 impl Direction {
-    pub fn default() -> Direction {
-        Direction::Right
-    }
-
-    pub fn opposite(&self) -> Direction {
+    pub fn invert(&self) -> Direction {
         match self {
-            Direction::Right => Direction::Left,
-            Direction::Down => Direction::Up,
-            Direction::Left => Direction::Right,
-            Direction::Up => Direction::Down,
+            Direction::Horizontal => Direction::Vertical,
+            Direction::Vertical => Direction::Horizontal
         }
     }
-
-    pub fn rotate_cw(&self) -> Direction {
-        match self {
-            Direction::Right => Direction::Down,
-            Direction::Down => Direction::Left,
-            Direction::Left => Direction::Up,
-            Direction::Up => Direction::Right,
-        }
-    }
-
-    pub fn horizontals() -> [Direction; 2] {
-        [Direction::Left, Direction::Right]
-    }
-
-    pub fn verticals() -> [Direction; 2] {
-        [Direction::Up, Direction::Down]
-    }
-
-    pub fn orthogonal(&self) -> [Direction; 2] {
-        match self {
-            Direction::Left | Direction::Right => Direction::verticals(),
-            Direction::Up | Direction::Down => Direction::horizontals(),
-        }
-    }
-
-    pub const ALL: [Direction; 4] = [
-        Direction::Right,
-        Direction::Down,
-        Direction::Left,
-        Direction::Up,
-    ];
 }
+
+#[derive(Debug, Clone)]
+pub enum TiledScheme {
+    Default,
+    #[allow(dead_code)]
+    Spiral,
+}
+
+#[derive(Debug, Clone)]
+pub enum ResizeEdge {
+    None,
+
+    Top,
+    Bottom,
+    Left,
+    Right,
+
+    TopLeft,
+    TopRight,
+    BottomLeft,
+    BottomRight,
+}
+
+impl ResizeEdge {
+    pub fn to_direction_and_favour(&self, rect: Rectangle<i32, Logical>) -> (Direction, bool) {
+        use ResizeEdge::*;
+
+        match self {
+            // use Rectangle::default()
+            Left => (Direction::Horizontal, true),
+            Top => (Direction::Vertical, true),
+            Right => (Direction::Horizontal, false),
+            Bottom => (Direction::Vertical, false),
+
+            TopLeft | TopRight | BottomLeft => {
+                if rect.size.w > rect.size.h {
+                    let is_favour = matches!(self, TopLeft | BottomLeft);
+                    (Direction::Horizontal, is_favour)
+                } else {
+                    let is_favour = matches!(self, TopLeft | TopRight);
+                    (Direction::Vertical, is_favour)
+                }
+            }
+
+            BottomRight => {
+                if rect.size.w > rect.size.h {
+                    (Direction::Horizontal, false)
+                } else {
+                    (Direction::Vertical, false)
+                }
+            }
+
+            // fallback
+            _ => (Direction::Horizontal, false),
+        }
+    }
+
+    pub fn _is_favour(&self) -> bool {
+        use ResizeEdge::*;
+
+        match self {
+            Top | Left | TopLeft | TopRight | BottomLeft => {
+                true
+            }
+
+            _ => false,
+        }
+    }
+
+    pub fn split(&self) -> impl Iterator<Item = ResizeEdge> {
+        use ResizeEdge::*;
+
+        match self {
+            TopLeft => vec![Top, Left].into_iter(),
+            TopRight => vec![Top, Right].into_iter(),
+            BottomLeft => vec![Bottom, Left].into_iter(),
+            BottomRight => vec![Bottom, Right].into_iter(),
+
+            _ => vec![self.clone()].into_iter(),
+        }
+    }
+}
+

@@ -1,9 +1,9 @@
-use std::collections::HashMap;
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use smithay::{
     desktop::Window,
     reexports::wayland_server::protocol::wl_surface::WlSurface,
-    utils::{Logical, Size},
+    utils::{Logical, Rectangle},
     wayland::{
         compositor, foreign_toplevel_list::ForeignToplevelHandle,
         shell::xdg::XdgToplevelSurfaceData,
@@ -15,18 +15,35 @@ use crate::state::{GlobalData, State};
 use super::workspace::WorkspaceId;
 
 pub trait WindowExt {
-    fn set_rec(&self, size: Size<i32, Logical>);
+    fn set_rect_cache(&self, rect: Rectangle<i32, Logical>);
+    fn send_rect(&self, rect: Rectangle<i32, Logical>);
+    fn get_rect(&self) -> Rectangle<i32, Logical>;
     #[allow(dead_code)]
     fn get_title_and_id(&self) -> Option<(Option<String>, Option<String>)>;
 }
 
 impl WindowExt for Window {
-    fn set_rec(&self, size: Size<i32, Logical>) {
+    fn set_rect_cache(&self, rect: Rectangle<i32, Logical>) {
+        let rect_ref = self
+            .user_data()
+            .get_or_insert::<Rc<RefCell<Rectangle<i32, Logical>>>, _>(|| {
+                Rc::new(RefCell::new(rect.clone()))
+            });
+
+        *rect_ref.borrow_mut() = rect.clone();
+    }
+
+    fn send_rect(&self, rect: Rectangle<i32, Logical>) {
         self.toplevel()
             .unwrap()
-            .with_pending_state(|state| state.size = Some(size));
+            .with_pending_state(|state| state.size = Some(rect.size));
 
         self.toplevel().unwrap().send_pending_configure();
+    }
+
+    fn get_rect(&self) -> Rectangle<i32, Logical>{
+        // must have rect
+        self.user_data().get::<Rc<RefCell<Rectangle<i32, Logical>>>>().unwrap().borrow().clone()
     }
 
     fn get_title_and_id(&self) -> Option<(Option<String>, Option<String>)> {

@@ -155,6 +155,6 @@ impl GlobalData {
 
         let output_working_geo = layer_map.non_exclusive_zone();
 
-        self.workspace_manager.update_output_geo(output_working_geo, &self.loop_handle);
+        self.workspace_manager.update_output_rect(output_working_geo, &self.loop_handle);
     }
 }

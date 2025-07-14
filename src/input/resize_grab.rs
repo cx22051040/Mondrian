@@ -1,17 +1,17 @@
 use smithay::{
     desktop::Window,
     input::pointer::{CursorImageStatus, GrabStartData as PointerGrabStartData, PointerGrab},
-    reexports::wayland_protocols::xdg::shell::server::xdg_toplevel::{self, ResizeEdge},
+    reexports::wayland_protocols::xdg::shell::server::xdg_toplevel,
     utils::{Logical, Rectangle},
 };
 
-use crate::state::GlobalData;
+use crate::{layout::ResizeEdge, state::GlobalData};
 
 pub struct ResizeSurfaceGrab {
     start_data: PointerGrabStartData<GlobalData>,
     window: Window,
     #[allow(dead_code)]
-    edges: ResizeEdge,
+    edge: ResizeEdge,
     #[allow(dead_code)]
     initial_rect: Rectangle<i32, Logical>,
 }
@@ -20,7 +20,7 @@ impl ResizeSurfaceGrab {
     pub fn start(
         start_data: PointerGrabStartData<GlobalData>,
         window: Window,
-        edges: ResizeEdge,
+        edge: ResizeEdge,
         initial_rect: Rectangle<i32, Logical>,
     ) -> Self {
         let xdg = window.toplevel().unwrap();
@@ -32,7 +32,7 @@ impl ResizeSurfaceGrab {
         Self {
             start_data,
             window,
-            edges,
+            edge,
             initial_rect,
         }
     }
@@ -67,10 +67,10 @@ impl PointerGrab<GlobalData> for ResizeSurfaceGrab {
     ) {
         handle.motion(data, None, event);
 
-        let _delta = event.location - self.start_data.location;
+        let delta = event.location - self.start_data.location;
 
-        // data.workspace_manager
-        //     .resize(delta.to_i32_round(), &self.edges, &mut self.initial_rect);
+        data.workspace_manager
+            .resize(&self.edge, delta.to_i32_round(), &data.loop_handle);
 
         self.start_data.location = event.location;
 

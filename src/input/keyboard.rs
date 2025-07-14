@@ -65,7 +65,10 @@ impl GlobalData {
                         #[cfg(feature = "trace_input")]
                         info!("Keys: {:?}", keys);
 
-                        data.action_keys(keys, serial);
+                        // if get keybindings, do not send keyboard event to clients
+                        if data.action_keys(keys, serial) {
+                            return FilterResult::Intercept(());
+                        }
                     }
                     KeyState::Released => {
                         let keysym_value = keysym_handle.modified_sym();
@@ -83,7 +86,7 @@ impl GlobalData {
         );
     }
 
-    pub fn action_keys(&mut self, keys: String, serial: Serial) {
+    pub fn action_keys(&mut self, keys: String, serial: Serial) -> bool {
         let _span = tracy_client::span!("keyboard_action");
 
         let keybindings = self.input_manager.get_keybindings();
@@ -116,6 +119,8 @@ impl GlobalData {
                         #[cfg(not(feature = "trace_input"))]
                         _ => {}
                     }
+
+                    return true;
                 }
                 KeyAction::Internal(func) => match func {
                     FunctionEnum::InvertWindow => {
@@ -129,17 +134,16 @@ impl GlobalData {
                     }
                     FunctionEnum::Quit => {
                         if let Some(focus) = &self.workspace_manager.current_workspace().focus() {
-                            info!("quit");
                             let toplevel = focus.toplevel().unwrap();
                             toplevel.send_close();
                         }
                     }
-                    FunctionEnum::Up(direction)
-                    | FunctionEnum::Down(direction)
-                    | FunctionEnum::Left(direction)
-                    | FunctionEnum::Right(direction) => {
+                    FunctionEnum::Up(edge)
+                    | FunctionEnum::Down(edge)
+                    | FunctionEnum::Left(edge)
+                    | FunctionEnum::Right(edge) => {
                         self.workspace_manager
-                            .exchange_window(&direction, &self.loop_handle);
+                            .exchange_window(edge, &self.loop_handle);
                     }
                     FunctionEnum::Kill => {
                         info!("Kill the full compositor");
@@ -161,7 +165,11 @@ impl GlobalData {
                     }
                 },
             }
+        
+            return true;
         }
+
+        return false;
     }
 
     pub fn set_keyboard_focus(&mut self, surface: Option<WlSurface>, serial: Serial) {

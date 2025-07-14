@@ -149,29 +149,30 @@ impl RenderManager {
                     match animation.state {
                         AnimationState::NotStarted => {
                             let rec = animation.start();
-                            window.set_rec(rec.size);
+                            window.send_rect(rec);
                             rec.loc
                         }
                         AnimationState::Running => {
                             animation.tick();
                             let rec = animation.current_value();
-                            window.set_rec(rec.size);
-                            // info!("{:?}", rec);
+                            window.send_rect(rec);
                             rec.loc
                         }
                         _ => break,
                     }
                 }
                 None => {
-                    let window_rec = workspace_manager.window_geometry(window).unwrap();
+                    let window_rec = window.get_rect();
                     window_rec.loc
                 }
             };
 
+            let render_loc = (location - window.geometry().loc).to_physical_precise_round(output_scale);
+
             elements.extend(window
                 .render_elements::<WaylandSurfaceRenderElement<R>>(
                     renderer,
-                    (location - window.geometry().loc).to_physical_precise_round(output_scale),
+                    render_loc,
                     Scale::from(output_scale),
                     0.85,
                 ).into_iter().map(CustomRenderElements::Surface)
@@ -301,7 +302,7 @@ impl RenderManager {
         if let Some(window) = focus {
             let window_rec = match self.animations.get(window) {
                 Some(animation) => animation.current_value(),
-                None => workspace_manager.window_geometry(window).unwrap(),
+                None => window.get_rect(),
             };
 
             let program = renderer

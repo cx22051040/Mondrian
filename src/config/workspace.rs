@@ -1,6 +1,6 @@
 use std::fs;
 
-use crate::layout::tiled_tree::TiledScheme;
+use crate::layout::TiledScheme;
 
 #[derive(Debug, Clone)]
 pub struct WorkspaceConfigs {

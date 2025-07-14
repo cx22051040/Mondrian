@@ -3,7 +3,7 @@ use std::{collections::HashMap, fs};
 use itertools::Itertools;
 use regex::Regex;
 
-use crate::layout::Direction;
+use crate::layout::ResizeEdge;
 
 #[derive(Debug, Clone)]
 pub enum FunctionEnum {
@@ -13,10 +13,10 @@ pub enum FunctionEnum {
     Quit,
     Kill,
     Json,
-    Up(Direction),
-    Down(Direction),
-    Left(Direction),
-    Right(Direction),
+    Up(ResizeEdge),
+    Down(ResizeEdge),
+    Left(ResizeEdge),
+    Right(ResizeEdge),
 
     SwitchWorkspace(usize),
 }
@@ -155,10 +155,10 @@ impl KeybindingConfigs {
                             "quit" => FunctionEnum::Quit,
                             "kill" => FunctionEnum::Kill,
                             "json" => FunctionEnum::Json,
-                            "up" => FunctionEnum::Up(Direction::Up),
-                            "down" => FunctionEnum::Down(Direction::Down),
-                            "left" => FunctionEnum::Left(Direction::Left),
-                            "right" => FunctionEnum::Right(Direction::Right),
+                            "up" => FunctionEnum::Up(ResizeEdge::Top),
+                            "down" => FunctionEnum::Down(ResizeEdge::Bottom),
+                            "left" => FunctionEnum::Left(ResizeEdge::Left),
+                            "right" => FunctionEnum::Right(ResizeEdge::Right),
                             "switch workspace" => {
                                 let id = key.split('+').find_map(|s| {
                                     s.trim().parse::<usize>().ok()

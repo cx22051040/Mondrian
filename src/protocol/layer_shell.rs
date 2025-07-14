@@ -52,7 +52,7 @@ impl WlrLayerShellHandler for GlobalData {
         map.unmap_layer(&layer);
 
         let output_working_geo = map.non_exclusive_zone();
-        self.workspace_manager.update_output_geo(output_working_geo, &self.loop_handle);
+        self.workspace_manager.update_output_rect(output_working_geo, &self.loop_handle);
     }
 
     fn new_popup(
@@ -96,7 +96,7 @@ impl GlobalData {
             }
 
             let output_working_geo = map.non_exclusive_zone();
-            self.workspace_manager.update_output_geo(output_working_geo, &self.loop_handle);
+            self.workspace_manager.update_output_rect(output_working_geo, &self.loop_handle);
 
             return true;
         }
