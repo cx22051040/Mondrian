@@ -369,7 +369,6 @@ impl Workspace {
 
         for window in windows {
             let window_rect = window.get_rect();
-            info!("window_rec: {:?}", window_rect);
 
             if window_rect.contains(position.to_i32_round()) {
                 let render_loc = window_rect.loc.to_f64() - window.geometry().loc.to_f64();
@@ -381,7 +380,7 @@ impl Workspace {
                 if let Some((surface, surface_loc)) =
                     window.surface_under(position - render_loc, WindowSurfaceType::ALL)
                 {
-                    return Some((surface, (surface_loc + window_rect.loc).to_f64()));
+                    return Some((surface, surface_loc.to_f64() + render_loc));
                 }
             }
         }
