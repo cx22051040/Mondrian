@@ -384,7 +384,8 @@ impl ContainerTree {
             if let Some(max_parent_id) = self.find_node_with_direction_and_favour(target_id, direction, is_favour) {
                 if let Some(NodeData::Container { rect, offset: parent_offset, .. }) = self.nodes.get_mut(max_parent_id) {
                     let rect = rect.clone();
-                    let min = 10;
+                    // TODO: use client's given
+                    let min = 175;
 
                     let half = match direction {
                         Direction::Horizontal => {

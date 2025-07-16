@@ -7,7 +7,7 @@ use smithay::{
     reexports::wayland_server::DisplayHandle,
 };
 
-use crate::{config::keybinding::{KeyAction, KeybindingConfigs}, state::GlobalData, utils::errors::AnyHowErr};
+use crate::{config::keybinding::{KeyAction, KeybindingConfigs}, input::focus::KeyboardFocusTarget, state::GlobalData, utils::errors::AnyHowErr};
 
 pub struct InputManager {
     pub seat_state: SeatState<GlobalData>,
@@ -72,5 +72,18 @@ impl InputManager {
 
     pub fn _get_touch(&self) -> Option<TouchHandle<GlobalData>> {
         self.seat.get_touch()
+    }
+
+    pub fn get_keyboard_focus(&self) -> Option<KeyboardFocusTarget> {
+        let keyboard = self.get_keyboard();
+        let keyboard = match keyboard {
+            Some(k) => k,
+            None => {
+                error!("get keyboard error");
+                return None;
+            }
+        };
+
+        keyboard.current_focus()
     }
 }

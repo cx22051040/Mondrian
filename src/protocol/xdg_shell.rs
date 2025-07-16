@@ -1,15 +1,15 @@
 use std::cell::RefCell;
 
 use crate::{
-    input::resize_grab::ResizeSurfaceGrab, layout::ResizeEdge, manager::window::WindowExt, state::GlobalData
+    input::{focus::PointerFocusTarget, resize_grab::ResizeSurfaceGrab}, manager::window::WindowExt, protocol::detect_pointer_quadrant, state::GlobalData
 };
 use smithay::{
-    delegate_xdg_shell, desktop::{layer_map_for_output, LayerSurface, PopupKind, Window}, input::{pointer::{Focus, PointerHandle}, Seat}, output::Output, reexports::{
+    delegate_xdg_shell, desktop::{layer_map_for_output, LayerSurface, PopupKind, Window, WindowSurface}, input::{pointer::{Focus, PointerHandle}, Seat}, output::Output, reexports::{
         wayland_protocols::xdg::shell::server::xdg_toplevel,
         wayland_server::{
             protocol::{wl_output::WlOutput, wl_seat, wl_surface::WlSurface}, Resource
         },
-    }, utils::{Logical, Point, Rectangle, Serial, SERIAL_COUNTER}, wayland::{
+    }, utils::Serial, wayland::{
         compositor::{self, with_states},
         shell::{wlr_layer::Layer, xdg::{
             PopupSurface, PositionerState, ToplevelSurface, XdgShellHandler, XdgShellState, XdgToplevelSurfaceData
@@ -48,71 +48,18 @@ impl XdgShellHandler for GlobalData {
         let _span = tracy_client::span!("new_xdg_toplevel");
 
         let window = Window::new_wayland_window(surface.clone());
-
-        self.window_manager.add_window(
-            window.clone(),
-            self.workspace_manager.current_workspace().id(),
-            &mut self.state
-        );
-
-        // // use the size from the suggested size of the surface if available
-        // if let Some(size) = surface.with_pending_state(|state| state.size) {
-        //     window.set_rec(size);
-        // }
-
-        // TODO:
-        let pointer = self.input_manager.get_pointer();
-        let pointer = match pointer {
-            Some(k) => k,
-            None => {
-                error!("get pointer error");
-                return;
-            }
-        };
-        let pointer_loc = pointer.current_location();
-
-        let edge = match self.workspace_manager.current_workspace().focus() {
-            Some (focus) => {
-                let window_rect = focus.get_rect();
-                detect_pointer_quadrant(pointer_loc, window_rect.to_f64())
-            }
-            None => {
-                ResizeEdge::None
-            }
-        };
-
-        self.workspace_manager
-            .map_element(
-                window.clone(),
-                edge,
-                true,
-                &self.loop_handle,
-            );
-
-        self.set_keyboard_focus(Some(surface.wl_surface().clone()), SERIAL_COUNTER.next_serial());
+        self.map_window(window);
     }
 
     fn new_popup(&mut self, surface: PopupSurface, _positioner: PositionerState) {
+        let _span = tracy_client::span!("new_xdg_popup");
+
         self.unconstrain_popup(&surface);
         let _ = self.popups.track_popup(PopupKind::Xdg(surface));
     }
 
     fn toplevel_destroyed(&mut self, surface: ToplevelSurface) {
-        let wl_surface = surface.wl_surface();
-
-        self.window_manager.get_foreign_handle(wl_surface)
-            .map(|handle| {
-                handle.send_closed();
-            });
-
-        match self.window_manager.remove_window(wl_surface) {
-            Some(window) => {
-                self.workspace_manager.unmap_element(window, &self.loop_handle);
-            }
-            None => {
-                warn!("Failed to find window for toplevel destroy");
-            }
-        }
+        self.unmap_window(&WindowSurface::Wayland(surface));
     }
 
     fn reposition_request(
@@ -160,7 +107,7 @@ impl XdgShellHandler for GlobalData {
                     wl_output = Some(client_output);
                 }
 
-                let window = self.workspace_manager.find_window(wl_surface).unwrap();
+                let window = self.window_manager.get_window_wayland(wl_surface).unwrap();
 
                 surface.with_pending_state(|state| {
                     state.states.set(xdg_toplevel::State::Fullscreen);
@@ -320,12 +267,12 @@ impl XdgShellHandler for GlobalData {
                 (roll.title.clone(), roll.app_id.clone())
             });
 
-        self.window_manager.get_foreign_handle(surface.wl_surface())
-            .map(|handle| {
-                handle.send_title(&title.unwrap_or("unkown".to_string()));
-                handle.send_app_id(&app_id.unwrap_or("unkown".to_string()));
-                handle.send_done();
-            });
+        // self.window_manager.get_foreign_handle(surface.wl_surface())
+        //     .map(|handle| {
+        //         handle.send_title(&title.unwrap_or("unkown".to_string()));
+        //         handle.send_app_id(&app_id.unwrap_or("unkown".to_string()));
+        //         handle.send_done();
+        //     });
     }
 }
 delegate_xdg_shell!(GlobalData);
@@ -336,8 +283,8 @@ impl GlobalData {
             return;
         };
         let Some(window) = self
-            .workspace_manager
-            .find_window(&root)
+            .window_manager
+            .get_window_wayland(&root)
         else {
             return;
         };
@@ -369,7 +316,7 @@ impl GlobalData {
     }
 
     pub fn resize_move_request(&mut self, wl_surface: &WlSurface, pointer: &PointerHandle<GlobalData>, start_data: PointerGrabStartData<GlobalData>, serial: Serial) {
-        if let Some(window) = self.workspace_manager.find_window(wl_surface) {
+        if let Some(window) = self.window_manager.get_window_wayland(wl_surface) {
             let window = window.clone();
             let window_rect = window.get_rect();
             
@@ -393,20 +340,24 @@ impl GlobalData {
         let popups = &mut self.popups;
 
         // Handle toplevel commits.
-        if let Some(window) = self.workspace_manager.find_window(surface)
+        if let Some(window) = self.window_manager.get_window_wayland(surface)
         {
-            let initial_configure_sent = with_states(surface, |states| {
-                states
-                    .data_map
-                    .get::<XdgToplevelSurfaceData>()
-                    .unwrap()
-                    .lock()
-                    .unwrap()
-                    .initial_configure_sent
-            });
-
-            if !initial_configure_sent {
-                window.toplevel().unwrap().send_configure();
+            // send the initial configure if relevant
+            #[cfg_attr(not(feature = "xwayland"), allow(irrefutable_let_patterns))]
+            if let Some(toplevel) = window.toplevel() {
+                let initial_configure_sent = with_states(surface, |states| {
+                    states
+                        .data_map
+                        .get::<XdgToplevelSurfaceData>()
+                        .unwrap()
+                        .lock()
+                        .unwrap()
+                        .initial_configure_sent
+                });
+    
+                if !initial_configure_sent {
+                    toplevel.send_configure();
+                }
             }
         }
 
@@ -454,29 +405,17 @@ fn check_grab(
         }
     };
 
-    // If the focus was for a different surface, ignore the request.
-    if !focus.id().same_client_as(&wl_surface.id()) {
-        warn!("the focus was for a different surface");
-        return None;
+    match focus {
+        PointerFocusTarget::WlSurface(surface) => {
+            // If the focus was for a different surface, ignore the request.
+            if !surface.id().same_client_as(&wl_surface.id()) {
+                warn!("the focus was for a different surface");
+                return None;
+            }
+        },
+        PointerFocusTarget::X11Surface(_) => { }
     }
 
     Some(start_data)
 }
 
-fn detect_pointer_quadrant(
-    pointer_loc: Point<f64, Logical>,
-    window_rect: Rectangle<f64, Logical>,
-) -> ResizeEdge {
-    let center_x = window_rect.loc.x + window_rect.size.w / 2.0;
-    let center_y = window_rect.loc.y + window_rect.size.h / 2.0;
-
-    let dx = pointer_loc.x - center_x;
-    let dy = pointer_loc.y - center_y;
-
-    match (dx >= 0., dy >= 0.) {
-        (true, false) => ResizeEdge::TopRight,
-        (false, false) => ResizeEdge::TopLeft,
-        (false, true) => ResizeEdge::BottomLeft,
-        (true, true) => ResizeEdge::BottomRight,
-    }
-}

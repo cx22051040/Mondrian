@@ -15,7 +15,7 @@ use smithay::{
 };
 
 use crate::{
-    animation::{Animation, AnimationState, AnimationType}, manager::window::WindowExt, protocol::xdg_shell::FullscreenSurface, render::{
+    animation::{Animation, AnimationState, AnimationType}, input::focus::KeyboardFocusTarget, manager::window::WindowExt, protocol::xdg_shell::FullscreenSurface, render::{
         background::{Background, BackgroundRenderElement}, border::{BorderRenderElement, BorderShader}, elements::{CustomRenderElements, OutputRenderElements, ShaderRenderElement}, MondrianRenderer
     }
 };
@@ -74,7 +74,12 @@ impl RenderManager {
 
         // Then Windows, Borders and Layer-shell
         output_elements.extend(
-            self.get_windows_render_elements(renderer, output_manager, workspace_manager)
+            self.get_windows_render_elements(
+                    renderer, 
+                    output_manager, 
+                    workspace_manager, 
+                    input_manager
+                )
                 .into_iter()
                 .map(OutputRenderElements::Custom),
         );
@@ -93,6 +98,7 @@ impl RenderManager {
         renderer: &mut R,
         output_manager: &OutputManager,
         workspace_manager: &WorkspaceManager,
+        input_manager: &InputManager,
     ) -> Vec<CustomRenderElements<R>> {
         let _span = tracy_client::span!("get_windows_render_elements");
 
@@ -140,7 +146,7 @@ impl RenderManager {
         }
 
         // windows border
-        elements.extend(self.get_border_render_elements(renderer, workspace_manager));
+        elements.extend(self.get_border_render_elements(renderer, input_manager));
 
         // windows
         for window in workspace_manager.elements() {
@@ -292,15 +298,14 @@ impl RenderManager {
     pub fn get_border_render_elements<R: MondrianRenderer>(
         &self,
         renderer: &mut R,
-        workspace_manager: &WorkspaceManager,
+        input_manager: &InputManager,
     ) -> Vec<CustomRenderElements<R>> {
         let _span = tracy_client::span!("get_border_render_elements");
 
         let mut elements: Vec<CustomRenderElements<R>> = vec![];
 
-        let focus = workspace_manager.current_workspace().focus();
-        if let Some(window) = focus {
-            let window_rec = match self.animations.get(window) {
+        if let Some(KeyboardFocusTarget::Window(window)) = input_manager.get_keyboard_focus() {
+            let window_rec = match self.animations.get(&window) {
                 Some(animation) => animation.current_value(),
                 None => window.get_rect(),
             };

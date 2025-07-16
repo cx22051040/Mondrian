@@ -1,5 +1,5 @@
 use smithay::{
-    desktop::Window,
+    desktop::{Window, WindowSurface},
     input::pointer::{CursorImageStatus, GrabStartData as PointerGrabStartData, PointerGrab},
     reexports::wayland_protocols::xdg::shell::server::xdg_toplevel,
     utils::{Logical, Rectangle},
@@ -23,11 +23,17 @@ impl ResizeSurfaceGrab {
         edge: ResizeEdge,
         initial_rect: Rectangle<i32, Logical>,
     ) -> Self {
-        let xdg = window.toplevel().unwrap();
-        xdg.with_pending_state(|state| {
-            state.states.set(xdg_toplevel::State::Resizing);
-        });
-        xdg.send_pending_configure();
+
+        match window.underlying_surface() {
+            WindowSurface::Wayland(toplevel) => {
+                toplevel.with_pending_state(|state| {
+                    state.states.set(xdg_toplevel::State::Resizing);
+                });
+                toplevel.send_pending_configure();
+            },
+            #[cfg(feature = "xwayland")]
+            WindowSurface::X11(_) => { }
+        };
 
         Self {
             start_data,
@@ -44,11 +50,16 @@ impl PointerGrab<GlobalData> for ResizeSurfaceGrab {
     }
 
     fn unset(&mut self, state: &mut GlobalData) {
-        let toplevel = self.window.toplevel().unwrap();
-        toplevel.with_pending_state(|state| {
-            state.states.unset(xdg_toplevel::State::Resizing);
-        });
-        toplevel.send_pending_configure();
+        match self.window.underlying_surface() {
+            WindowSurface::Wayland(toplevel) => {
+                toplevel.with_pending_state(|state| {
+                    state.states.unset(xdg_toplevel::State::Resizing);
+                });
+                toplevel.send_pending_configure();
+            },
+            #[cfg(feature = "xwayland")]
+            WindowSurface::X11(_) => { }
+        };
 
         state
             .cursor_manager
@@ -70,7 +81,7 @@ impl PointerGrab<GlobalData> for ResizeSurfaceGrab {
         let delta = event.location - self.start_data.location;
 
         data.workspace_manager
-            .resize(&self.edge, delta.to_i32_round(), &data.loop_handle);
+            .resize(&self.window, &self.edge, delta.to_i32_round(), &data.loop_handle);
 
         self.start_data.location = event.location;
 
@@ -145,12 +156,16 @@ impl PointerGrab<GlobalData> for ResizeSurfaceGrab {
         if !handle.current_pressed().contains(&BTN_LEFT) {
             handle.unset_grab(self, data, event.serial, event.time, true);
 
-            let xdg = self.window.toplevel().unwrap();
-            xdg.with_pending_state(|state| {
-                state.states.unset(xdg_toplevel::State::Resizing);
-            });
-
-            xdg.send_pending_configure();
+            match self.window.underlying_surface() {
+                WindowSurface::Wayland(toplevel) => {
+                    toplevel.with_pending_state(|state| {
+                        state.states.unset(xdg_toplevel::State::Resizing);
+                    });
+                    toplevel.send_pending_configure();
+                },
+                #[cfg(feature = "xwayland")]
+                WindowSurface::X11(_) => { }
+            };
         }
     }
 

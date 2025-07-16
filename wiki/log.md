@@ -222,3 +222,9 @@ client 使用 dmabuf 提交 buffer 的时候，不会保证 buffer 已经渲染�
 4. 添加快捷键响应后续事件，如果响应了快捷键，返回 FilterResult::Intercept(()) 中断不向 client 发送键盘事件。
 
 5. 对窗口删除做了一定优化，删除后执行一次鼠标的 focus 寻找，必定会自动绑定到 sibling 节点，对于 container 则是靠近鼠标的 node 节点。
+
+### 2025.7.16
+
+1. 添加 seat_primary_select 协议，为实现 copy 做准备
+
+2. 添加了 XWayland 兼容层，x client 所有请求转角给 XWayland Compositor 处理，转化为 Wayland Compositor 可以读取的信息。

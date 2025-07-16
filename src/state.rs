@@ -1,27 +1,47 @@
+use std::sync::Arc;
+
 use anyhow::Context;
+
+#[cfg(feature = "xwayland")]
 use smithay::{
-    backend::allocator::dmabuf::Dmabuf, delegate_data_device, delegate_dmabuf, delegate_drm_syncobj, delegate_output, delegate_seat, delegate_shm, delegate_viewporter, desktop::PopupManager, input::{Seat, SeatHandler, SeatState}, reexports::{
+    wayland::{
+        xwayland_keyboard_grab::XWaylandKeyboardGrabState, 
+        xwayland_shell
+    }, 
+    xwayland::X11Wm
+};
+
+use smithay::{
+    backend::allocator::dmabuf::Dmabuf, delegate_data_device, delegate_dmabuf, delegate_drm_syncobj, delegate_output, delegate_shm, delegate_viewporter, desktop::PopupManager, reexports::{
         calloop::LoopHandle,
         wayland_server::{
-            backend::ClientData, protocol::{wl_buffer, wl_shm, wl_surface::WlSurface}, DisplayHandle, Resource
+            backend::ClientData, protocol::{wl_buffer, wl_shm}, DisplayHandle,
         },
-    }, utils::{Clock, Monotonic}, wayland::{
-        buffer::BufferHandler, compositor::{CompositorClientState, CompositorState}, dmabuf::{DmabufGlobal, DmabufHandler, DmabufState, ImportNotifier}, drm_syncobj::{DrmSyncobjHandler, DrmSyncobjState}, foreign_toplevel_list::ForeignToplevelListState, output::{OutputHandler, OutputManagerState}, security_context::SecurityContext, selection::{
+    }, 
+    utils::{Clock, Monotonic}, 
+    wayland::{
+        buffer::BufferHandler, compositor::{
+            CompositorClientState, CompositorState
+        }, dmabuf::{
+            DmabufGlobal, DmabufHandler, DmabufState, ImportNotifier
+        }, drm_syncobj::{
+            DrmSyncobjHandler, DrmSyncobjState
+        }, foreign_toplevel_list::ForeignToplevelListState, output::{
+            OutputHandler, OutputManagerState
+        }, security_context::SecurityContext, selection::{
             data_device::{
-                set_data_device_focus, ClientDndGrabHandler, DataDeviceHandler, DataDeviceState, ServerDndGrabHandler
-            }, SelectionHandler
-        }, shell::{wlr_layer::WlrLayerShellState, xdg::XdgShellState}, shm::{ShmHandler, ShmState}, viewporter::ViewporterState
+                ClientDndGrabHandler, DataDeviceHandler, DataDeviceState, ServerDndGrabHandler
+            }, 
+            primary_selection::PrimarySelectionState, SelectionHandler
+        }, shell::{wlr_layer::WlrLayerShellState, xdg::XdgShellState}, shm::{ShmHandler, ShmState}, socket::ListeningSocketSource, viewporter::ViewporterState
     }
 };
 
 use crate::{
-    backend::Backend,
-    config::Configs,
-    // layout::tiled_tree::TiledScheme,
-    manager::{
+    backend::Backend, config::Configs, manager::{
         cursor::CursorManager, input::InputManager, output::OutputManager, render::RenderManager,
         window::WindowManager, workspace::{WorkspaceId, WorkspaceManager},
-    },
+    }
 };
 
 #[derive(Default)]
@@ -50,6 +70,8 @@ impl ClientData for ClientState {
 pub struct GlobalData {
     // config
     pub configs: Configs,
+
+    pub socket_name: String,
 
     pub backend: Backend,
     pub state: State,
@@ -80,6 +102,19 @@ impl GlobalData {
         // load configs
         let configs = Configs::new();
 
+        // initial listening socket source
+        let source = ListeningSocketSource::new_auto().context("Failed to init socket source")?;
+        let socket_name = source.socket_name().to_string_lossy().into_owned();
+        loop_handle
+            .insert_source(source, move |client_stream, _, data| {
+                data.display_handle
+                    .insert_client(client_stream, Arc::new(ClientState::default()))
+                    .expect("Failed to insert client");
+            })
+            .context("Failed to init socket source")?;
+
+        info!(name = socket_name, "Listening on wayland socket.");
+
         // init backend
         let mut backend = Backend::new(&loop_handle).context("Failed to create backend")?;
 
@@ -101,6 +136,9 @@ impl GlobalData {
         let popups = PopupManager::default();
         let render_manager = RenderManager::new();
 
+        let start_time = std::time::Instant::now();
+        let clock = Clock::new();
+
         // initial backend
         backend.init(
             &loop_handle,
@@ -109,7 +147,11 @@ impl GlobalData {
             &render_manager,
             &mut nuonuo_state,
         );
+        
+        // set display env
+        unsafe { std::env::set_var("WAYLAND_DISPLAY", &socket_name) };
 
+        // TODO: test
         let output = output_manager.current_output();
         let output_geo = output_manager
             .output_geometry(output)
@@ -117,12 +159,11 @@ impl GlobalData {
 
         workspace_manager.add_workspace(WorkspaceId::next(), output, output_geo, None, true);
 
-        let start_time = std::time::Instant::now();
-        let clock = Clock::new();
-
         Ok(Self {
             backend,
             state: nuonuo_state,
+
+            socket_name,
 
             output_manager,
             workspace_manager,
@@ -152,6 +193,15 @@ pub struct State {
     pub shm_state: ShmState,
     pub dmabuf_state: DmabufState,
     pub syncobj_state: Option<DrmSyncobjState>,
+    pub primary_selection_state: PrimarySelectionState,
+
+    // xwayland state
+    #[cfg(feature = "xwayland")]
+    pub xwayland_shell_state: xwayland_shell::XWaylandShellState,
+    #[cfg(feature = "xwayland")]
+    pub xwm: Option<X11Wm>,
+    #[cfg(feature = "xwayland")]
+    pub xdisplay: Option<u32>,
 
     // protocol state
     pub xdg_shell_state: XdgShellState,
@@ -173,7 +223,15 @@ impl State {
             vec![wl_shm::Format::Argb8888, wl_shm::Format::Xrgb8888],
         );
         let dmabuf_state = DmabufState::new();
+        let primary_selection_state = PrimarySelectionState::new::<GlobalData>(display_handle);
+        
+        // init xwayland state
+        #[cfg(feature = "xwayland")]
+        let xwayland_shell_state = xwayland_shell::XWaylandShellState::new::<GlobalData>(display_handle);
+        #[cfg(feature = "xwayland")]
+        XWaylandKeyboardGrabState::new::<GlobalData>(display_handle);
 
+        // init protocol state
         let xdg_shell_state = XdgShellState::new::<GlobalData>(display_handle);
         let layer_shell_state = WlrLayerShellState::new::<GlobalData>(display_handle);
         let viewporter_state = ViewporterState::new::<GlobalData>(display_handle);
@@ -186,6 +244,11 @@ impl State {
             shm_state,
             dmabuf_state,
             syncobj_state: None,
+            primary_selection_state,
+
+            xwayland_shell_state,
+            xwm: None,
+            xdisplay: None,
 
             xdg_shell_state,
             layer_shell_state,
@@ -211,39 +274,6 @@ delegate_data_device!(GlobalData);
 
 impl OutputHandler for GlobalData {}
 delegate_output!(GlobalData);
-
-impl SeatHandler for GlobalData {
-    type KeyboardFocus = WlSurface;
-    type PointerFocus = WlSurface;
-    type TouchFocus = WlSurface;
-
-    fn seat_state(&mut self) -> &mut SeatState<GlobalData> {
-        &mut self.input_manager.seat_state
-    }
-
-    fn cursor_image(
-        &mut self,
-        _seat: &Seat<Self>,
-        image: smithay::input::pointer::CursorImageStatus,
-    ) {
-        self.cursor_manager.set_cursor_image(image);
-    }
-
-    fn focus_changed(&mut self, seat: &Seat<Self>, focused: Option<&WlSurface>) {
-        let display_handle = &self.display_handle;
-        let client = focused.and_then(|s| display_handle.get_client(s.id()).ok());
-        set_data_device_focus(display_handle, seat, client);
-    }
-
-    fn led_state_changed(
-        &mut self,
-        _seat: &Seat<Self>,
-        _led_state: smithay::input::keyboard::LedState,
-    ) {
-        info!("led state changed");
-    }
-}
-delegate_seat!(GlobalData);
 
 impl BufferHandler for GlobalData {
     fn buffer_destroyed(&mut self, _buffer: &wl_buffer::WlBuffer) {}

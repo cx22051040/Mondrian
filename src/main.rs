@@ -19,20 +19,17 @@ mod render;
 mod state;
 mod utils;
 
-use std::sync::Arc;
-
 use smithay::{
     reexports::{
         calloop::{EventLoop, Interest, Mode, PostAction, generic::Generic},
         wayland_server::Display,
     },
-    wayland::socket::ListeningSocketSource,
 };
 
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_subscriber::{self, layer::SubscriberExt, FmtSubscriber};
 
-use state::{ClientState, GlobalData};
+use state::GlobalData;
 use utils::errors::AnyHowErr;
 
 fn main() -> anyhow::Result<()> {
@@ -78,24 +75,12 @@ fn main() -> anyhow::Result<()> {
         )
         .anyhow_err("Failed to init server source")?;
 
-    // initial listening socket source
-    let source = ListeningSocketSource::new_auto().anyhow_err("Failed to init socket source")?;
-    let socket_name = source.socket_name().to_string_lossy().into_owned();
-    loop_handle
-        .insert_source(source, move |client_stream, _, data| {
-            data.display_handle
-                .insert_client(client_stream, Arc::new(ClientState::default()))
-                .expect("Failed to insert client");
-        })
-        .anyhow_err("Failed to init socket source")?;
-
-    info!(name = socket_name, "Listening on wayland socket.");
-
     // initial the main data
     let mut global_data =
         GlobalData::new(loop_handle, display_handle).anyhow_err("Failed to init global data")?;
-
-    unsafe { std::env::set_var("WAYLAND_DISPLAY", &socket_name) };
+    // start xwayland
+    #[cfg(feature = "xwayland")]
+    global_data.start_xwayland();
 
     global_data.configs.init();
 

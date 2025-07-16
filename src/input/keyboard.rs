@@ -1,12 +1,9 @@
 use smithay::{
-    backend::input::{Event, InputBackend, KeyState, KeyboardKeyEvent},
-    input::keyboard::{FilterResult, xkb::keysym_get_name},
-    reexports::wayland_server::protocol::wl_surface::WlSurface,
-    utils::{SERIAL_COUNTER, Serial},
+    backend::input::{Event, InputBackend, KeyState, KeyboardKeyEvent}, desktop::WindowSurface, input::keyboard::{xkb::keysym_get_name, FilterResult}, utils::{Serial, SERIAL_COUNTER}
 };
 
 use crate::{
-    config::keybinding::{FunctionEnum, KeyAction}, manager::workspace::WorkspaceId, state::GlobalData
+    config::keybinding::{FunctionEnum, KeyAction}, input::focus::KeyboardFocusTarget, manager::workspace::WorkspaceId, state::GlobalData
 };
 
 impl GlobalData {
@@ -103,6 +100,16 @@ impl GlobalData {
                         command.arg(arg);
                     }
 
+                    // use current display
+                    let mut envs = vec![("WAYLAND_DISPLAY", self.socket_name.clone())];
+
+                    #[cfg(feature = "xwayland")]
+                    if let Some(ref xdisplay) = self.state.xdisplay {
+                        envs.push(("DISPLAY", format!(":{}", xdisplay)));
+                    }
+
+                    command.envs(envs);
+
                     match command.spawn() {
                         #[cfg(feature = "trace_input")]
                         Ok(child) => {
@@ -124,7 +131,9 @@ impl GlobalData {
                 }
                 KeyAction::Internal(func) => match func {
                     FunctionEnum::InvertWindow => {
-                        self.workspace_manager.invert_window(&self.loop_handle);
+                        if let Some(KeyboardFocusTarget::Window(target)) = self.input_manager.get_keyboard_focus() {
+                            self.workspace_manager.invert_window(&target, &self.loop_handle);
+                        }
                     }
                     FunctionEnum::Expansion => {
                         self.workspace_manager.tiled_expansion(&self.loop_handle);
@@ -133,17 +142,25 @@ impl GlobalData {
                         self.workspace_manager.tiled_recover(&self.loop_handle);
                     }
                     FunctionEnum::Quit => {
-                        if let Some(focus) = &self.workspace_manager.current_workspace().focus() {
-                            let toplevel = focus.toplevel().unwrap();
-                            toplevel.send_close();
+                        if let Some(KeyboardFocusTarget::Window(window)) = self.input_manager.get_keyboard_focus() {
+                            match window.underlying_surface() {
+                                WindowSurface::Wayland(toplevel) => {
+                                    toplevel.send_close();
+                                },
+                                #[cfg(feature = "xwayland")]
+                                WindowSurface::X11(x11_surface) => {
+                                    let _ = x11_surface.close();
+                                }
+                            }
                         }
                     }
                     FunctionEnum::Up(edge)
                     | FunctionEnum::Down(edge)
                     | FunctionEnum::Left(edge)
                     | FunctionEnum::Right(edge) => {
-                        self.workspace_manager
-                            .exchange_window(edge, &self.loop_handle);
+                        if let Some(KeyboardFocusTarget::Window(target)) = self.input_manager.get_keyboard_focus() {
+                            self.workspace_manager.exchange_window(&target, edge, &self.loop_handle);
+                        }
                     }
                     FunctionEnum::Kill => {
                         info!("Kill the full compositor");
@@ -172,7 +189,24 @@ impl GlobalData {
         return false;
     }
 
-    pub fn set_keyboard_focus(&mut self, surface: Option<WlSurface>, serial: Serial) {
+    pub fn update_keyboard_focus(&mut self) {
+        let serial = SERIAL_COUNTER.next_serial();
+        
+        let pointer = self.input_manager.get_pointer();
+        let pointer = match pointer {
+            Some(k) => k,
+            None => {
+                error!("get pointer error");
+                return;
+            }
+        };
+
+        let pointer_loc = pointer.current_location();
+
+        self.focus_target_under(pointer_loc, serial, true);
+    }
+
+    pub fn set_keyboard_focus(&mut self, focus_target: Option<KeyboardFocusTarget>, serial: Serial) {
         let keyboard = self.input_manager.get_keyboard();
         let keyboard = match keyboard {
             Some(k) => k,
@@ -182,7 +216,7 @@ impl GlobalData {
             }
         };
 
-        keyboard.set_focus(self, surface, serial);
+        keyboard.set_focus(self, focus_target, serial);
     }
 }
 

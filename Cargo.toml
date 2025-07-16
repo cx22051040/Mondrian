@@ -21,21 +21,26 @@ tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
 tracy-client = "0.17.3"
 xcursor = "0.3.8"
 
-
 [dependencies.smithay]
 version = "^0.7"
 default-features = false
 features = ["wayland_frontend", "desktop"]
 git = "https://github.com/Smithay/smithay.git"
 
+[dependencies.x11rb]
+default-features = false
+features = ["composite"]
+optional = true
+version = "0.13.0"
+
 [features]
-default = ["winit", "tty", "egl"]
+default = ["winit", "tty", "egl", "xwayland"]
 egl = ["smithay/use_system_lib", "smithay/backend_egl"]
 winit = ["smithay/backend_winit", "smithay/backend_drm"]
+xwayland = ["smithay/xwayland", "x11rb", "smithay/x11rb_event_source"]
 trace_input = []
 trace_layout = []
 trace_config = []
-xwayland = []
 tty = [
     "smithay-drm-extras",
     "smithay/use_system_lib",
