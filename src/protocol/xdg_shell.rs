@@ -267,12 +267,12 @@ impl XdgShellHandler for GlobalData {
                 (roll.title.clone(), roll.app_id.clone())
             });
 
-        // self.window_manager.get_foreign_handle(surface.wl_surface())
-        //     .map(|handle| {
-        //         handle.send_title(&title.unwrap_or("unkown".to_string()));
-        //         handle.send_app_id(&app_id.unwrap_or("unkown".to_string()));
-        //         handle.send_done();
-        //     });
+        self.window_manager.get_foreign_handle(surface.wl_surface())
+            .map(|handle| {
+                handle.send_title(&title.unwrap_or("unkown".to_string()));
+                handle.send_app_id(&app_id.unwrap_or("unkown".to_string()));
+                handle.send_done();
+            });
     }
 }
 delegate_xdg_shell!(GlobalData);

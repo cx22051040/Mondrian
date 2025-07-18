@@ -7,11 +7,8 @@ use std::{
 use smithay::{
     desktop::{Space, Window, WindowSurface},
     output::Output,
-    reexports::{
-        calloop::LoopHandle,
-        wayland_server::protocol::wl_surface::WlSurface,
-    },
-    utils::{Logical, Point, Rectangle}, wayland::seat::WaylandFocus,
+    reexports::calloop::LoopHandle,
+    utils::{Logical, Point, Rectangle},
 };
 
 use crate::{
@@ -182,9 +179,10 @@ impl Workspace {
                     layout_tree.print_tree();
                 }
             }
-            TiledScheme::Spiral => {
+            TiledScheme::Scroll => {
                 if let Some(_) = &mut self.tiled_tree {
-                    // layout_tree.insert_window_spiral(window.clone(), &mut self.tiled, loop_handle);
+
+
 
                     // #[cfg(feature = "trace_layout")]
                     // layout_tree.print_tree();
@@ -229,8 +227,13 @@ impl Workspace {
         loop_handle: &LoopHandle<'_, GlobalData>,
     ) {
         if let Some(layout_tree) = &mut self.tiled_tree {
-            let is_favour = matches!(*edge, ResizeEdge::Top | ResizeEdge::Left);
-            layout_tree.exchange(target, is_favour, loop_handle);
+            // input edge is single turn
+            let (direction, is_favour) = edge.to_direction_and_favour(Rectangle::default());
+
+            layout_tree.exchange(target, direction, is_favour, loop_handle);
+
+            #[cfg(feature = "trace_layout")]
+            layout_tree.print_tree();
         }
     }
 

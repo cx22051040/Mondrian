@@ -312,12 +312,76 @@ impl ContainerTree {
         }
     }
 
-    pub fn exchange(&mut self, _target: &Window, _is_favour: bool, _loop_handle: &LoopHandle<'_, GlobalData>) {
+    pub fn exchange(&mut self, target: &Window, direction: Direction, is_favour: bool, loop_handle: &LoopHandle<'_, GlobalData>) {
         /*
             find exchange node with vec add or sub,
             if none, get parent and continue until find root,
             exchange node
         */
+
+        if let Some(target_id) = self.windows.get(target).cloned() {
+            if self.root == target_id {
+                return;
+            }
+
+            if let Some(NodeData::Node { window: target_window, parent, .. }) = self.nodes.get(target_id) {
+                let target_window_copy = target_window.clone();
+                let mut neighbor_window_copy = None;
+                let mut origin_idx = 0;
+
+                // get orifin idx
+                if let Some(NodeData::Container { elements, .. }) = self.nodes.get(parent.clone()) {
+                    if let Some(idx) = elements.iter().position(|id| *id == target_id) {
+                        origin_idx = idx;
+                    }
+                }
+
+                // find neighbor and exchange
+                if let Some(neighbor_id) = self.find_neighbor_only_node(target_id, direction, origin_idx, is_favour) {
+                    if let Some(NodeData::Node { window: neighbor_window, .. }) = self.nodes.get_mut(neighbor_id) {
+                        self.windows.insert(target_window_copy.clone(), neighbor_id);
+                        self.windows.insert(neighbor_window.clone(), target_id);
+
+                        neighbor_window_copy = Some(neighbor_window.clone());
+                        *neighbor_window = target_window_copy.clone();
+                    }
+                }
+
+                // change target
+                if let Some(neighbor_window_copy) = neighbor_window_copy {
+                    if let Some(NodeData::Node { window: target_window, .. }) = self.nodes.get_mut(target_id) {
+                        *target_window = neighbor_window_copy.clone();
+                    }
+
+                    let target_rect = target_window_copy.get_rect();
+                    let neighbor_rect = neighbor_window_copy.get_rect();
+                    
+                    // exchange rect cache
+                    target_window_copy.set_rect_cache(neighbor_rect);
+                    neighbor_window_copy.set_rect_cache(target_rect);
+
+                    // add animation
+                    loop_handle.insert_idle(move |data| {
+                        data.render_manager.add_animation(
+                            target_window_copy,
+                            target_rect,
+                            neighbor_rect,
+                            Duration::from_millis(30),
+                            crate::animation::AnimationType::EaseInOutQuad,
+                        );
+                    });
+                    loop_handle.insert_idle(move |data| {
+                        data.render_manager.add_animation(
+                            neighbor_window_copy,
+                            neighbor_rect,
+                            target_rect,
+                            Duration::from_millis(30),
+                            crate::animation::AnimationType::EaseInOutQuad,
+                        );
+                    });
+                }
+            }
+        }
     }
 
     pub fn expansion(&self, root_rect: Rectangle<i32, Logical>, loop_handle: &LoopHandle<'_, GlobalData>) {
@@ -381,7 +445,11 @@ impl ContainerTree {
         */
 
         if let Some(target_id) = self.find_node_id(target).cloned() {
-            if let Some(max_parent_id) = self.find_node_with_direction_and_favour(target_id, direction, is_favour) {
+            if self.root == target_id {
+                return;
+            }
+
+            if let Some((max_parent_id, _)) = self.find_neighbor(target_id, direction, is_favour) {
                 if let Some(NodeData::Container { rect, offset: parent_offset, .. }) = self.nodes.get_mut(max_parent_id) {
                     let rect = rect.clone();
                     // TODO: use client's given
@@ -403,7 +471,7 @@ impl ContainerTree {
         }
     }
 
-    fn find_node_with_direction_and_favour(&self, node_id: NodeId, direction: Direction, is_favour: bool) -> Option<NodeId> {
+    fn find_neighbor(&self, node_id: NodeId, direction: Direction, is_favour: bool) -> Option<(NodeId, NodeId)> {
         /*
             find node with direction and favour,
             if not, jump to parent and continue,
@@ -435,17 +503,51 @@ impl ContainerTree {
                             elements.get(idx + 1)
                         };
 
-                        if neighbor.is_some() {
-                            return Some(parent);
+                        if let Some(neighbor) = neighbor {
+                            return Some((parent, neighbor.clone()));
                         }
                     }
                 }
 
-                return self.find_node_with_direction_and_favour(parent, direction, is_favour);
+                return self.find_neighbor(parent, direction, is_favour);
             }
         }
 
         return None;
+    }
+
+    fn find_neighbor_only_node(&self, target_id: NodeId, direction: Direction, origin_idx: usize, is_favour: bool) -> Option<NodeId> {
+        self.find_neighbor(target_id, direction, is_favour).and_then(|(_, neigbor_id)| {
+            self.nodes.get(neigbor_id).and_then(|node_data| match node_data {
+                NodeData::Node { .. } => {
+                    Some(neigbor_id)
+                }
+                NodeData::Container { .. } => {
+                    self.find_node_in_container(neigbor_id, direction,origin_idx, is_favour)
+                }
+            })
+        })
+    }
+
+    fn find_node_in_container(&self, node_id: NodeId, direction: Direction, origin_idx: usize, is_favour: bool) -> Option<NodeId> {
+        if let Some(NodeData::Node { .. }) = self.nodes.get(node_id) {
+            return Some(node_id);
+        }
+
+        else if let Some(NodeData::Container { elements, direction: container_direction, .. }) = self.nodes.get(node_id) {
+            if &direction == container_direction {
+                if is_favour {
+                    // invert because we need neighbor
+                    return self.find_node_in_container(elements[1], direction, origin_idx, is_favour);
+                } else {
+                    return self.find_node_in_container(elements[0], direction, origin_idx, is_favour);
+                }
+            } else {
+                return self.find_node_in_container(elements[origin_idx], direction, origin_idx, is_favour);
+            }
+        }
+
+        None
     }
 
     pub fn update_root_rect_recursive(&mut self, root_rect: Rectangle<i32, Logical>, loop_handle: &LoopHandle<'_, GlobalData>) {

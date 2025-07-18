@@ -228,3 +228,7 @@ client 使用 dmabuf 提交 buffer 的时候，不会保证 buffer 已经渲染�
 1. 添加 seat_primary_select 协议，为实现 copy 做准备
 
 2. 添加了 XWayland 兼容层，x client 所有请求转角给 XWayland Compositor 处理，转化为 Wayland Compositor 可以读取的信息。
+
+### 2025.7.17-18
+
+新增 exchange 操作，交换相邻的两个窗口。如果两个窗口是 sibling，直接交换就可以了，如何识别不同 container 下的邻居是个难点，这里使用简化的操作，通过 find_neighbor 找到对应方向的，最有可能的节点，如果是 container，则遍历寻找 container 中最靠近（方向反向，比如找右边，那遍历往左）的 node 节点，这里有一个细节，方向与寻找方向一致，则直接往靠近方向，若与原先的一致，那么就是根据原先的位置来找，一般出现在两个 container 为 Vertical，我们认为上节点与上节点交换，所以使用 target 节点的 idx 信息即可。

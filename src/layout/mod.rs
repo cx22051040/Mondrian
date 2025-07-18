@@ -25,7 +25,7 @@ impl Direction {
 pub enum TiledScheme {
     Default,
     #[allow(dead_code)]
-    Spiral,
+    Scroll,
 }
 
 #[derive(Debug, Clone)]
