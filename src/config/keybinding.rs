@@ -18,6 +18,8 @@ pub enum FunctionEnum {
     Left(ResizeEdge),
     Right(ResizeEdge),
 
+    SwitchLayout,
+
     SwitchWorkspace(usize),
 }
 
@@ -159,6 +161,7 @@ impl KeybindingConfigs {
                             "down" => FunctionEnum::Down(ResizeEdge::Bottom),
                             "left" => FunctionEnum::Left(ResizeEdge::Left),
                             "right" => FunctionEnum::Right(ResizeEdge::Right),
+                            "switch layout" => FunctionEnum::SwitchLayout,
                             "switch workspace" => {
                                 let id = key.split('+').find_map(|s| {
                                     s.trim().parse::<usize>().ok()

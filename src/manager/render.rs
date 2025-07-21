@@ -156,11 +156,14 @@ impl RenderManager {
         for window in window_manager.mapped_windows(workspace_manager.current_workspace().id()) {
             let rect = match animation_manager.get_animation_data(window) {
                 Some(rect) => {
-                    window.send_rect(rect);
                     rect
                 }
                 None => {
-                    window.get_rect().unwrap()
+                    if let Some(rect) = window.get_rect() {
+                        rect
+                    } else {
+                        continue; 
+                    }
                 }
             };
 

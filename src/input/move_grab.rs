@@ -4,17 +4,29 @@ use smithay::{
     utils::{Logical, Point},
 };
 
-use crate::state::GlobalData;
+use crate::{layout::WindowLayout, state::GlobalData};
 
-pub struct PointerMoveSurfaceGrab {
-    // TODO: can use smaller struct such as InputState
+pub struct MoveSurfaceGrab {
     pub start_data: PointerGrabStartData<GlobalData>,
-    #[allow(dead_code)]
+    pub initial_layout: WindowLayout,
     pub window: Window,
-    pub initial_window_location: Point<i32, Logical>,
 }
 
-impl PointerGrab<GlobalData> for PointerMoveSurfaceGrab {
+impl MoveSurfaceGrab {
+    pub fn start(
+        start_data: PointerGrabStartData<GlobalData>,
+        initial_layout: WindowLayout,
+        window: Window,
+    ) -> Self {
+        Self {
+            start_data,
+            initial_layout,
+            window,
+        }
+    }
+}
+
+impl PointerGrab<GlobalData> for MoveSurfaceGrab {
     fn start_data(&self) -> &PointerGrabStartData<GlobalData> {
         &self.start_data
     }
@@ -47,6 +59,15 @@ impl PointerGrab<GlobalData> for PointerMoveSurfaceGrab {
         if !handle.current_pressed().contains(&BTN_LEFT) {
             // No more buttons are pressed, release the grab.
             handle.unset_grab(self, data, event.serial, event.time, true);
+
+            match self.initial_layout {
+                WindowLayout::Tiled => {
+                    info!("123");
+                    data.switch_layout(&self.window, self.start_data.location);
+                }
+                _ => { }
+            }
+
         }
     }
 
@@ -66,9 +87,8 @@ impl PointerGrab<GlobalData> for PointerMoveSurfaceGrab {
         handle.motion(data, None, event);
 
         let delta = event.location - self.start_data.location;
-        self.initial_window_location += delta.to_i32_round();
 
-        // TODO
+        data.workspace_manager.grab_move(&self.window, delta.to_i32_round(), &mut data.animation_manager);
 
         self.start_data.location = event.location;
     }

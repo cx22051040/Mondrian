@@ -216,10 +216,8 @@ impl GlobalData {
                 };
 
                 if button == BUTTON_LEFT {
-                    // TODO: layer shell should not be grabed
-                    // self.grab_move_request(target, &pointer, start_data, serial);
+                    self.grab_move_request(&target, &pointer, start_data, serial);
                 } else if button == BUTTON_RIGHT {
-                    // TODO: only windows could be resized
                     self.resize_move_request(&target, &pointer, start_data, serial);
                 }
 
@@ -357,7 +355,7 @@ impl GlobalData {
 
         // The window
         else if let Some(window) =
-            self.workspace_manager.window_under(pointer_loc)
+            self.window_manager.window_under(pointer_loc, self.workspace_manager.current_workspace().id())
         {
             let window_rect = window.get_rect().unwrap();
             let render_loc: Point<f64, Logical> = window_rect.loc.to_f64() - window.geometry().loc.to_f64();

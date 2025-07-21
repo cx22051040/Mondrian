@@ -126,6 +126,10 @@ impl Workspace {
         self.container_tree.recover(animation_manager);
     }
 
+    pub fn grab_move(&mut self, target: &Window, offset: Point<i32, Logical>, animation_manager: &mut AnimationManager) {
+        self.container_tree.grab_move(target, offset, animation_manager);
+    }
+
     pub fn resize(&mut self, target: &Window, edge: &ResizeEdge, offset: Point<i32, Logical>) {
         for edge in edge.split() {
             let (direction, is_favour) = edge.to_direction_and_favour(Rectangle::default());
@@ -167,22 +171,6 @@ impl Workspace {
         };
 
         self.container_tree.update_root_rect(root_rect, animation_manager);
-    }
-
-    pub fn window_under(
-        &mut self,
-        position: Point<f64, Logical>,
-    ) -> Option<Window> {
-
-        for window in self.windows() {
-            let window_rect = window.get_rect().unwrap();
-
-            if window_rect.contains(position.to_i32_round()) {
-                return Some(window.clone())
-            }
-        }
-
-        None
     }
 
     fn deactivate(&mut self) {
@@ -373,6 +361,10 @@ impl WorkspaceManager {
         self.current_workspace_mut().recover(animation_manager);
     }
 
+    pub fn grab_move(&mut self, target: &Window, offset: Point<i32, Logical>, animation_manager: &mut AnimationManager) {
+        self.current_workspace_mut().grab_move(target, offset, animation_manager);
+    }
+
     pub fn resize(&mut self, target: &Window, edge: &ResizeEdge, offset: Point<i32, Logical>) {
         self.current_workspace_mut().resize(target, edge, offset);
     }
@@ -384,13 +376,5 @@ impl WorkspaceManager {
     ) {
         self.current_workspace_mut()
             .update_output_rect(rec, animation_manager);
-    }
-
-    pub fn window_under(
-        &mut self,
-        position: Point<f64, Logical>,
-    ) -> Option<Window> {
-        self.current_workspace_mut()
-            .window_under(position)
     }
 }

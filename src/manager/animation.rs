@@ -2,6 +2,8 @@ use smithay::{desktop::Window, utils::{Coordinate, Logical, Point, Rectangle, Si
 
 use std::{collections::HashMap, time::Duration};
 
+use crate::manager::window::WindowExt;
+
 pub enum AnimationType {
     #[allow(dead_code)]
     Linear,
@@ -89,6 +91,11 @@ impl Animation {
         }
     }
 
+    pub fn stop(&mut self) -> Rectangle<i32, Logical> {
+        self.state = AnimationState::Completed;
+        self.to
+    }
+
     pub fn current_value(&self) -> Rectangle<i32, Logical> {
         let progress = (self.elapsed.as_secs_f64() / self.duration.as_secs_f64()).clamp(0.0, 1.0);
         process_rec(
@@ -116,6 +123,9 @@ impl AnimationManager {
         duration: Duration,
         animation_type: AnimationType,
     ) {
+        // void conflict
+        self.stop_animation(&window);
+
         let animation = Animation::new(from, to, duration, animation_type);
         self.animations.insert(window, animation);
     }
@@ -123,14 +133,27 @@ impl AnimationManager {
     pub fn get_animation_data(&mut self, window: &Window) -> Option<Rectangle<i32, Logical>> {
         self.animations.get_mut(window).and_then(|animation| match animation.state {
             AnimationState::NotStarted => {
-                Some(animation.start())
+                let rect = animation.start();
+                window.send_rect(rect);
+
+                Some(rect)
             }
             AnimationState::Running => {
                 animation.tick();
-                Some(animation.current_value())
+                let rect = animation.current_value();
+                window.send_rect(rect);
+
+                Some(rect)
             }
             _ => None,
         })
+    }
+
+    pub fn stop_animation(&mut self, window: &Window) {
+        if let Some(animation) = self.animations.get_mut(window) {
+            let rect = animation.stop();
+            window.send_rect(rect);
+        }
     }
 
     pub fn refresh(&mut self) {

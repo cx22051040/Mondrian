@@ -241,8 +241,10 @@ client 使用 dmabuf 提交 buffer 的时候，不会保证 buffer 已经渲染�
 
 3. 将 animation 从 render manager 中抽离出来作为一个单独的 manager，原先使用 loop handle 进行动画插入，因为 loop handle 不会马上优先执行，可能会导致动画开始的某几帧跳变。
 
-4. 优化了 resize 操作，添加 resize max parent 缓存，不需要每次 resize 的时候都遍历一次树，删除了动画效果，更流畅。
+4. 优化了 resize 操作，删除了动画效果，更流畅。
 
-5. 添加了 float 与 tiled 两种类型的布局窗口，对于某些不适合插入平铺状态的窗口，比如弹窗，子窗口这类，规划到 floating 窗口，并且基于父窗口分配大小与位置
+5. 添加了 float 与 tiled 两种类型的布局窗口，对于某些不适合插入平铺状态的窗口，比如弹窗，子窗口这类，规划到 floating 窗口，并且基于父窗口分配大小与位置，实现了 floating 与 tiled 窗口的互换，grab 操作
 
-6. TODO：完善 float 窗口的操作，完善 xwayland fullscreen 等监听，完成 screencopy 协议，调整 float 和 tiled 下以及 popups 等的 focus 遮挡关系与行为。
+6. 优化动画组建的鲁棒性，同时插入多个动画不会造成冲突。
+
+7. TODO：完善 xwayland fullscreen 等监听，完成 screencopy 协议，调整 float 和 tiled 下以及 popups 等的 focus 遮挡关系与行为。

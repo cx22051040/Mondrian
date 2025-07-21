@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use smithay::{desktop::Window, utils::{Logical, Rectangle}};
+use smithay::{desktop::Window, utils::{Logical, Point, Rectangle}};
 
 use crate::{
     layout::{
@@ -120,6 +120,22 @@ impl ContainerTree {
             .flatten();
 
         self.floating.iter().chain(tiled_iter)
+    }
+
+    pub fn grab_move(&mut self, target: &Window, offset: Point<i32, Logical>, animation_manager: &mut AnimationManager) {
+        match target.get_layout() {
+            WindowLayout::Tiled => { },
+            WindowLayout::Floating => {
+                // void conflict
+                animation_manager.stop_animation(target);
+
+                let mut rect = target.get_rect().unwrap();
+                rect.loc += offset;
+
+                target.set_rect_cache(rect);
+                target.send_rect(rect);
+            }
+        }
     }
 
     pub fn resize(
@@ -242,11 +258,11 @@ impl ContainerTree {
 
     #[cfg(feature = "trace_layout")]
     pub fn print_tree(&self) {
-        if let Some(tiled_tree) = self.tiled_tree {
+        if let Some(tiled_tree) = &self.tiled_tree {
             tiled_tree.print_tree();
         }
 
-        self.floating.iter().map(|window| info!("Float window: Rect: {:?}", window.get_rect()));
+        let _ = self.floating.iter().map(|window| info!("Float window: Rect: {:?}", window.get_rect()));
     }
 }
 

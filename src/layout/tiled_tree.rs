@@ -300,8 +300,6 @@ impl TiledTree {
                 self.nodes.remove(target_sibling);
                 self.windows.shift_remove(target);
             }
-        } else {
-            error!("not find target_id from window: {:?}", target);
         }
     }
 

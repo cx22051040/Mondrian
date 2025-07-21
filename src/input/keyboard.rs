@@ -3,7 +3,7 @@ use smithay::{
 };
 
 use crate::{
-    config::keybinding::{FunctionEnum, KeyAction}, input::focus::KeyboardFocusTarget, manager::workspace::WorkspaceId, state::GlobalData
+    config::keybinding::{FunctionEnum, KeyAction}, input::focus::KeyboardFocusTarget, layout::WindowLayout, manager::{window::WindowExt, workspace::WorkspaceId}, state::GlobalData
 };
 
 impl GlobalData {
@@ -169,7 +169,21 @@ impl GlobalData {
                     FunctionEnum::Json => {
                         // TODO
                     }
+                    FunctionEnum::SwitchLayout => {
+                        if let Some(KeyboardFocusTarget::Window(window)) = self.input_manager.get_keyboard_focus() {
+                            let pointer = self.input_manager.get_pointer();
+                            let pointer = match pointer {
+                                Some(k) => k,
+                                None => {
+                                    error!("get pointer error");
+                                    return false;
+                                }
+                            };
 
+                            let pointer_loc = pointer.current_location();
+                            self.switch_layout(&window, pointer_loc.to_i32_round());
+                        }
+                    }
                     FunctionEnum::SwitchWorkspace(id) => {
                         let output = self.output_manager.current_output();
                         let output_geo = self.output_manager
@@ -207,6 +221,13 @@ impl GlobalData {
     }
 
     pub fn set_keyboard_focus(&mut self, focus_target: Option<KeyboardFocusTarget>, serial: Serial) {
+        // modify stack layer
+        if let Some(KeyboardFocusTarget::Window(window)) = &focus_target {
+            if matches!(window.get_layout(), WindowLayout::Floating) {
+                self.window_manager.raise_window(window);
+            }
+        }
+
         let keyboard = self.input_manager.get_keyboard();
         let keyboard = match keyboard {
             Some(k) => k,

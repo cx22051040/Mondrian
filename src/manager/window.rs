@@ -3,7 +3,7 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use smithay::{
     desktop::{Window, WindowSurface},
     reexports::wayland_server::protocol::wl_surface::WlSurface,
-    utils::{Logical, Rectangle, Size},
+    utils::{Logical, Point, Rectangle, Size},
     wayland::{
         compositor::{self, with_states}, foreign_toplevel_list::ForeignToplevelHandle, shell::xdg::{ToplevelSurface, XdgToplevelSurfaceData}
     }, xwayland::X11Surface,
@@ -245,7 +245,7 @@ impl WindowManager {
         }
     }
     
-    pub fn set_unmapped(&mut self, mapped: &Window) {
+    pub fn set_unmapped(&mut self, mapped: &Window) -> bool {
         if self.mapped.contains(mapped) {
             // remove foreign handle
             match mapped.underlying_surface() {
@@ -260,8 +260,11 @@ impl WindowManager {
             if let Some(pos) = self.mapped.iter().position(|w| w == mapped) {
                 let window = self.mapped.remove(pos);
                 self.unmapped.push(window);
+                return true;
             }
         }
+
+        false
     }
 
     pub fn mapped_windows(&self, workspace_id: WorkspaceId) -> impl Iterator<Item = &Window> {
@@ -292,6 +295,67 @@ impl WindowManager {
         None
     }
 
+    pub fn window_under(&self, pointer_loc: Point<f64, Logical>, workspace_id: WorkspaceId) -> Option<Window> {
+        for window in &self.mapped {
+            if Some(&workspace_id) != self.window_workspace.get(window) {
+                continue;
+            }
+
+            let window_rect = window.get_rect().unwrap();
+
+            if window_rect.contains(pointer_loc.to_i32_round()) {
+                return Some(window.clone())
+            }
+        }
+
+        None
+    }
+
+    pub fn window_under_tiled(&self, pointer_loc: Point<f64, Logical>, workspace_id: WorkspaceId) -> Option<Window> {
+        for window in &self.mapped {
+            if Some(&workspace_id) != self.window_workspace.get(window) {
+                continue;
+            }
+
+            if matches!(window.get_layout(), WindowLayout::Floating) {
+                continue;
+            }
+
+            let window_rect = window.get_rect().unwrap();
+
+            if window_rect.contains(pointer_loc.to_i32_round()) {
+                return Some(window.clone())
+            }
+        }
+
+        None
+    }
+
+    pub fn switch_layout(&mut self, window: &Window) {
+        if self.mapped.contains(window) {
+            let layout = window.get_layout();
+
+            self.mapped.retain(|w| w != window);
+            match layout {
+                WindowLayout::Tiled => {
+                    self.mapped.insert(0, window.clone());
+                    window.set_layout(WindowLayout::Floating);
+                }
+                WindowLayout::Floating => {
+                    self.mapped.push(window.clone());
+                    window.set_layout(WindowLayout::Tiled);
+                }
+            }
+        }
+    }
+
+    pub fn raise_window(&mut self, window: &Window) {
+        if self.mapped.contains(window) {
+            self.mapped.retain(|w| w != window);
+            self.mapped.insert(0, window.clone());
+        }
+    }
+
     pub fn get_foreign_handle(&self, surface: &WlSurface) -> Option<&ForeignToplevelHandle> {
         self.foreign_handle.get(surface)
     }
@@ -302,7 +366,7 @@ fn compute_child_rect(parent_window: &Window, size_opt: Option<Size<i32, Logical
         let parent_rect = parent_rect.to_f64();
         let center = parent_rect.loc + parent_rect.size / 2.0;
     
-        let size = size_opt.map(|s| s.to_f64()).unwrap_or(parent_rect.size / 2.0);
+        let size: Size<f64, Logical> = size_opt.map(|s| s.to_f64()).unwrap_or(parent_rect.size / 2.0);
         let loc = center - size / 2.0;
         Some(Rectangle::new(loc, size).to_i32_round())
     })

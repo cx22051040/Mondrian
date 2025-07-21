@@ -191,12 +191,12 @@ impl XdgShellHandler for GlobalData {
         surface.send_pending_configure();
     }
 
-    fn move_request(&mut self, _surface: ToplevelSurface, seat: wl_seat::WlSeat, _serial: Serial) {
+    fn move_request(&mut self, surface: ToplevelSurface, seat: wl_seat::WlSeat, serial: Serial) {
         if !self.input_manager.is_mainmod_pressed() {
             return
         }
 
-        let _pointer: PointerHandle<Self> = match Seat::from_resource(&seat) {
+        let pointer = match Seat::from_resource(&seat) {
             Some(seat) => {
                 match seat.get_pointer() {
                     Some(pointer) => pointer,
@@ -211,7 +211,16 @@ impl XdgShellHandler for GlobalData {
                 return
             }
         };
-        //
+
+        let start_data = match pointer.grab_start_data() {
+            Some(start_data) => start_data,
+            None => {
+                warn!("Failed to get start_data from: {:?}", pointer);
+                return;
+            }
+        };
+
+        self.grab_move_request(&PointerFocusTarget::WlSurface(surface.wl_surface().clone()), &pointer, start_data, serial);
     }
 
     fn resize_request(

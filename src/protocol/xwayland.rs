@@ -4,7 +4,7 @@ use std::process::Stdio;
 use smithay::{delegate_xwayland_keyboard_grab, delegate_xwayland_shell, wayland::xwayland_keyboard_grab::XWaylandKeyboardGrabHandler};
 use smithay::{
     desktop::Window, reexports::wayland_server::protocol::wl_surface::WlSurface, utils::{Logical, Rectangle, SERIAL_COUNTER}, wayland::{compositor::CompositorHandler, xwayland_shell::{XWaylandShellHandler, XWaylandShellState}}, xwayland::{
-        xwm::{Reorder, ResizeEdge as X11ResizeEdge, XwmId}, X11Surface, X11Wm, XWayland, XWaylandEvent, XwmHandler
+        xwm::{Reorder, ResizeEdge as X11ResizeEdge, WmWindowType, XwmId}, X11Surface, X11Wm, XWayland, XWaylandEvent, XwmHandler
     }
 };
 
@@ -66,9 +66,34 @@ impl XwmHandler for GlobalData {
     }
 
     fn new_window(&mut self, _xwm: XwmId, surface: X11Surface) {
+
+        if surface.is_override_redirect() {
+            return;
+        }
+
+        // judge layout
+        // TODO: a wired bug, some client may start many no type windows
+        // and the windows has no info, cannot judge layout
+        let layout = if let Some(window_type) = surface.window_type() {
+            match window_type {
+                WmWindowType::Normal => {
+                    if surface.is_popup() || surface.is_transient_for().is_some() {
+                        WindowLayout::Floating
+                    } else {
+                        WindowLayout::Tiled
+                    } 
+                }
+                _ => {
+                    WindowLayout::Floating
+                }
+            }
+        } else {
+            WindowLayout::Floating
+        };
+
         // create new window
         let window = Window::new_x11_window(surface);
-        window.set_layout(WindowLayout::Tiled);
+        window.set_layout(layout);
 
         // add unmapped window in window_manager
         self.window_manager.add_window_unmapped(
@@ -77,17 +102,7 @@ impl XwmHandler for GlobalData {
         );
     }
 
-    fn new_override_redirect_window(&mut self, _xwm: XwmId, surface: X11Surface) { 
-        // create new window
-        let window = Window::new_x11_window(surface);
-        window.set_layout(WindowLayout::Floating);
-
-        // add unmapped window in window_manager
-        self.window_manager.add_window_unmapped(
-            window,
-            self.workspace_manager.current_workspace().id()
-        );
-    }
+    fn new_override_redirect_window(&mut self, _xwm: XwmId, _surface: X11Surface) { }
 
     fn map_window_request(&mut self, _xwm: XwmId, window: X11Surface) {
         window.set_mapped(true).unwrap();        
@@ -96,12 +111,7 @@ impl XwmHandler for GlobalData {
         }
     }
 
-    fn mapped_override_redirect_window(&mut self, _xwm: XwmId, window: X11Surface) {
-        window.set_mapped(true).unwrap();
-        if let Some(window) = self.window_manager.get_unmapped(&window.into()) {
-            self.set_mapped(&window.clone());
-        }
-    }
+    fn mapped_override_redirect_window(&mut self, _xwm: XwmId, _window: X11Surface) { }
 
     fn unmapped_window(&mut self, _xwm: XwmId, window: X11Surface) {
         if let Some(window) = self.window_manager.get_mapped(&window.into()) {
@@ -109,7 +119,11 @@ impl XwmHandler for GlobalData {
         }
     }
 
-    fn destroyed_window(&mut self, _xwm: XwmId, _window: X11Surface) { }
+    fn destroyed_window(&mut self, _xwm: XwmId, window: X11Surface) {
+        if let Some(window) = self.window_manager.get_mapped(&window.into()) {
+            self.destroy_window(&window.clone());
+        }
+    }
 
     fn configure_request(
         &mut self,
@@ -211,10 +225,28 @@ impl XwmHandler for GlobalData {
         self.resize_move_request(&PointerFocusTarget::X11Surface(window), &pointer, start_data, SERIAL_COUNTER.next_serial());
     }
 
-    fn move_request(&mut self, _xwm: XwmId, _window: X11Surface, _button: u32) {
+    fn move_request(&mut self, _xwm: XwmId, window: X11Surface, _button: u32) {
         if !self.input_manager.is_mainmod_pressed() {
             return
         }
+
+        let pointer = match self.input_manager.get_pointer() {
+            Some(pointer) => pointer,
+            None => {
+                warn!("Failed to get pointer");
+                return
+            }
+        };
+        
+        let start_data = match pointer.grab_start_data() {
+            Some(start_data) => start_data,
+            None => {
+                warn!("Failed to get start_data from: {:?}", pointer);
+                return;
+            }
+        };
+
+        self.grab_move_request(&PointerFocusTarget::X11Surface(window), &pointer, start_data, SERIAL_COUNTER.next_serial());
     }
 }
 
