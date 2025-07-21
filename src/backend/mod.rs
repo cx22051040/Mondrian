@@ -130,7 +130,7 @@ impl GlobalData {
 
         let output = self.output_manager.current_output();
 
-        self.workspace_manager.elements().for_each(|window| {
+        self.workspace_manager.windows().for_each(|window| {
             window.send_frame(output, time, throttle, surface_primary_scanout_output);
         });
         let map = smithay::desktop::layer_map_for_output(output);

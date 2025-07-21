@@ -1,6 +1,22 @@
-use smithay::{desktop::{Window, WindowSurface}, utils::{Logical, Point, Rectangle, SERIAL_COUNTER}};
+use smithay::{
+    desktop::Window, input::pointer::{
+        Focus, GrabStartData as PointerGrabStartData, PointerHandle
+    }, 
+    reexports::wayland_server::protocol::wl_surface::WlSurface, 
+    utils::{
+        Logical, Point, Rectangle, Serial, SERIAL_COUNTER
+    },
+};
 
-use crate::{input::focus::KeyboardFocusTarget, layout::ResizeEdge, manager::window::WindowExt, state::GlobalData};
+use crate::{
+    input::{
+        focus::{KeyboardFocusTarget, PointerFocusTarget}, 
+        resize_grab::ResizeSurfaceGrab,
+    }, 
+    layout::ResizeEdge, 
+    manager::window::WindowExt, 
+    state::GlobalData
+};
 
 pub mod compositor;
 pub mod foreign_toplevel;
@@ -29,19 +45,7 @@ pub fn detect_pointer_quadrant(
 }
 
 impl GlobalData {
-    pub fn map_window(&mut self, window: Window) {
-        // add window in window_manager
-        self.window_manager.add_window(
-            window.clone(),
-            self.workspace_manager.current_workspace().id(),
-            &mut self.state
-        );
-
-        // use the size from the suggested size of the surface if available
-        // if let Some(size) = surface.with_pending_state(|state| state.size) {
-        //     window.set_rec(size);
-        // }
-
+    pub fn map_window(&mut self, window: Window) -> bool {
         // map window for current workspace
         let target = self
             .input_manager
@@ -59,82 +63,79 @@ impl GlobalData {
             Some(k) => k,
             None => {
                 error!("get pointer error");
-                return;
+                return false;
             }
         };
         let pointer_loc = pointer.current_location();
 
         let edge = if let Some(KeyboardFocusTarget::Window(window)) = self.input_manager.get_keyboard_focus() {
-            detect_pointer_quadrant(pointer_loc, window.get_rect().to_f64())
+            detect_pointer_quadrant(pointer_loc, window.get_rect().unwrap().to_f64())
         } else {
             ResizeEdge::None
         };
 
-        self.workspace_manager
-            .map_window(
-                target.as_ref(),
-                window.clone(),
-                edge,
-                true,
-                &self.loop_handle,
-            );
-
-        // set focus
-        self.set_keyboard_focus(Some(window.clone().into()), SERIAL_COUNTER.next_serial());
-
-        // xwayland config
-        #[cfg(feature = "xwayland")]
-        if let Some(xsurface) = window.x11_surface() {
-            xsurface.configure(Some(window.get_rect())).unwrap();
-        }
+        self.workspace_manager.map_window(
+            target.as_ref(),
+            window,
+            edge,
+            &mut self.animation_manager,
+        )
     }
 
-    pub fn unmap_window(&mut self, surface: &WindowSurface) {
-        // self.window_manager.get_foreign_handle(wl_surface)
-        //     .map(|handle| {
-        //         handle.send_closed();
-        //     });
-        match surface {
-            WindowSurface::Wayland(toplevel) => {
-                let window = match self.window_manager.get_window_wayland(toplevel.wl_surface()) {
-                    Some(window) => window.clone(),
-                    None => {
-                        warn!("Failed to get window");
-                        return;
-                    }
-                };
+    pub fn set_mapped(&mut self, window: &Window) {
+        self.window_manager.set_mapped(window);
+        self.set_keyboard_focus(Some(window.clone().into()), SERIAL_COUNTER.next_serial());
+    }
 
-                match self.window_manager.remove_window(&window) {
-                    Some(target) => {
-                        self.workspace_manager.unmap_window(&target, &self.loop_handle);
-                    }
-                    None => {
-                        warn!("Failed to find window for toplevel destroy");
-                    }
-                }
-            },
-            #[cfg(feature = "xwayland")]
-            WindowSurface::X11(x11_surface) => {
-                let window = match self.window_manager.get_window_xwayland(x11_surface) {
-                    Some(window) => window.clone(),
-                    None => {
-                        warn!("Failed to get window");
-                        return;
-                    }
-                };
+    pub fn unmap_window(&mut self, window: &Window) {
+        self.window_manager.set_unmapped(window);
+        self.workspace_manager.unmap_window(window, &mut self.animation_manager);
+    }
 
-                match self.window_manager.remove_window(&window) {
-                    Some(target) => {
-                        self.workspace_manager.unmap_window(&target, &self.loop_handle);
-                    }
-                    None => {
-                        warn!("Failed to find window for toplevel destroy");
-                    }
-                }
-            }
-        }
+    pub fn destroy_window(&mut self, window: &Window) {
+        self.unmap_window(window);
+        self.window_manager.remove_unmapped(window);
 
         self.update_keyboard_focus();
     }
+    
+    pub fn _grab_move_request(&mut self, _wl_surface: &WlSurface, _pointer: &PointerHandle<GlobalData>, _start_data: PointerGrabStartData<GlobalData>, _serial: Serial) {
+        // TODO
+    }
 
+    pub fn resize_move_request(
+        &mut self, 
+        surface: &PointerFocusTarget, 
+        pointer: &PointerHandle<GlobalData>, 
+        start_data: PointerGrabStartData<GlobalData>, 
+        serial: Serial
+    ) {
+        let window = match surface {
+            PointerFocusTarget::WlSurface(wl_surface) => {
+                // send resize state
+                self.window_manager.get_mapped(&wl_surface.clone().into())
+            },
+            PointerFocusTarget::X11Surface(x11_surface) => {
+                self.window_manager.get_mapped(&x11_surface.clone().into())
+            }
+        };
+
+        if let Some(window) = window {
+            let window_rect = window.get_rect().unwrap();
+            
+            let pointer_loc = start_data.location;
+    
+            let edge = detect_pointer_quadrant(pointer_loc, window_rect.to_f64());
+    
+            // set pointer state
+            let grab = ResizeSurfaceGrab::start(
+                start_data,
+                window.clone(),
+                edge,
+                window_rect,
+            );
+            
+            pointer.set_grab(self, grab, serial, Focus::Clear);
+        }
+    }
 }

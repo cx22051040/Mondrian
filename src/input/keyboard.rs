@@ -132,14 +132,14 @@ impl GlobalData {
                 KeyAction::Internal(func) => match func {
                     FunctionEnum::InvertWindow => {
                         if let Some(KeyboardFocusTarget::Window(target)) = self.input_manager.get_keyboard_focus() {
-                            self.workspace_manager.invert_window(&target, &self.loop_handle);
+                            self.workspace_manager.invert_window(&target, &mut self.animation_manager);
                         }
                     }
                     FunctionEnum::Expansion => {
-                        self.workspace_manager.tiled_expansion(&self.loop_handle);
+                        self.workspace_manager.tiled_expansion(&mut self.animation_manager);
                     }
                     FunctionEnum::Recover => {
-                        self.workspace_manager.tiled_recover(&self.loop_handle);
+                        self.workspace_manager.tiled_recover(&mut self.animation_manager);
                     }
                     FunctionEnum::Quit => {
                         if let Some(KeyboardFocusTarget::Window(window)) = self.input_manager.get_keyboard_focus() {
@@ -159,7 +159,7 @@ impl GlobalData {
                     | FunctionEnum::Left(edge)
                     | FunctionEnum::Right(edge) => {
                         if let Some(KeyboardFocusTarget::Window(target)) = self.input_manager.get_keyboard_focus() {
-                            self.workspace_manager.exchange_window(&target, edge, &self.loop_handle);
+                            self.workspace_manager.exchange_window(&target, edge, &mut self.animation_manager);
                         }
                     }
                     FunctionEnum::Kill => {
@@ -175,7 +175,7 @@ impl GlobalData {
                         let output_geo = self.output_manager
                             .output_geometry(output).unwrap();
 
-                        self.workspace_manager.switch_workspace(WorkspaceId::new(*id), output, output_geo, &self.loop_handle);
+                        self.workspace_manager.switch_workspace(WorkspaceId::new(*id), output_geo, &mut self.animation_manager);
 
                         self.update_output_working_size();
                         self.set_keyboard_focus(None, serial);

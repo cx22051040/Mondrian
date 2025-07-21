@@ -81,7 +81,7 @@ impl PointerGrab<GlobalData> for ResizeSurfaceGrab {
         let delta = event.location - self.start_data.location;
 
         data.workspace_manager
-            .resize(&self.window, &self.edge, delta.to_i32_round(), &data.loop_handle);
+            .resize(&self.window, &self.edge, delta.to_i32_round());
 
         self.start_data.location = event.location;
 

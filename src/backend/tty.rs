@@ -50,7 +50,6 @@ use smithay::{
         session::{Event as SessionEvent, Session, libseat::LibSeatSession},
         udev::{self, UdevBackend, UdevEvent},
     },
-    desktop::{Space, Window},
     output::Mode as WlMode,
     reexports::{
         calloop::{
@@ -77,8 +76,10 @@ use std::{
     time::Duration,
 };
 
+use crate::manager::animation::AnimationManager;
 use crate::manager::input::InputManager;
 use crate::manager::render::RenderManager;
+use crate::manager::window::WindowManager;
 use crate::manager::{cursor::CursorManager, output::OutputManager, workspace::WorkspaceManager};
 use crate::render::AsGlesRenderer;
 use crate::state::{GlobalData, State};
@@ -220,8 +221,10 @@ impl Tty {
                                     &mut data.render_manager,
                                     &data.output_manager,
                                     &data.workspace_manager,
+                                    &data.window_manager,
                                     &mut data.cursor_manager,
                                     &data.input_manager,
+                                    &mut data.animation_manager,
                                     &data.clock,
                                     &data.loop_handle,
                                 );
@@ -684,8 +687,10 @@ impl Tty {
                     &mut data.render_manager,
                     &data.output_manager,
                     &data.workspace_manager,
+                    &data.window_manager,
                     &mut data.cursor_manager,
                     &data.input_manager,
+                    &mut data.animation_manager,
                     &data.clock,
                     &data.loop_handle,
                 );
@@ -942,8 +947,10 @@ impl Tty {
                     &mut data.render_manager,
                     &data.output_manager,
                     &data.workspace_manager,
+                    &data.window_manager,
                     &mut data.cursor_manager,
                     &data.input_manager,
+                    &mut data.animation_manager,
                     &data.clock,
                     &data.loop_handle,
                 );
@@ -990,11 +997,15 @@ impl Tty {
         node: DrmNode,
         crtc: crtc::Handle,
         frame_target: Time<Monotonic>,
+
         render_manager: &mut RenderManager,
         output_manager: &OutputManager,
         workspace_manager: &WorkspaceManager,
+        window_manager: &WindowManager,
         cursor_manager: &mut CursorManager,
         input_manager: &InputManager,
+        animation_manager: &mut AnimationManager,
+
         clock: &Clock<Monotonic>,
         loop_handle: &LoopHandle<'_, GlobalData>,
     ) {
@@ -1022,8 +1033,10 @@ impl Tty {
             &mut renderer,
             output_manager,
             workspace_manager,
+            window_manager,
             cursor_manager,
             input_manager,
+            animation_manager,
         );
 
         match surface
@@ -1048,7 +1061,7 @@ impl Tty {
                 if rendered {
 
                     update_primary_scanout_output(
-                        workspace_manager.current_space(), 
+                        workspace_manager, 
                         output_manager.current_output(), 
                         &render_element_states
                     );
@@ -1056,7 +1069,7 @@ impl Tty {
                     // need queue_frame to switch buffer
                     let output_presentation_feedback = take_presentation_feedback(
                         output_manager.current_output(),
-                        workspace_manager.current_space(),
+                        workspace_manager,
                         &render_element_states,
                     );
 
@@ -1109,8 +1122,10 @@ impl Tty {
                                 &mut data.render_manager,
                                 &data.output_manager,
                                 &data.workspace_manager,
+                                &data.window_manager,
                                 &mut data.cursor_manager,
                                 &data.input_manager,
+                                &mut data.animation_manager,
                                 &data.clock,
                                 &data.loop_handle,
                             );
@@ -1236,21 +1251,19 @@ fn surface_dmabuf_feedback(
 
 pub fn take_presentation_feedback(
     output: &Output,
-    space: &Space<Window>,
+    workspace_manager: &WorkspaceManager,
     render_element_states: &RenderElementStates,
 ) -> OutputPresentationFeedback {
     let mut output_presentation_feedback = OutputPresentationFeedback::new(output);
 
-    space.elements().for_each(|window| {
-        if space.outputs_for_element(window).contains(output) {
-            window.take_presentation_feedback(
-                &mut output_presentation_feedback,
-                surface_primary_scanout_output,
-                |surface, _| {
-                    surface_presentation_feedback_flags_from_states(surface, render_element_states)
-                },
-            );
-        }
+    workspace_manager.windows().for_each(|window| {
+        window.take_presentation_feedback(
+            &mut output_presentation_feedback,
+            surface_primary_scanout_output,
+            |surface, _| {
+                surface_presentation_feedback_flags_from_states(surface, render_element_states)
+            },
+        );
     });
     let map = smithay::desktop::layer_map_for_output(output);
     for layer_surface in map.layers() {
@@ -1267,11 +1280,11 @@ pub fn take_presentation_feedback(
 }
 
 pub fn update_primary_scanout_output(
-    space: &Space<Window>,
+    workspace_manager: &WorkspaceManager,
     output: &Output,
     render_element_states: &RenderElementStates,
 ) {
-    space.elements().for_each(|window| {
+    workspace_manager.windows().for_each(|window| {
         window.with_surfaces(|surface, states| {
             update_surface_primary_scanout_output(
                 surface,

@@ -5,6 +5,7 @@
 use smithay::utils::{Logical, Rectangle};
 
 pub mod container_tree;
+pub mod tiled_tree;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Direction {
@@ -26,6 +27,18 @@ pub enum TiledScheme {
     Default,
     #[allow(dead_code)]
     Scroll,
+}
+
+#[derive(Debug, Clone)]
+pub enum WindowLayout {
+    Tiled,
+    Floating,
+}
+
+impl Default for WindowLayout {
+    fn default() -> Self {
+        WindowLayout::Tiled
+    }
 }
 
 #[derive(Debug, Clone)]

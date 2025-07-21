@@ -39,8 +39,7 @@ use smithay::{
 
 use crate::{
     backend::Backend, config::Configs, manager::{
-        cursor::CursorManager, input::InputManager, output::OutputManager, render::RenderManager,
-        window::WindowManager, workspace::{WorkspaceId, WorkspaceManager},
+        animation::AnimationManager, cursor::CursorManager, input::InputManager, output::OutputManager, render::RenderManager, window::WindowManager, workspace::{WorkspaceId, WorkspaceManager}
     }
 };
 
@@ -80,10 +79,12 @@ pub struct GlobalData {
     pub output_manager: OutputManager,
     pub workspace_manager: WorkspaceManager,
     pub window_manager: WindowManager,
-    pub cursor_manager: CursorManager,
     pub input_manager: InputManager,
-    pub popups: PopupManager,
     pub render_manager: RenderManager,
+    pub animation_manager: AnimationManager,
+    
+    pub popups: PopupManager,
+    pub cursor_manager: CursorManager,
 
     // handles
     pub loop_handle: LoopHandle<'static, GlobalData>,
@@ -126,15 +127,17 @@ impl GlobalData {
         let mut output_manager = OutputManager::new();
         let mut workspace_manager = WorkspaceManager::new(configs.conf_workspaces.clone());
         let window_manager = WindowManager::new();
-        let cursor_manager = CursorManager::new("default", 24);
         let input_manager = InputManager::new(
-            backend.seat_name(),
-            &display_handle,
-            configs.conf_keybindings.clone()
-        )
-        .context("Failed to create input_manager")?;
-        let popups = PopupManager::default();
+                backend.seat_name(),
+                &display_handle,
+                configs.conf_keybindings.clone()
+            )
+            .context("Failed to create input_manager")?;
         let render_manager = RenderManager::new();
+        let animation_manager = AnimationManager::new();
+    
+        let popups = PopupManager::default();
+        let cursor_manager = CursorManager::new("default", 24);
 
         let start_time = std::time::Instant::now();
         let clock = Clock::new();
@@ -157,7 +160,7 @@ impl GlobalData {
             .output_geometry(output)
             .context("workspace add test error")?;
 
-        workspace_manager.add_workspace(WorkspaceId::next(), output, output_geo, None, true);
+        workspace_manager.add_workspace(WorkspaceId::next(), output_geo, None, true);
 
         Ok(Self {
             backend,
@@ -168,10 +171,12 @@ impl GlobalData {
             output_manager,
             workspace_manager,
             window_manager,
-            cursor_manager,
             input_manager,
-            popups,
             render_manager,
+            animation_manager,
+            
+            popups,
+            cursor_manager,
 
             loop_handle,
             display_handle,
@@ -181,6 +186,11 @@ impl GlobalData {
             start_time,
             clock,
         })
+    }
+
+    pub fn refresh(&mut self) {
+        // TODO: release death data
+        self.animation_manager.refresh();
     }
 }
 

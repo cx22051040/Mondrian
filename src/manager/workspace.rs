@@ -5,18 +5,15 @@ use std::{
 };
 
 use smithay::{
-    desktop::{Space, Window, WindowSurface},
-    output::Output,
-    reexports::calloop::LoopHandle,
+    desktop::{Window, WindowSurface},
     utils::{Logical, Point, Rectangle},
 };
 
 use crate::{
-    config::workspace::WorkspaceConfigs,
-    layout::{
+    config::workspace::WorkspaceConfigs, layout::{
         container_tree::ContainerTree, Direction, ResizeEdge, TiledScheme
-    },
-    state::GlobalData,
+    }, 
+    manager::animation::{AnimationManager, AnimationType}
 };
 
 use super::window::WindowExt;
@@ -41,11 +38,8 @@ impl WorkspaceId {
 pub struct Workspace {
     workspace_id: WorkspaceId,
 
-    tiled: Space<Window>, // TODO: maybe ...
-    // pub floating: Space<Window>,
-    // pub layout: HashMap<Window, WindowLayout>,
     scheme: TiledScheme, 
-    tiled_tree: Option<ContainerTree>,
+    container_tree: ContainerTree,
 
     output_working_geometry: Rectangle<i32, Logical>,
 
@@ -55,23 +49,27 @@ pub struct Workspace {
 impl Workspace {
     pub fn new(
         workspace_id: WorkspaceId,
-        output: &Output,
         output_geometry: Rectangle<i32, Logical>,
         scheme: TiledScheme,
         configs: Arc<WorkspaceConfigs>,
     ) -> Self {
-        let mut tiled: Space<Window> = Default::default();
-        // let mut floating: Space<Window> = Default::default();
-        tiled.map_output(output, output_geometry.loc);
-        // floating.map_output(output, output_geometry.loc);
+
+        let gap = configs.gap;
+        let root_rect = Rectangle {
+            loc: (
+                output_geometry.loc.x + gap, 
+                output_geometry.loc.y + gap
+            ).into(),
+            size: (
+                output_geometry.size
+                - (gap * 2, gap * 2).into()
+            ).into(),
+        };
 
         Self {
             workspace_id,
-            tiled,
-            // floating,
-            // layout: HashMap::new(),
             scheme,
-            tiled_tree: None,
+            container_tree: ContainerTree::new(root_rect, gap),
             output_working_geometry: output_geometry,
 
             configs,
@@ -82,246 +80,93 @@ impl Workspace {
         self.workspace_id
     }
 
-    pub fn current_space(&self) -> &Space<Window> {
-        &self.tiled
-    }
-
-    pub fn elements(&self) -> impl DoubleEndedIterator<Item = &Window> {
-        self.tiled.elements()
+    pub fn windows(&self) -> impl Iterator<Item = &Window> {
+        self.container_tree.windows()
     }
 
     pub fn is_empty(&self) -> bool {
-        self.tiled_tree.is_none()
-    }
-
-    pub fn _clear(&mut self) {
-        // Clear the workspace, remove all elements, send to else workspace
+        self.container_tree.is_empty()
     }
 
     pub fn map_window(
         &mut self,
         target: Option<&Window>,
         window: Window,
-        edge: ResizeEdge,
-        activate: bool,
-        loop_handle: &LoopHandle<'_, GlobalData>,
-    ) {
-        self.refresh();
-
-        match window.underlying_surface() {
-            WindowSurface::Wayland(toplevel) => {
-                toplevel.with_pending_state(|state| state.bounds = Some(self.output_working_geometry.size));
-                toplevel.send_pending_configure();
-            },
-            #[cfg(feature = "xwayland")]
-            WindowSurface::X11(_) => { }
-        };
-
-        if self.tiled_tree.is_none() {
-
-            let gap = self.configs.gap;
-            let root_rec = Rectangle {
-                loc: (
-                    self.output_working_geometry.loc.x + gap, 
-                    self.output_working_geometry.loc.y + gap
-                ).into(),
-                size: (
-                    self.output_working_geometry.size
-                    - (gap * 2, gap * 2).into()
-                ).into(),
-            };
-
-            self.tiled_tree = Some(
-                ContainerTree::new_with_first_node(
-                    window.clone(), 
-                    root_rec, 
-                    self.configs.gap, 
-                ));
-            
-            self.tiled.map_element(window.clone(), root_rec.loc, activate);
-
-            // add animation
-            loop_handle.insert_idle(move |data| {
-                let mut from = root_rec;
-                from.loc.y += from.size.h;
-                data.render_manager.add_animation(
-                    window,
-                    from,
-                    root_rec,
-                    Duration::from_millis(30),
-                    crate::animation::AnimationType::OvershootBounce,
-                );
-            });
-
-            return;
-        }
-
-        match self.scheme {
-            TiledScheme::Default => {
-                if let Some(layout_tree) = &mut self.tiled_tree {
-                    // default: must have target if layout tree is some
-                    let target = target.unwrap();                    
-
-                    let target_rec = target.get_rect();
-
-                    let (direction, is_favour) = edge.to_direction_and_favour(target_rec);
-
-                    layout_tree.insert(
-                        target,
-                        direction,
-                        window.clone(),
-                        is_favour,
-
-                        loop_handle,
-                    );
-
-                    #[cfg(feature = "trace_layout")]
-                    layout_tree.print_tree();
-                }
-            }
-            TiledScheme::Scroll => {
-                if let Some(_) = &mut self.tiled_tree {
-
-
-
-                    // #[cfg(feature = "trace_layout")]
-                    // layout_tree.print_tree();
-                }
-            }
-        }
-
-        // the location info was stored at window.get_rect()
-        self.tiled.map_element(window.clone(), (0, 0), activate);
+        edge: ResizeEdge, 
+        animation_manager: &mut AnimationManager,
+    ) -> bool {
+        self.container_tree.insert(target, window, edge, &self.scheme, animation_manager)
     }
 
-    pub fn unmap_window(&mut self, target: &Window, loop_handle: &LoopHandle<'_, GlobalData>) {
-        if let Some(tiled_tree) = &mut self.tiled_tree {
-            tiled_tree.remove(target, loop_handle);
-            self.tiled.unmap_elem(target);
-
-            if tiled_tree.is_empty() {
-                self.tiled_tree = None;
-            } else {
-                #[cfg(feature = "trace_layout")]
-                tiled_tree.print_tree();
-            }
-        } else {
-            error!("empty layout tree!");
-            return;
-        }
+    pub fn unmap_window(&mut self, target: &Window, animation_manager: &mut AnimationManager) {
+        self.container_tree.remove(target, animation_manager);
     }
 
-    pub fn invert_window(&mut self, target: &Window, loop_handle: &LoopHandle<'_, GlobalData>) {
-        if let Some(layout_tree) = &mut self.tiled_tree {
-            layout_tree.invert(target, loop_handle);
-
-            #[cfg(feature = "trace_layout")]
-            layout_tree.print_tree();
-        }
+    pub fn invert_window(&mut self, target: &Window, animation_manager: &mut AnimationManager) {
+        self.container_tree.invert(target, animation_manager);
     }
 
     pub fn exchange_window(
         &mut self,
         target: &Window,
         edge: &ResizeEdge,
-        loop_handle: &LoopHandle<'_, GlobalData>,
+        animation_manager: &mut AnimationManager,
     ) {
-        if let Some(layout_tree) = &mut self.tiled_tree {
-            // input edge is single turn
+        // input edge is single turn
+        let (direction, is_favour) = edge.to_direction_and_favour(Rectangle::default());
+
+        self.container_tree.exchange(target, direction, is_favour, animation_manager);
+    }
+
+    pub fn expansion(&self, animation_manager: &mut AnimationManager) {
+        self.container_tree.expansion(animation_manager);
+    }
+
+    pub fn recover(&mut self, animation_manager: &mut AnimationManager) {
+        self.container_tree.recover(animation_manager);
+    }
+
+    pub fn resize(&mut self, target: &Window, edge: &ResizeEdge, offset: Point<i32, Logical>) {
+        for edge in edge.split() {
             let (direction, is_favour) = edge.to_direction_and_favour(Rectangle::default());
 
-            layout_tree.exchange(target, direction, is_favour, loop_handle);
-
-            #[cfg(feature = "trace_layout")]
-            layout_tree.print_tree();
-        }
-    }
-
-    pub fn tiled_expansion(&self, loop_handle: &LoopHandle<'_, GlobalData>) {
-        if let Some(layout_tree) = &self.tiled_tree {
-            let rect = self.output_working_geometry;
-            
-            let gap = self.configs.gap;
-            let root_rect = Rectangle {
-                loc: (
-                    rect.loc.x + gap, 
-                    rect.loc.y + gap
-                ).into(),
-                size: (
-                    rect.size
-                    - (gap * 2, gap * 2).into()
-                ).into(),
+            let offset = match direction {
+                Direction::Horizontal => {
+                    offset.x
+                },
+                Direction::Vertical => {
+                    offset.y
+                }
             };
 
-            layout_tree.expansion(root_rect, loop_handle);
+            self.container_tree.resize(target, direction, offset, is_favour);
         }
-    }
-
-    pub fn tiled_recover(&mut self, loop_handle: &LoopHandle<'_, GlobalData>) {
-        if let Some(layout_tree) = &mut self.tiled_tree {
-            let rect = self.output_working_geometry;
-            
-            let gap = self.configs.gap;
-            let root_rect = Rectangle {
-                loc: (
-                    rect.loc.x + gap, 
-                    rect.loc.y + gap
-                ).into(),
-                size: (
-                    rect.size
-                    - (gap * 2, gap * 2).into()
-                ).into(),
-            };
-
-            layout_tree.update_root_rect_recursive(root_rect, loop_handle);
-        }
-    }
-
-    pub fn resize(&mut self, target: &Window, edge: &ResizeEdge, offset: Point<i32, Logical>, loop_handle: &LoopHandle<'_, GlobalData>) {
-        if let Some(tiled_tree) = &mut self.tiled_tree {
-            for edge in edge.split() {
-                let (direction, is_favour) = edge.to_direction_and_favour(Rectangle::default());
-
-                let offset = match direction {
-                    Direction::Horizontal => {
-                        offset.x
-                    },
-                    Direction::Vertical => {
-                        offset.y
-                    }
-                };
-
-                tiled_tree.resize(target, direction, offset, is_favour, loop_handle);
-            }
-        } 
     }
 
     pub fn update_output_rect(
         &mut self,
         rect: Rectangle<i32, Logical>,
-        loop_handle: &LoopHandle<'_, GlobalData>,
+        animation_manager: &mut AnimationManager,
     ) {
         if self.output_working_geometry == rect {
             return;
         }
 
         self.output_working_geometry = rect;
-        if let Some(layout_tree) = &mut self.tiled_tree {
 
-            let gap = self.configs.gap;
-            let root_rect = Rectangle {
-                loc: (
-                    rect.loc.x + gap, 
-                    rect.loc.y + gap
-                ).into(),
-                size: (
-                    rect.size
-                    - (gap * 2, gap * 2).into()
-                ).into(),
-            };
+        let gap = self.configs.gap;
+        let root_rect = Rectangle {
+            loc: (
+                rect.loc.x + gap, 
+                rect.loc.y + gap
+            ).into(),
+            size: (
+                rect.size
+                - (gap * 2, gap * 2).into()
+            ).into(),
+        };
 
-            layout_tree.update_root_rect_recursive(root_rect, loop_handle);
-        }
+        self.container_tree.update_root_rect(root_rect, animation_manager);
     }
 
     pub fn window_under(
@@ -329,8 +174,8 @@ impl Workspace {
         position: Point<f64, Logical>,
     ) -> Option<Window> {
 
-        for window in self.elements() {
-            let window_rect = window.get_rect();
+        for window in self.windows() {
+            let window_rect = window.get_rect().unwrap();
 
             if window_rect.contains(position.to_i32_round()) {
                 return Some(window.clone())
@@ -340,13 +185,8 @@ impl Workspace {
         None
     }
 
-    fn refresh(&mut self) {
-        self.tiled.refresh();
-        // self.floating.refresh();
-    }
-
     fn deactivate(&mut self) {
-        for window in self.tiled.elements() {
+        for window in self.windows() {
             window.set_activated(false);
 
             match window.underlying_surface() {
@@ -357,11 +197,6 @@ impl Workspace {
                 WindowSurface::X11(_) => { }
             };
         }
-    }
-
-    #[allow(dead_code)]
-    fn raise_element(&mut self, window: &Window, activate: bool) {
-        self.tiled.raise_element(window, activate)
     }
 }
 
@@ -384,14 +219,12 @@ impl WorkspaceManager {
     pub fn add_workspace(
         &mut self,
         workspace_id: WorkspaceId,
-        output: &Output,
         output_geometry: Rectangle<i32, Logical>,
         scheme: Option<TiledScheme>,
         activate: bool,
     ) {
         let workspace = Workspace::new(
             workspace_id,
-            output,
             output_geometry,
             scheme.unwrap_or_else(|| self.configs.scheme.clone()),
             self.configs.clone(),
@@ -415,11 +248,10 @@ impl WorkspaceManager {
         }
     }
 
-    pub fn switch_workspace(&mut self, workspace_id: WorkspaceId, output: &Output, output_geometry: Rectangle<i32, Logical>, loop_handle: &LoopHandle<'_, GlobalData>) {
+    pub fn switch_workspace(&mut self, workspace_id: WorkspaceId, output_geometry: Rectangle<i32, Logical>, animation_manager: &mut AnimationManager) {
         if !self.workspaces.contains_key(&workspace_id) {
             self.add_workspace(
                 workspace_id,
-                output, 
                 output_geometry, 
                 None, 
                 true
@@ -429,27 +261,26 @@ impl WorkspaceManager {
                 self.current_workspace_mut().deactivate();
                 self.activated_workspace = Some(workspace_id);
 
-                loop_handle.insert_idle(move |data| {
-                    for window in data.workspace_manager.current_workspace().elements() {
-                        let width = data.workspace_manager.current_workspace().output_working_geometry.size.w;
+                // add animation
+                for window in self.current_workspace().windows() {
+                    let width = self.current_workspace().output_working_geometry.size.w;
 
-                        let to = window.get_rect();
-                        let mut from = to.clone();
-                        from.loc.x = if workspace_id.0 > id.0 {
-                            from.loc.x + width
-                        } else {
-                            from.loc.x - width
-                        };
+                    let to = window.get_rect().unwrap();
+                    let mut from = to.clone();
+                    from.loc.x = if workspace_id.0 > id.0 {
+                        from.loc.x + width
+                    } else {
+                        from.loc.x - width
+                    };
     
-                        data.render_manager.add_animation(
-                            window.clone(), 
-                            from, 
-                            to, 
-                            Duration::from_millis(30), 
-                            crate::animation::AnimationType::EaseInOutQuad,
-                        );
-                    }
-                });
+                    animation_manager.add_animation(
+                        window.clone(), 
+                        from, 
+                        to, 
+                        Duration::from_millis(30), 
+                        AnimationType::EaseInOutQuad,
+                    );
+                }
             }
         } else {
             self.activated_workspace = Some(workspace_id);
@@ -460,7 +291,6 @@ impl WorkspaceManager {
 
     pub fn remove_workspace(&mut self, workspace_id: WorkspaceId) {
         if self.workspaces.iter().count() <= 1 {
-            warn!("Cannot remove the last workspace: {:?}", workspace_id);
             return;
         }
         
@@ -475,9 +305,7 @@ impl WorkspaceManager {
         let mut to_remove = vec![];
 
         for workspace in self.workspaces.values_mut() {
-            if self.activated_workspace == Some(workspace.id()) {
-                workspace.refresh();
-            } else if workspace.is_empty() {
+            if self.activated_workspace != Some(workspace.id()) && workspace.is_empty() {
                 to_remove.push(workspace.id());
             }
         }
@@ -485,10 +313,6 @@ impl WorkspaceManager {
         for id in to_remove {
             self.remove_workspace(id);
         }
-    }
-
-    pub fn current_space(&self) -> &Space<Window> {
-        self.current_workspace().current_space()
     }
 
     pub fn current_workspace(&self) -> &Workspace {
@@ -507,8 +331,8 @@ impl WorkspaceManager {
         self.workspaces.iter().count()
     }
 
-    pub fn elements(&self) -> impl DoubleEndedIterator<Item = &Window> {
-        self.current_workspace().elements()
+    pub fn windows(&self) -> impl Iterator<Item = &Window> {
+        self.current_workspace().windows()
     }
 
     pub fn map_window(
@@ -516,51 +340,50 @@ impl WorkspaceManager {
         target: Option<&Window>,
         window: Window,
         edge: ResizeEdge,
-        activate: bool,
-        loop_handle: &LoopHandle<'_, GlobalData>,
-    ) {
+        animation_manager: &mut AnimationManager,
+    ) -> bool {
         self.current_workspace_mut()
-            .map_window(target, window, edge, activate, loop_handle);
+            .map_window(target, window, edge, animation_manager)
     }
 
-    pub fn unmap_window(&mut self, target: &Window, loop_handle: &LoopHandle<'_, GlobalData>) {
+    pub fn unmap_window(&mut self, target: &Window, animation_manager: &mut AnimationManager) {
         self.current_workspace_mut()
-            .unmap_window(target, loop_handle);
+            .unmap_window(target, animation_manager);
     }
 
-    pub fn invert_window(&mut self, target: &Window, loop_handle: &LoopHandle<'_, GlobalData>) {
-        self.current_workspace_mut().invert_window(target, loop_handle);
+    pub fn invert_window(&mut self, target: &Window, animation_manager: &mut AnimationManager) {
+        self.current_workspace_mut().invert_window(target, animation_manager);
     }
 
     pub fn exchange_window(
         &mut self,
         target: &Window,
         edge: &ResizeEdge,
-        loop_handle: &LoopHandle<'_, GlobalData>,
+        animation_manager: &mut AnimationManager,
     ) {
         self.current_workspace_mut()
-            .exchange_window(target, edge, loop_handle);
+            .exchange_window(target, edge, animation_manager);
     }
 
-    pub fn tiled_expansion(&mut self, loop_handle: &LoopHandle<'_, GlobalData>) {
-        self.current_workspace_mut().tiled_expansion(loop_handle);
+    pub fn tiled_expansion(&mut self, animation_manager: &mut AnimationManager) {
+        self.current_workspace_mut().expansion(animation_manager);
     }
 
-    pub fn tiled_recover(&mut self, loop_handle: &LoopHandle<'_, GlobalData>) {
-        self.current_workspace_mut().tiled_recover(loop_handle);
+    pub fn tiled_recover(&mut self, animation_manager: &mut AnimationManager) {
+        self.current_workspace_mut().recover(animation_manager);
     }
 
-    pub fn resize(&mut self, target: &Window, edge: &ResizeEdge, offset: Point<i32, Logical>, loop_handle: &LoopHandle<'_, GlobalData>) {
-        self.current_workspace_mut().resize(target, edge, offset, loop_handle);
+    pub fn resize(&mut self, target: &Window, edge: &ResizeEdge, offset: Point<i32, Logical>) {
+        self.current_workspace_mut().resize(target, edge, offset);
     }
 
     pub fn update_output_rect(
         &mut self,
         rec: Rectangle<i32, Logical>,
-        loop_handle: &LoopHandle<'_, GlobalData>,
+        animation_manager: &mut AnimationManager,
     ) {
         self.current_workspace_mut()
-            .update_output_rect(rec, loop_handle);
+            .update_output_rect(rec, animation_manager);
     }
 
     pub fn window_under(

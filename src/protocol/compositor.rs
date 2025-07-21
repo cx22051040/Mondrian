@@ -105,11 +105,7 @@ impl CompositorHandler for GlobalData {
                 return;
             }
 
-            if let Some(window) = self.window_manager.get_window_wayland(&root) {
-                window.on_commit();
-            }
-
-            self.xdg_shell_handle_commit(surface);
+            self.xdg_shell_handle_commit(&root);
             // resize_grab::handle_commit(&mut self.workspace_manager, surface);
         };
     }

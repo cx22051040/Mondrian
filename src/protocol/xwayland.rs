@@ -3,12 +3,12 @@ use std::process::Stdio;
 #[cfg(feature = "xwayland")]
 use smithay::{delegate_xwayland_keyboard_grab, delegate_xwayland_shell, wayland::xwayland_keyboard_grab::XWaylandKeyboardGrabHandler};
 use smithay::{
-    desktop::{Window, WindowSurface}, reexports::wayland_server::protocol::wl_surface::WlSurface, utils::{Logical, Rectangle}, wayland::{compositor::CompositorHandler, xwayland_shell::{XWaylandShellHandler, XWaylandShellState}}, xwayland::{
+    desktop::Window, reexports::wayland_server::protocol::wl_surface::WlSurface, utils::{Logical, Rectangle, SERIAL_COUNTER}, wayland::{compositor::CompositorHandler, xwayland_shell::{XWaylandShellHandler, XWaylandShellState}}, xwayland::{
         xwm::{Reorder, ResizeEdge as X11ResizeEdge, XwmId}, X11Surface, X11Wm, XWayland, XWaylandEvent, XwmHandler
     }
 };
 
-use crate::{input::focus::KeyboardFocusTarget, state::GlobalData};
+use crate::{input::focus::{KeyboardFocusTarget, PointerFocusTarget}, layout::WindowLayout, manager::window::WindowExt, state::GlobalData};
 
 impl GlobalData {
     pub fn start_xwayland(&mut self) {
@@ -65,27 +65,48 @@ impl XwmHandler for GlobalData {
         self.state.xwm.as_mut().unwrap()
     }
 
-    fn new_window(&mut self, _xwm: XwmId, _window: X11Surface) { }
+    fn new_window(&mut self, _xwm: XwmId, surface: X11Surface) {
+        // create new window
+        let window = Window::new_x11_window(surface);
+        window.set_layout(WindowLayout::Tiled);
 
-    fn new_override_redirect_window(&mut self, _xwm: XwmId, _window: X11Surface) { }
+        // add unmapped window in window_manager
+        self.window_manager.add_window_unmapped(
+            window,
+            self.workspace_manager.current_workspace().id()
+        );
+    }
+
+    fn new_override_redirect_window(&mut self, _xwm: XwmId, surface: X11Surface) { 
+        // create new window
+        let window = Window::new_x11_window(surface);
+        window.set_layout(WindowLayout::Floating);
+
+        // add unmapped window in window_manager
+        self.window_manager.add_window_unmapped(
+            window,
+            self.workspace_manager.current_workspace().id()
+        );
+    }
 
     fn map_window_request(&mut self, _xwm: XwmId, window: X11Surface) {
-        window.set_mapped(true).unwrap();
-        let window = Window::new_x11_window(window);
-        
-        self.map_window(window);
+        window.set_mapped(true).unwrap();        
+        if let Some(window) = self.window_manager.get_unmapped(&window.into()) {
+            self.set_mapped(&window.clone());
+        }
     }
 
     fn mapped_override_redirect_window(&mut self, _xwm: XwmId, window: X11Surface) {
-        let _location = window.geometry().loc;
-        let _window = Window::new_x11_window(window);
-
-        // TODO: this window don't need tiled
-        // use float to map it
+        window.set_mapped(true).unwrap();
+        if let Some(window) = self.window_manager.get_unmapped(&window.into()) {
+            self.set_mapped(&window.clone());
+        }
     }
 
     fn unmapped_window(&mut self, _xwm: XwmId, window: X11Surface) {
-        self.unmap_window(&WindowSurface::X11(window));
+        if let Some(window) = self.window_manager.get_mapped(&window.into()) {
+            self.unmap_window(&window.clone());
+        }
     }
 
     fn destroyed_window(&mut self, _xwm: XwmId, _window: X11Surface) { }
@@ -93,22 +114,66 @@ impl XwmHandler for GlobalData {
     fn configure_request(
         &mut self,
         _xwm: XwmId,
-        window: X11Surface,
-        _x: Option<i32>,
-        _y: Option<i32>,
+        surface: X11Surface,
+        x: Option<i32>,
+        y: Option<i32>,
         w: Option<u32>,
         h: Option<u32>,
         _reorder: Option<Reorder>,
     ) {
-        // we just set the new size, but don't let windows move themselves around freely
-        let mut geo = window.geometry();
-        if let Some(w) = w {
-            geo.size.w = w as i32;
+        if let Some(window) = self.window_manager.get_mapped(&surface.clone().into()) {
+            match window.get_layout() {
+                WindowLayout::Floating => {
+                    let mut rect = window.geometry();
+                    if let Some(x) = x {
+                        rect.loc.x = x;
+                    }
+                    if let Some(y) = y {
+                        rect.loc.y = y;
+                    }
+                    if let Some(w) = w {
+                        rect.size.w = w as i32;
+                    }
+                    if let Some(h) = h {
+                        rect.size.h = h as i32;
+                    }
+                    window.set_rect_cache(rect);
+                    window.send_rect(rect);
+                }
+                WindowLayout::Tiled => {
+                    let rect = window.get_rect();
+                    let _ = surface.configure(rect);
+                }
+            }
+        } else if let Some(unmapped) = self.window_manager.get_unmapped(&surface.clone().into()) {
+            match unmapped.get_layout() {
+                WindowLayout::Floating => {
+                    let mut rect = unmapped.geometry();
+                    if let Some(x) = x {
+                        rect.loc.x = x;
+                    }
+                    if let Some(y) = y {
+                        rect.loc.y = y;
+                    }
+                    if let Some(w) = w {
+                        rect.size.w = w as i32;
+                    }
+                    if let Some(h) = h {
+                        rect.size.h = h as i32;
+                    }
+                    unmapped.set_rect_cache(rect);
+                    unmapped.send_rect(rect);
+                }
+                WindowLayout::Tiled => {
+                    // insert into container tree but not mapped
+                    if let Some(rect) = unmapped.get_rect() {
+                        unmapped.send_rect(rect);
+                    } else {
+                        let _ = self.map_window(unmapped.clone());
+                    }
+                }
+            }
         }
-        if let Some(h) = h {
-            geo.size.h = h as i32;
-        }
-        let _ = window.configure(geo);
     }
 
     fn configure_notify(
@@ -118,21 +183,44 @@ impl XwmHandler for GlobalData {
         _geometry: Rectangle<i32, Logical>,
         _above: Option<x11rb::protocol::xproto::Window>,
     ) {
-        // TODO
+        // modify cache
+        // info!("configure_notify");
     }
 
-    fn resize_request(&mut self, _xwm: XwmId, _window: X11Surface, _button: u32, _resize_edge: X11ResizeEdge) {
-        // TODO
+    fn resize_request(&mut self, _xwm: XwmId, window: X11Surface, _button: u32, _resize_edge: X11ResizeEdge) {
+        if !self.input_manager.is_mainmod_pressed() {
+            return
+        }
+
+        let pointer = match self.input_manager.get_pointer() {
+            Some(pointer) => pointer,
+            None => {
+                warn!("Failed to get pointer");
+                return
+            }
+        };
+        
+        let start_data = match pointer.grab_start_data() {
+            Some(start_data) => start_data,
+            None => {
+                warn!("Failed to get start_data from: {:?}", pointer);
+                return;
+            }
+        };
+
+        self.resize_move_request(&PointerFocusTarget::X11Surface(window), &pointer, start_data, SERIAL_COUNTER.next_serial());
     }
 
     fn move_request(&mut self, _xwm: XwmId, _window: X11Surface, _button: u32) {
-        // TODO
+        if !self.input_manager.is_mainmod_pressed() {
+            return
+        }
     }
 }
 
 impl XWaylandKeyboardGrabHandler for GlobalData {
     fn keyboard_focus_for_xsurface(&self, surface: &WlSurface) -> Option<Self::KeyboardFocus> {
-        let window = self.window_manager.get_window_wayland(surface)?;
+        let window = self.window_manager.get_mapped(&surface.clone().into())?;
         Some(KeyboardFocusTarget::Window(window.clone()))
     }
 }

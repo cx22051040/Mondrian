@@ -232,3 +232,17 @@ client 使用 dmabuf 提交 buffer 的时候，不会保证 buffer 已经渲染�
 ### 2025.7.17-18
 
 新增 exchange 操作，交换相邻的两个窗口。如果两个窗口是 sibling，直接交换就可以了，如何识别不同 container 下的邻居是个难点，这里使用简化的操作，通过 find_neighbor 找到对应方向的，最有可能的节点，如果是 container，则遍历寻找 container 中最靠近（方向反向，比如找右边，那遍历往左）的 node 节点，这里有一个细节，方向与寻找方向一致，则直接往靠近方向，若与原先的一致，那么就是根据原先的位置来找，一般出现在两个 container 为 Vertical，我们认为上节点与上节点交换，所以使用 target 节点的 idx 信息即可。
+
+### 2025.7.19-21
+
+1. 优化了 xdg_shell 新建 toplevel 的流程，解决了“首帧闪烁”问题，根据是否是第一次提交和是否接收 compositor 发送的配置信息，来决定是否将窗口加入 mapped 组进行合成显示。
+
+2. 优化了 xwayland 的建立行为，与 xdg_shell 思想一致。
+
+3. 将 animation 从 render manager 中抽离出来作为一个单独的 manager，原先使用 loop handle 进行动画插入，因为 loop handle 不会马上优先执行，可能会导致动画开始的某几帧跳变。
+
+4. 优化了 resize 操作，添加 resize max parent 缓存，不需要每次 resize 的时候都遍历一次树，删除了动画效果，更流畅。
+
+5. 添加了 float 与 tiled 两种类型的布局窗口，对于某些不适合插入平铺状态的窗口，比如弹窗，子窗口这类，规划到 floating 窗口，并且基于父窗口分配大小与位置
+
+6. TODO：完善 float 窗口的操作，完善 xwayland fullscreen 等监听，完成 screencopy 协议，调整 float 和 tiled 下以及 popups 等的 focus 遮挡关系与行为。

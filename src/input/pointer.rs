@@ -215,14 +215,12 @@ impl GlobalData {
                     location: pointer.current_location(),
                 };
 
-                if let Some(wl_surface) = target.wl_surface().as_deref() {
-                    if button == BUTTON_LEFT {
-                        // TODO: layer shell should not be grabed
-                        self.grab_move_request(wl_surface, &pointer, start_data, serial);
-                    } else if button == BUTTON_RIGHT {
-                        // TODO: only windows could be resized
-                        self.resize_move_request(wl_surface, &pointer, start_data, serial);
-                    }
+                if button == BUTTON_LEFT {
+                    // TODO: layer shell should not be grabed
+                    // self.grab_move_request(target, &pointer, start_data, serial);
+                } else if button == BUTTON_RIGHT {
+                    // TODO: only windows could be resized
+                    self.resize_move_request(&target, &pointer, start_data, serial);
                 }
 
                 return;
@@ -361,7 +359,7 @@ impl GlobalData {
         else if let Some(window) =
             self.workspace_manager.window_under(pointer_loc)
         {
-            let window_rect = window.get_rect();
+            let window_rect = window.get_rect().unwrap();
             let render_loc: Point<f64, Logical> = window_rect.loc.to_f64() - window.geometry().loc.to_f64();
 
             if update_keyboard_focus {

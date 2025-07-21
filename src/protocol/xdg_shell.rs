@@ -1,10 +1,10 @@
 use std::cell::RefCell;
 
 use crate::{
-    input::{focus::PointerFocusTarget, resize_grab::ResizeSurfaceGrab}, manager::window::WindowExt, protocol::detect_pointer_quadrant, state::GlobalData
+    input::focus::PointerFocusTarget, layout::WindowLayout, manager::window::{CustomWindowSurface, WindowExt}, state::GlobalData
 };
 use smithay::{
-    delegate_xdg_shell, desktop::{layer_map_for_output, LayerSurface, PopupKind, Window, WindowSurface}, input::{pointer::{Focus, PointerHandle}, Seat}, output::Output, reexports::{
+    backend::renderer::utils::with_renderer_surface_state, delegate_xdg_shell, desktop::{layer_map_for_output, LayerSurface, PopupKind, Window}, input::{pointer::PointerHandle, Seat}, output::Output, reexports::{
         wayland_protocols::xdg::shell::server::xdg_toplevel,
         wayland_server::{
             protocol::{wl_output::WlOutput, wl_seat, wl_surface::WlSurface}, Resource
@@ -18,7 +18,6 @@ use smithay::{
 };
 use smithay::{
     desktop::{find_popup_root_surface, get_popup_toplevel_coords},
-    input::pointer::GrabStartData as PointerGrabStartData,
 };
 
 #[derive(Default)]
@@ -38,7 +37,6 @@ impl FullscreenSurface {
     }
 }
 
-
 impl XdgShellHandler for GlobalData {
     fn xdg_shell_state(&mut self) -> &mut XdgShellState {
         &mut self.state.xdg_shell_state
@@ -48,7 +46,13 @@ impl XdgShellHandler for GlobalData {
         let _span = tracy_client::span!("new_xdg_toplevel");
 
         let window = Window::new_wayland_window(surface.clone());
-        self.map_window(window);
+        window.set_layout(WindowLayout::default());
+
+        // add unmapped window in window_manager
+        self.window_manager.add_window_unmapped(
+            window,
+            self.workspace_manager.current_workspace().id()
+        );
     }
 
     fn new_popup(&mut self, surface: PopupSurface, _positioner: PositionerState) {
@@ -59,7 +63,9 @@ impl XdgShellHandler for GlobalData {
     }
 
     fn toplevel_destroyed(&mut self, surface: ToplevelSurface) {
-        self.unmap_window(&WindowSurface::Wayland(surface));
+        if let Some(window) = self.window_manager.get_mapped(&surface.into()) {
+            self.destroy_window(&window.clone());
+        }
     }
 
     fn reposition_request(
@@ -107,7 +113,7 @@ impl XdgShellHandler for GlobalData {
                     wl_output = Some(client_output);
                 }
 
-                let window = self.window_manager.get_window_wayland(wl_surface).unwrap();
+                let window = self.window_manager.get_mapped(&wl_surface.clone().into()).unwrap();
 
                 surface.with_pending_state(|state| {
                     state.states.set(xdg_toplevel::State::Fullscreen);
@@ -175,7 +181,7 @@ impl XdgShellHandler for GlobalData {
 
                     let output_working_geo = map.non_exclusive_zone();
                     self.workspace_manager
-                        .update_output_rect(output_working_geo, &self.loop_handle);
+                        .update_output_rect(output_working_geo, &mut self.animation_manager);
                 }
 
                 fullscreen.clear();
@@ -185,12 +191,12 @@ impl XdgShellHandler for GlobalData {
         surface.send_pending_configure();
     }
 
-    fn move_request(&mut self, surface: ToplevelSurface, seat: wl_seat::WlSeat, serial: Serial) {
+    fn move_request(&mut self, _surface: ToplevelSurface, seat: wl_seat::WlSeat, _serial: Serial) {
         if !self.input_manager.is_mainmod_pressed() {
             return
         }
 
-        let pointer: PointerHandle<Self> = match Seat::from_resource(&seat) {
+        let _pointer: PointerHandle<Self> = match Seat::from_resource(&seat) {
             Some(seat) => {
                 match seat.get_pointer() {
                     Some(pointer) => pointer,
@@ -205,12 +211,7 @@ impl XdgShellHandler for GlobalData {
                 return
             }
         };
-
-        let wl_surface = surface.wl_surface();
-
-        if let Some(start_data) = check_grab(&pointer, wl_surface, serial) {
-            self.resize_move_request(wl_surface, &pointer, start_data, serial);
-        }
+        //
     }
 
     fn resize_request(
@@ -240,17 +241,15 @@ impl XdgShellHandler for GlobalData {
             }
         };
 
-        let wl_surface = surface.wl_surface();
+        let start_data = match pointer.grab_start_data() {
+            Some(start_data) => start_data,
+            None => {
+                warn!("Failed to get start_data from: {:?}", pointer);
+                return;
+            }
+        };
 
-        if let Some(start_data) = check_grab(&pointer, wl_surface, serial) {
-            // send resize state
-            surface.with_pending_state(|state| {
-                state.states.set(xdg_toplevel::State::Resizing);
-            });
-            surface.send_pending_configure();
-            
-            self.resize_move_request(wl_surface, &pointer, start_data, serial);
-        }
+        self.resize_move_request(&PointerFocusTarget::WlSurface(surface.wl_surface().clone()), &pointer, start_data, serial);
     }
 
     fn grab(&mut self, _surface: PopupSurface, _seat: wl_seat::WlSeat, _serial: Serial) {}
@@ -284,7 +283,7 @@ impl GlobalData {
         };
         let Some(window) = self
             .window_manager
-            .get_window_wayland(&root)
+            .get_mapped(&root.into())
         else {
             return;
         };
@@ -298,7 +297,7 @@ impl GlobalData {
             }
         };
 
-        let window_rect = window.get_rect();
+        let window_rect = window.get_rect().unwrap();
 
         // The target geometry for the positioner should be relative to its parent's geometry, so
         // we will compute that here.
@@ -311,57 +310,52 @@ impl GlobalData {
         });
     }
 
-    pub fn grab_move_request(&mut self, _wl_surface: &WlSurface, _pointer: &PointerHandle<GlobalData>, _start_data: PointerGrabStartData<GlobalData>, _serial: Serial) {
-        // TODO
-    }
-
-    pub fn resize_move_request(&mut self, wl_surface: &WlSurface, pointer: &PointerHandle<GlobalData>, start_data: PointerGrabStartData<GlobalData>, serial: Serial) {
-        if let Some(window) = self.window_manager.get_window_wayland(wl_surface) {
-            let window = window.clone();
-            let window_rect = window.get_rect();
-            
-            let pointer_loc = start_data.location;
-
-            let edge = detect_pointer_quadrant(pointer_loc, window_rect.to_f64());
-
-            // set pointer state
-            let grab = ResizeSurfaceGrab::start(
-                start_data,
-                window,
-                edge,
-                window_rect,
-            );
-            
-            pointer.set_grab(self, grab, serial, Focus::Clear);
-        }
-    }
-
     pub fn xdg_shell_handle_commit(&mut self, surface: &WlSurface) {
-        let popups = &mut self.popups;
-
         // Handle toplevel commits.
-        if let Some(window) = self.window_manager.get_window_wayland(surface)
+        if let Some(window) = self.window_manager.get_mapped(&surface.clone().into())
         {
-            // send the initial configure if relevant
-            #[cfg_attr(not(feature = "xwayland"), allow(irrefutable_let_patterns))]
-            if let Some(toplevel) = window.toplevel() {
-                let initial_configure_sent = with_states(surface, |states| {
-                    states
-                        .data_map
-                        .get::<XdgToplevelSurfaceData>()
-                        .unwrap()
-                        .lock()
-                        .unwrap()
-                        .initial_configure_sent
+            window.on_commit();
+        } else if let Some(unmapped) = self.window_manager.get_unmapped(&CustomWindowSurface::WlSurface(surface.clone())) {
+            let (initial_configure_sent, configured) = with_states(surface, |states| {
+                let guard = states
+                    .data_map
+                    .get::<XdgToplevelSurfaceData>()
+                    .unwrap()
+                    .lock()
+                    .unwrap();
+
+                (guard.initial_configure_sent, guard.configured)
+            });
+
+            #[cfg(feature = "trace_protocol")]
+            info!("initial_configure_sent: {}, configured: {}", initial_configure_sent, configured);
+
+            // first configure sent
+            if !initial_configure_sent {
+                // get client first configuration
+                let unmapped = unmapped.clone();
+                self.window_manager.get_configure(&unmapped, &mut self.state);
+
+                // will send initial configure - size
+                let _success = self.map_window(unmapped.clone());
+            } else if configured {
+                let has_buffer = with_renderer_surface_state(surface, |state| {
+                    state.buffer().is_some()
                 });
-    
-                if !initial_configure_sent {
-                    toplevel.send_configure();
+
+                if let Some(has_buffer) = has_buffer {
+                    // void first frame flash
+                    if has_buffer {
+                        // symbol the window is mapped
+                        let unmapped = unmapped.clone();
+                        self.set_mapped(&unmapped);
+                    }
                 }
             }
         }
 
         // Handle popup commits.
+        let popups = &mut self.popups;
         popups.commit(surface);
         if let Some(popup) = popups.find_popup(surface) {
             match popup {
@@ -376,46 +370,4 @@ impl GlobalData {
             }
         }
     }
-
 }
-
-fn check_grab(
-    pointer: &PointerHandle<GlobalData>, 
-    wl_surface: &WlSurface, 
-    serial: Serial
-) -> Option<PointerGrabStartData<GlobalData>> {
-    if !pointer.has_grab(serial) {
-        warn!("pointer don't have grab state");
-        return None;
-    }
-
-    let start_data = match pointer.grab_start_data() {
-        Some(start_data) => start_data,
-        None => {
-            warn!("Failed to get start_data from: {:?}", pointer);
-            return None;
-        }
-    };
-
-    let focus= match start_data.focus.as_ref() {
-        Some((focus, _)) => focus,
-        None => {
-            warn!("Failed to get start_data from: {:?}", pointer);
-            return None;
-        }
-    };
-
-    match focus {
-        PointerFocusTarget::WlSurface(surface) => {
-            // If the focus was for a different surface, ignore the request.
-            if !surface.id().same_client_as(&wl_surface.id()) {
-                warn!("the focus was for a different surface");
-                return None;
-            }
-        },
-        PointerFocusTarget::X11Surface(_) => { }
-    }
-
-    Some(start_data)
-}
-

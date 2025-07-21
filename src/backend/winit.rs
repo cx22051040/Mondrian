@@ -18,8 +18,7 @@ use smithay::{
 
 use crate::{
     manager::{
-        cursor::CursorManager, input::InputManager, output::OutputManager, render::RenderManager,
-        workspace::WorkspaceManager,
+        animation::AnimationManager, cursor::CursorManager, input::InputManager, output::OutputManager, render::RenderManager, window::WindowManager, workspace::WorkspaceManager
     },
     state::{GlobalData, State},
 };
@@ -64,8 +63,10 @@ impl Winit {
                             &mut data.render_manager,
                             &data.output_manager,
                             &data.workspace_manager,
+                            &data.window_manager,
                             &mut data.cursor_manager,
                             &data.input_manager,
+                            &mut data.animation_manager,
                         );
 
                         match data.backend.winit().backend.submit(Some(&[damage])) {
@@ -76,7 +77,7 @@ impl Winit {
                         }
 
                         // For each of the windows send the frame callbacks to tell them to draw next frame.
-                        data.workspace_manager.elements().for_each(|window| {
+                        data.workspace_manager.windows().for_each(|window| {
                             window.send_frame(
                                 data.output_manager.current_output(),
                                 data.start_time.elapsed(),
@@ -186,8 +187,10 @@ impl Winit {
         render_manager: &mut RenderManager,
         output_manager: &OutputManager,
         workspace_manager: &WorkspaceManager,
+        window_manager: &WindowManager,
         cursor_manager: &mut CursorManager,
         input_manager: &InputManager,
+        animation_manager: &mut AnimationManager
     ) {
         let _span = tracy_client::span!("winit_render");
 
@@ -196,8 +199,10 @@ impl Winit {
                 renderer,
                 output_manager,
                 workspace_manager,
+                window_manager,
                 cursor_manager,
                 input_manager,
+                animation_manager,
             );
 
             let _ = damage_tracker.render_output(

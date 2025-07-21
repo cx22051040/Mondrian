@@ -102,6 +102,7 @@ fn main() -> anyhow::Result<()> {
         .run(None, &mut global_data, move |data| {
             // running
             let _span = tracy_client::span!("flush_clients");
+            data.refresh();
             data.display_handle.flush_clients().unwrap();
         })
         .anyhow_err("Failed to run event loop")?;
