@@ -16,7 +16,7 @@ use smithay::{
     },
 };
 
-use crate::{input::focus::PointerFocusTarget, manager::window::WindowExt, protocol::xdg_shell::FullscreenSurface, state::GlobalData};
+use crate::{input::focus::PointerFocusTarget, manager::window::WindowExt, protocol::FullscreenSurface, state::GlobalData};
 
 const BUTTON_LEFT: u32 = 272;
 const BUTTON_RIGHT: u32 = 273;

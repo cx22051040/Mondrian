@@ -1,41 +1,27 @@
-use std::cell::RefCell;
-
 use crate::{
     input::focus::PointerFocusTarget, layout::WindowLayout, manager::window::{CustomWindowSurface, WindowExt}, state::GlobalData
 };
 use smithay::{
-    backend::renderer::utils::with_renderer_surface_state, delegate_xdg_shell, desktop::{layer_map_for_output, LayerSurface, PopupKind, Window}, input::{pointer::PointerHandle, Seat}, output::Output, reexports::{
+    backend::renderer::utils::with_renderer_surface_state, delegate_xdg_shell, desktop::{PopupKind, Window}, 
+    input::{
+        pointer::PointerHandle, Seat
+    }, 
+    output::Output, reexports::{
         wayland_protocols::xdg::shell::server::xdg_toplevel,
         wayland_server::{
             protocol::{wl_output::WlOutput, wl_seat, wl_surface::WlSurface}, Resource
         },
     }, utils::Serial, wayland::{
         compositor::{self, with_states},
-        shell::{wlr_layer::Layer, xdg::{
+        shell::xdg::{
             PopupSurface, PositionerState, ToplevelSurface, XdgShellHandler, XdgShellState, XdgToplevelSurfaceData
-        }},
+        },
     }
 };
 use smithay::{
     desktop::{find_popup_root_surface, get_popup_toplevel_coords},
 };
 
-#[derive(Default)]
-pub struct FullscreenSurface(RefCell<Option<(Window, Vec<LayerSurface>)>>);
-
-impl FullscreenSurface {
-    pub fn set(&self, window: Window, layer_surfaces: Vec<LayerSurface>) {
-        *self.0.borrow_mut() = Some((window, layer_surfaces));
-    }
-
-    pub fn get(&self) -> Option<(Window, Vec<LayerSurface>)> {
-        self.0.borrow_mut().clone()
-    }
-
-    pub fn clear(&self) -> Option<(Window, Vec<LayerSurface>)> {
-        self.0.borrow_mut().take()
-    }
-}
 
 impl XdgShellHandler for GlobalData {
     fn xdg_shell_state(&mut self) -> &mut XdgShellState {
@@ -120,27 +106,8 @@ impl XdgShellHandler for GlobalData {
                     state.size = Some(output_geo.size);
                     state.fullscreen_output = wl_output;
                 });
-                
-                output.user_data().insert_if_missing(FullscreenSurface::default);
 
-                // hide layer-shell surface
-                let mut map = layer_map_for_output(&output);
-                let mut layer_surfaces = vec![];
-                
-                for level in [Layer::Overlay, Layer::Top] {
-                    layer_surfaces.extend(
-                        map.layers_on(level).cloned()
-                    );
-                }
-                for layer_surface in &layer_surfaces {
-                    map.unmap_layer(layer_surface);
-                }
-                
-                output
-                    .user_data()
-                    .get::<FullscreenSurface>()
-                    .unwrap()
-                    .set(window.clone(), layer_surfaces);
+                self.fullscreen(window, &output);
             }
 
             // The protocol demands us to always reply with a configure,
@@ -170,22 +137,7 @@ impl XdgShellHandler for GlobalData {
 
         if let Some(wl_output) = ret {
             let output = Output::from_resource(&wl_output).unwrap();
-            if let Some(fullscreen) = output.user_data().get::<FullscreenSurface>() {
-                if let Some((_, layer_surfaces)) = fullscreen.get() {
-                    // restore layer-shell surfaces
-                    let mut map = layer_map_for_output(&output);
-
-                    for layer_surface in &layer_surfaces {
-                        map.map_layer(layer_surface).unwrap();
-                    }
-
-                    let output_working_geo = map.non_exclusive_zone();
-                    self.workspace_manager
-                        .update_output_rect(output_working_geo, &mut self.animation_manager);
-                }
-
-                fullscreen.clear();
-            }
+            self.unfullscreen(&output);
         }
 
         surface.send_pending_configure();

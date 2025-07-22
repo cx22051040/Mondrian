@@ -12,7 +12,7 @@ use smithay::{
 };
 
 use crate::{
-    input::focus::KeyboardFocusTarget, manager::{animation::AnimationManager, window::{WindowExt, WindowManager}}, protocol::xdg_shell::FullscreenSurface, render::{
+    input::focus::KeyboardFocusTarget, manager::{animation::AnimationManager, window::{WindowExt, WindowManager}}, protocol::FullscreenSurface, render::{
         background::{Background, BackgroundRenderElement}, border::{BorderRenderElement, BorderShader}, elements::{CustomRenderElements, OutputRenderElements, ShaderRenderElement}, MondrianRenderer
     }
 };
@@ -131,6 +131,7 @@ impl RenderManager {
             .get::<FullscreenSurface>()
             .and_then(|f| f.get())
         {
+            info!("yes");
             let location: Point<i32, Logical> = (0, 0).into();
             elements.extend(window
                 .render_elements::<WaylandSurfaceRenderElement<R>>(

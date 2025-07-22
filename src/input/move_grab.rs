@@ -62,12 +62,10 @@ impl PointerGrab<GlobalData> for MoveSurfaceGrab {
 
             match self.initial_layout {
                 WindowLayout::Tiled => {
-                    info!("123");
                     data.switch_layout(&self.window, self.start_data.location);
                 }
                 _ => { }
             }
-
         }
     }
 

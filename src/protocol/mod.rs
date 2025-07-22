@@ -1,17 +1,16 @@
-use std::time::Duration;
+use std::{cell::RefCell, time::Duration};
 
 use smithay::{
-    desktop::Window, input::pointer::{
+    desktop::{layer_map_for_output, LayerSurface, Window}, input::pointer::{
         Focus, GrabStartData as PointerGrabStartData, PointerHandle
-    }, 
-    utils::{
+    }, output::Output, utils::{
         Logical, Point, Rectangle, Serial, SERIAL_COUNTER
-    },
+    }, wayland::shell::wlr_layer::Layer
 };
 
 use crate::{
     input::{
-        focus::{KeyboardFocusTarget, PointerFocusTarget}, move_grab::MoveSurfaceGrab, resize_grab::ResizeSurfaceGrab
+        focus::PointerFocusTarget, move_grab::MoveSurfaceGrab, resize_grab::ResizeSurfaceGrab
     }, 
     layout::{ResizeEdge, WindowLayout}, 
     manager::{animation::{AnimationManager, AnimationType}, window::WindowExt}, 
@@ -26,20 +25,26 @@ pub mod xdg_shell;
 #[cfg(feature = "xwayland")]
 pub mod xwayland;
 
+#[derive(Default)]
+pub struct FullscreenSurface(RefCell<Option<(Window, Vec<LayerSurface>)>>);
+
+impl FullscreenSurface {
+    pub fn set(&self, window: Window, layer_surfaces: Vec<LayerSurface>) {
+        *self.0.borrow_mut() = Some((window, layer_surfaces));
+    }
+
+    pub fn get(&self) -> Option<(Window, Vec<LayerSurface>)> {
+        self.0.borrow_mut().clone()
+    }
+
+    pub fn clear(&self) -> Option<(Window, Vec<LayerSurface>)> {
+        self.0.borrow_mut().take()
+    }
+}
+
 impl GlobalData {
     pub fn map_window(&mut self, window: Window) -> bool {
         // map window for current workspace
-        let target = self
-            .input_manager
-            .get_keyboard_focus()
-            .and_then(|focus| {
-                if let KeyboardFocusTarget::Window(w) = focus {
-                    Some(w)
-                } else {
-                    None
-                }
-            });
-        
         let pointer = self.input_manager.get_pointer();
         let pointer = match pointer {
             Some(k) => k,
@@ -50,14 +55,16 @@ impl GlobalData {
         };
         let pointer_loc = pointer.current_location();
 
-        let edge = if let Some(KeyboardFocusTarget::Window(window)) = self.input_manager.get_keyboard_focus() {
-            detect_pointer_quadrant(pointer_loc, window.get_rect().unwrap().to_f64())
+        let target_tiled = self.window_manager.window_under_tiled(pointer_loc, self.workspace_manager.current_workspace().id());
+
+        let edge = if let Some(target_tiled) = &target_tiled {
+            detect_pointer_quadrant(pointer_loc, target_tiled.get_rect().unwrap().to_f64())
         } else {
             ResizeEdge::None
         };
 
         self.workspace_manager.map_window(
-            target.as_ref(),
+            target_tiled.as_ref(),
             window,
             edge,
             &mut self.animation_manager,
@@ -190,6 +197,49 @@ impl GlobalData {
             );
             
             pointer.set_grab(self, grab, serial, Focus::Clear);
+        }
+    }
+
+    pub fn fullscreen(&self, window: &Window, output: &Output) {
+        info!("full");
+        output.user_data().insert_if_missing(FullscreenSurface::default);
+
+        // hide layer-shell surface
+        let mut map = layer_map_for_output(output);
+        let mut layer_surfaces = vec![];
+        
+        for level in [Layer::Overlay, Layer::Top] {
+            layer_surfaces.extend(
+                map.layers_on(level).cloned()
+            );
+        }
+        for layer_surface in &layer_surfaces {
+            map.unmap_layer(layer_surface);
+        }
+        
+        output
+            .user_data()
+            .get::<FullscreenSurface>()
+            .unwrap()
+            .set(window.clone(), layer_surfaces);
+    }
+    
+    pub fn unfullscreen(&mut self, output: &Output) {
+        if let Some(fullscreen) = output.user_data().get::<FullscreenSurface>() {
+            if let Some((_, layer_surfaces)) = fullscreen.get() {
+                // restore layer-shell surfaces
+                let mut map = layer_map_for_output(output);
+
+                for layer_surface in &layer_surfaces {
+                    map.map_layer(layer_surface).unwrap();
+                }
+
+                let output_working_geo = map.non_exclusive_zone();
+                self.workspace_manager
+                    .update_output_rect(output_working_geo, &mut self.animation_manager);
+            }
+
+            fullscreen.clear();
         }
     }
 }

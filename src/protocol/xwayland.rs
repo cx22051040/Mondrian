@@ -66,11 +66,6 @@ impl XwmHandler for GlobalData {
     }
 
     fn new_window(&mut self, _xwm: XwmId, surface: X11Surface) {
-
-        if surface.is_override_redirect() {
-            return;
-        }
-
         // judge layout
         // TODO: a wired bug, some client may start many no type windows
         // and the windows has no info, cannot judge layout
@@ -97,17 +92,31 @@ impl XwmHandler for GlobalData {
 
         // add unmapped window in window_manager
         self.window_manager.add_window_unmapped(
-            window,
+            window.clone(),
             self.workspace_manager.current_workspace().id()
         );
     }
 
-    fn new_override_redirect_window(&mut self, _xwm: XwmId, _surface: X11Surface) { }
+    fn new_override_redirect_window(&mut self, _xwm: XwmId, surface: X11Surface) {
+        let layout = WindowLayout::Floating;
 
-    fn map_window_request(&mut self, _xwm: XwmId, window: X11Surface) {
-        window.set_mapped(true).unwrap();        
-        if let Some(window) = self.window_manager.get_unmapped(&window.into()) {
-            self.set_mapped(&window.clone());
+        // create new window
+        let window = Window::new_x11_window(surface);
+        window.set_layout(layout);
+
+        // add unmapped window in window_manager
+        self.window_manager.add_window_unmapped(
+            window.clone(),
+            self.workspace_manager.current_workspace().id()
+        );
+    }
+
+    fn map_window_request(&mut self, _xwm: XwmId, surface: X11Surface) {
+        surface.set_mapped(true).unwrap();
+
+        if let Some(window) = self.window_manager.get_unmapped(&surface.into()).cloned() {
+            self.set_mapped(&window);
+            self.map_window(window);
         }
     }
 
@@ -135,7 +144,24 @@ impl XwmHandler for GlobalData {
         h: Option<u32>,
         _reorder: Option<Reorder>,
     ) {
-        if let Some(window) = self.window_manager.get_mapped(&surface.clone().into()) {
+        // we just set the new size, but don't let windows move themselves around freely
+        if let Some(window) = self.window_manager.get_unmapped(&surface.clone().into()) {
+            let mut rect = window.geometry();
+            if let Some(x) = x {
+                rect.loc.x = x;
+            }
+            if let Some(y) = y {
+                rect.loc.y = y;
+            }
+            if let Some(w) = w {
+                rect.size.w = w as i32;
+            }
+            if let Some(h) = h {
+                rect.size.h = h as i32;
+            }
+            window.set_rect_cache(rect);
+            window.send_rect(rect);
+        } else if let Some(window) = self.window_manager.get_mapped(&surface.clone().into()) {
             match window.get_layout() {
                 WindowLayout::Floating => {
                     let mut rect = window.geometry();
@@ -159,34 +185,6 @@ impl XwmHandler for GlobalData {
                     let _ = surface.configure(rect);
                 }
             }
-        } else if let Some(unmapped) = self.window_manager.get_unmapped(&surface.clone().into()) {
-            match unmapped.get_layout() {
-                WindowLayout::Floating => {
-                    let mut rect = unmapped.geometry();
-                    if let Some(x) = x {
-                        rect.loc.x = x;
-                    }
-                    if let Some(y) = y {
-                        rect.loc.y = y;
-                    }
-                    if let Some(w) = w {
-                        rect.size.w = w as i32;
-                    }
-                    if let Some(h) = h {
-                        rect.size.h = h as i32;
-                    }
-                    unmapped.set_rect_cache(rect);
-                    unmapped.send_rect(rect);
-                }
-                WindowLayout::Tiled => {
-                    // insert into container tree but not mapped
-                    if let Some(rect) = unmapped.get_rect() {
-                        unmapped.send_rect(rect);
-                    } else {
-                        let _ = self.map_window(unmapped.clone());
-                    }
-                }
-            }
         }
     }
 
@@ -199,6 +197,33 @@ impl XwmHandler for GlobalData {
     ) {
         // modify cache
         // info!("configure_notify");
+    }
+
+    fn fullscreen_request(&mut self, _xwm: XwmId, surface: X11Surface) {
+        if let Some(window) = self.window_manager.get_mapped(&surface.clone().into()) {
+            info!("full screen");
+            let output = self.output_manager.current_output();
+            let output_rect = self.output_manager.output_geometry(output).unwrap();
+            
+            surface.set_fullscreen(true).unwrap();
+            self.fullscreen(window, output);
+
+            let _ = surface.configure(output_rect);
+        }
+    }
+
+    fn unfullscreen_request(&mut self, xwm: XwmId, surface: X11Surface) {
+        if let Some(window) = self.window_manager.get_mapped(&surface.clone().into()) {
+            let output = self.output_manager.current_output();
+            surface.set_fullscreen(false).unwrap();
+            self.fullscreen(window, output);
+
+            if let Some(rect) = window.get_rect() {
+                let _ = surface.configure(rect);
+            } else {
+                self.new_window(xwm, surface);
+            }
+        }
     }
 
     fn resize_request(&mut self, _xwm: XwmId, window: X11Surface, _button: u32, _resize_edge: X11ResizeEdge) {

@@ -92,10 +92,19 @@ ppt与视频链接：[https://pan.baidu.com/s/1rbNUo9MPMoF6pzZGAx5mGw?pwd=51vr](
 Wayland 基础协议配置：
 
 ```bash
-# archlinux
-sudo pacman -S --needed wayland
+
+# base depends
+libwayland
+libxkbcommon
+libudev
+libinput
+libgbm
+libseat
+xwayland
 
 # ubuntu must use 25.05 or above, don't need any operations
+
+# nixos use nix develop --impure
 
 # extra
 # fcitx5 输入法安装
@@ -112,6 +121,9 @@ sudo pacman -S kitty
 git clone https://github.com/Linermao/Mondrian.git
 
 cd /Mondrian
+
+# 初始化配置
+./set_up.sh
 
 # 初始化配置文件
 cargo build
@@ -171,7 +183,7 @@ cargo build --release
 
 - [x] 实现 `layer_shell` 基本协议支持
 
-- [ ] 实现 `xwayland` 基本协议支持
+- [x] 实现 `xwayland` 基本协议支持
 
 #### 🧩 输入设备管理
 
@@ -183,7 +195,7 @@ cargo build --release
 
 - [x] 实现使用键盘控制窗口的移动与布局
 
-- [ ] 实现使用鼠标进行窗口的移动与缩放
+- [x] 实现使用鼠标进行窗口的移动与缩放
 
 - [ ] 实现拓展设备的输入监听 - 触摸板，手写板，VR设备等
 
@@ -217,9 +229,9 @@ cargo build --release
   
   - [ ] 跨 output 的 window 移动逻辑
 
-- [ ] 实现 tiled 与 floating 窗口的互换与共存
+- [x] 实现 tiled 与 floating 窗口的互换与共存
 
-- [ ] 优化 popups 管理逻辑，允许其成为 floating 窗口
+- [x] 优化 popups 管理逻辑，允许其成为 floating 窗口
 
 #### 🎨 美化效果
 
