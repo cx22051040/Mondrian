@@ -352,7 +352,7 @@ impl GlobalData {
                 }
             }
         }
-
+        
         // The window
         else if let Some(window) =
             self.window_manager.window_under(pointer_loc, self.workspace_manager.current_workspace().id())

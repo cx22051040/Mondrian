@@ -201,28 +201,26 @@ impl XwmHandler for GlobalData {
 
     fn fullscreen_request(&mut self, _xwm: XwmId, surface: X11Surface) {
         if let Some(window) = self.window_manager.get_mapped(&surface.clone().into()) {
-            info!("full screen");
             let output = self.output_manager.current_output();
             let output_rect = self.output_manager.output_geometry(output).unwrap();
             
+            let _ = surface.configure(output_rect);
+            
             surface.set_fullscreen(true).unwrap();
             self.fullscreen(window, output);
-
-            let _ = surface.configure(output_rect);
         }
     }
 
-    fn unfullscreen_request(&mut self, xwm: XwmId, surface: X11Surface) {
+    fn unfullscreen_request(&mut self, _xwm: XwmId, surface: X11Surface) {
         if let Some(window) = self.window_manager.get_mapped(&surface.clone().into()) {
-            let output = self.output_manager.current_output();
             surface.set_fullscreen(false).unwrap();
-            self.fullscreen(window, output);
 
             if let Some(rect) = window.get_rect() {
                 let _ = surface.configure(rect);
-            } else {
-                self.new_window(xwm, surface);
             }
+
+            let output = self.output_manager.current_output().clone();
+            self.unfullscreen(&output);
         }
     }
 

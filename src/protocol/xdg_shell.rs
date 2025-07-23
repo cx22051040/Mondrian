@@ -143,6 +143,16 @@ impl XdgShellHandler for GlobalData {
         surface.send_pending_configure();
     }
 
+    fn show_window_menu(
+        &mut self,
+        _surface: ToplevelSurface,
+        _seat: wl_seat::WlSeat,
+        _serial: Serial,
+        _location: smithay::utils::Point<i32, smithay::utils::Logical>,
+    ) {
+        info!("shoud shouw");
+    }
+
     fn move_request(&mut self, surface: ToplevelSurface, seat: wl_seat::WlSeat, serial: Serial) {
         if !self.input_manager.is_mainmod_pressed() {
             return

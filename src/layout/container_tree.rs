@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{cell::RefCell, time::Duration};
 
 use smithay::{desktop::Window, utils::{Logical, Point, Rectangle}};
 
@@ -11,6 +11,14 @@ use crate::{
     manager::{animation::{AnimationManager, AnimationType}, window::WindowExt},
 };
 
+#[derive(Default)]
+pub struct ExpansionCache(pub RefCell<Option<Rectangle<i32, Logical>>>);
+
+impl ExpansionCache {
+    pub fn get(&self) -> Option<Rectangle<i32, Logical>> {
+        self.0.borrow().clone()
+    }
+}
 
 #[derive(Debug)]
 pub struct ContainerTree {
@@ -153,7 +161,29 @@ impl ContainerTree {
                     error!("the tiled_tree is none");
                 }
             },
-            WindowLayout::Floating => { }
+            WindowLayout::Floating => {
+                let mut rect = target.get_rect().unwrap();
+                match direction {
+                    Direction::Horizontal => {
+                        if is_favour {
+                            rect.loc.x += offset;
+                            rect.size.w -= offset;
+                        } else {
+                            rect.size.w += offset;
+                        }
+                    }
+                    Direction::Vertical => {
+                        if is_favour {
+                            rect.loc.y += offset;
+                            rect.size.h -= offset;
+                        } else {
+                            rect.size.h += offset;
+                        }
+                    }
+                }
+                target.set_rect_cache(rect);
+                target.send_rect(rect);
+            }
         }
 
     }
@@ -222,18 +252,28 @@ impl ContainerTree {
                 info!("expansion rect: {:?}", rect);
 
                 if let Some(window) = window_iter.next().cloned() {
-                    // add animation
-                    let window_rect = window.get_rect().unwrap();
-                    window.set_rect_cache(rect);
+                    if window
+                        .user_data()
+                        .get::<ExpansionCache>()
+                        .map(|guard| guard.0.borrow().is_none())
+                        .unwrap_or(true) 
+                    {
+                        let window_rect = window.get_rect().unwrap();
 
-                    animation_manager.add_animation(
-                        window,
-                        window_rect,
-                        rect,
-                        Duration::from_millis(30),
-                        AnimationType::EaseInOutQuad,
-                    );
+                        // ExpansionCache
+                        let guard = window.user_data().get_or_insert::<ExpansionCache, _>(|| {
+                            ExpansionCache(RefCell::new(Some(rect)))
+                        });
+                        *guard.0.borrow_mut() = Some(rect);
 
+                        animation_manager.add_animation(
+                            window,
+                            window_rect,
+                            rect,
+                            Duration::from_millis(30),
+                            AnimationType::EaseInOutQuad,
+                        );
+                    }
                 }
             }
 
@@ -241,8 +281,26 @@ impl ContainerTree {
         }
     }
 
-    pub fn recover(&self, _animation_manager: &mut AnimationManager) {
-        // TODO
+    pub fn recover(&self, animation_manager: &mut AnimationManager) {
+        for window in self.windows() {
+            // set expansion cache
+            if let Some(guard) = window.user_data().get::<ExpansionCache>() {
+                if let Some(from) = guard.get() {
+                    let to = window.get_rect().unwrap();
+    
+                    guard.0.borrow_mut().take();
+    
+                    animation_manager.add_animation(
+                        window.clone(), 
+                        from, 
+                        to, 
+                        Duration::from_millis(30),
+                        AnimationType::EaseInOutQuad,
+                    );
+                }
+            }
+
+        }
     }
 
     pub fn is_empty(&self) -> bool {

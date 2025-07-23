@@ -201,7 +201,6 @@ impl GlobalData {
     }
 
     pub fn fullscreen(&self, window: &Window, output: &Output) {
-        info!("full");
         output.user_data().insert_if_missing(FullscreenSurface::default);
 
         // hide layer-shell surface
@@ -266,11 +265,11 @@ fn set_pointer_as_center(target: &Window, pointer_loc: Point<i32, Logical>, anim
     let rect = target.get_rect().unwrap();
 
     let new_loc = (
-        pointer_loc.x - rect.size.w / 4,
-        pointer_loc.y - rect.size.h / 4,
+        pointer_loc.x - rect.size.w * 3 / 8,
+        pointer_loc.y - rect.size.h * 3 / 8,
     ).into();
 
-    let new_rect = Rectangle::new(new_loc, rect.size/2);
+    let new_rect = Rectangle::new(new_loc, rect.size*3/4);
 
     target.set_rect_cache(new_rect);
     // target.send_rect(rect);

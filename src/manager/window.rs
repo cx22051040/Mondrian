@@ -9,7 +9,7 @@ use smithay::{
     }, xwayland::X11Surface,
 };
 
-use crate::{layout::WindowLayout, state::{GlobalData, State}};
+use crate::{layout::{container_tree::ExpansionCache, WindowLayout}, state::{GlobalData, State}};
 
 use super::workspace::WorkspaceId;
 
@@ -299,6 +299,16 @@ impl WindowManager {
         for window in &self.mapped {
             if Some(&workspace_id) != self.window_workspace.get(window) {
                 continue;
+            }
+
+            // expansion window
+            if let Some(guard) = window.user_data().get::<ExpansionCache>() {
+                if let Some(window_rect) = guard.get() {
+                    if window_rect.contains(pointer_loc.to_i32_round()) {
+                        return Some(window.clone())
+                    }
+                    continue;
+                }
             }
 
             let window_rect = window.get_rect().unwrap();
