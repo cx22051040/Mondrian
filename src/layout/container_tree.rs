@@ -60,7 +60,7 @@ impl ContainerTree {
                     match scheme {
                         TiledScheme::Default => {
                             // default: must have target if layout tree is some         
-                            let target = target.unwrap();
+                            let target = target.unwrap(); 
                             let target_rec = target.get_rect().unwrap();
     
                             let (direction, is_favour) = edge.to_direction_and_favour(target_rec);

@@ -1,0 +1,30 @@
+{
+    "layer": "top",
+    "position": "top",
+    "height": 0,
+    "margin-top": 5,
+    "mod": "dock",
+    "exclusive": true,
+    "passthrough": false,
+    "gtk-layer-shell": true,
+
+    // load modules
+    "include": ["~/.config/waybar/modules/modules.jsonc"],
+
+    "modules-left": [
+        "hyprland/workspaces"
+    ],
+    "modules-center": [
+        "hyprland/window",
+        "wlr/taskbar"
+    ],
+    "modules-right": [
+        "tray",
+        "memory",
+        "network",
+        "pulseaudio",
+        "pulseaudio#microphone",
+        "clock",
+        "custom/power"
+    ]
+}

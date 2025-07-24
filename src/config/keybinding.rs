@@ -21,6 +21,7 @@ pub enum FunctionEnum {
     SwitchLayout,
 
     SwitchWorkspace(usize),
+    Template(usize),
 }
 
 #[derive(Debug, Clone)]
@@ -173,6 +174,13 @@ impl KeybindingConfigs {
                                 }
 
                                 FunctionEnum::SwitchWorkspace(id)
+                            },
+                            "template" => {
+                                let id = key.split('+').find_map(|s| {
+                                    s.trim().parse::<usize>().ok()
+                                }).unwrap_or(1);
+
+                                FunctionEnum::Template(id)
                             },
                             _ => {
                                 tracing::info!(

@@ -12,7 +12,7 @@ use smithay::{
 };
 
 use crate::{
-    input::focus::KeyboardFocusTarget, layout::container_tree::ExpansionCache, manager::{animation::AnimationManager, window::{WindowExt, WindowManager}}, protocol::FullscreenSurface, render::{
+    input::focus::KeyboardFocusTarget, layout::{container_tree::ExpansionCache, WindowLayout}, manager::{animation::AnimationManager, window::{WindowExt, WindowManager}}, protocol::FullscreenSurface, render::{
         background::{Background, BackgroundRenderElement}, border::{BorderRenderElement, BorderShader}, elements::{CustomRenderElements, OutputRenderElements, ShaderRenderElement}, MondrianRenderer
     }
 };
@@ -178,15 +178,23 @@ impl RenderManager {
                     elements.extend(self.get_border_render_elements(renderer, rect));
                 }
             }
-
+            
             let render_loc = (rect.loc - window.geometry().loc).to_physical_precise_round(output_scale);
+            
+            // set alpha
+            let mut alpha  = 0.85;
+            if let WindowLayout::Floating = window.get_layout() {
+                alpha = 1.0
+            } else if let Some(val) = window_manager.get_opacity(window) {
+                alpha = val;
+            }
 
             elements.extend(window
                 .render_elements::<WaylandSurfaceRenderElement<R>>(
                     renderer,
                     render_loc,
                     Scale::from(output_scale),
-                    0.85,
+                    alpha,
                 ).into_iter().map(CustomRenderElements::Surface)
             );
         }

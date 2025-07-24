@@ -194,6 +194,9 @@ impl GlobalData {
                         self.update_output_working_size();
                         self.set_keyboard_focus(None, serial);
                     }
+                    FunctionEnum::Template(_) => {
+                        
+                    }
                 },
             }
         

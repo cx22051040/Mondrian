@@ -45,6 +45,7 @@ pub struct TiledTree {
     root: NodeId,
 
     windows: IndexMap<Window, NodeId>,
+
     gap: i32
 }
 
@@ -203,10 +204,9 @@ impl TiledTree {
                 }
             }
             return true;
-        } else {
-            error!("not find target_id from window: {:?}", target);
-            return false;
         }
+
+        false
     }
     
     pub fn remove(&mut self, target: &Window, animation_manager: &mut AnimationManager) {

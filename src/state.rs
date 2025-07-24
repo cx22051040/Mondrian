@@ -126,7 +126,7 @@ impl GlobalData {
         // initial managers
         let mut output_manager = OutputManager::new();
         let mut workspace_manager = WorkspaceManager::new(configs.conf_workspaces.clone());
-        let window_manager = WindowManager::new();
+        let window_manager = WindowManager::new(configs.conf_windowrules.clone());
         let input_manager = InputManager::new(
                 backend.seat_name(),
                 &display_handle,

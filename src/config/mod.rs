@@ -2,10 +2,15 @@ use std::{fs, sync::Arc};
 
 use regex::Regex;
 
-use crate::config::{keybinding::KeybindingConfigs, workspace::WorkspaceConfigs};
-
 pub mod keybinding;
 pub mod workspace;
+pub mod windowrules;
+
+use crate::config::{
+    keybinding::KeybindingConfigs, 
+    workspace::WorkspaceConfigs,
+    windowrules::WindowRulesConfigs,
+};
 
 #[derive(Debug, Clone)]
 pub struct Configs {
@@ -16,6 +21,7 @@ pub struct Configs {
 
     pub conf_workspaces: Arc<WorkspaceConfigs>,
     pub conf_keybindings: Arc<KeybindingConfigs>,
+    pub conf_windowrules: Arc<WindowRulesConfigs>
 }
 
 impl Configs {
@@ -35,6 +41,7 @@ impl Configs {
 
         let mut conf_workspaces = WorkspaceConfigs::default();
         let mut conf_keybindings = KeybindingConfigs::default();
+        let mut conf_windowrules = WindowRulesConfigs::default();
 
         if let Ok(content) = content {
             info!("using config from {:?}", config_path);
@@ -98,6 +105,11 @@ impl Configs {
                             Ok(_) => info!("Loaded keybindings configs from {}", source_file),
                             Err(e) => error!("Failed to load keybindings configs: {}", e),
                         }
+                    } else if source_file.contains("windowrules") {
+                        match conf_windowrules.load_configs(source_file) {
+                            Ok(_) => info!("Loaded windowrules configs from {}", source_file),
+                            Err(e) => error!("Failed to load keybindings configs: {}", e),
+                        }
                     }
                 }
             }
@@ -111,6 +123,7 @@ impl Configs {
             exec_once_cmds,
             conf_workspaces: Arc::new(conf_workspaces),
             conf_keybindings: Arc::new(conf_keybindings),
+            conf_windowrules: Arc::new(conf_windowrules)
         }
     }
 

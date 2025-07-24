@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, rc::Rc, sync::Arc};
 
 use smithay::{
     desktop::{Window, WindowSurface},
@@ -9,7 +9,7 @@ use smithay::{
     }, xwayland::X11Surface,
 };
 
-use crate::{layout::{container_tree::ExpansionCache, WindowLayout}, state::{GlobalData, State}};
+use crate::{config::windowrules::WindowRulesConfigs, layout::{container_tree::ExpansionCache, WindowLayout}, state::{GlobalData, State}};
 
 use super::workspace::WorkspaceId;
 
@@ -42,8 +42,7 @@ pub trait WindowExt {
     fn set_rect_cache(&self, rect: Rectangle<i32, Logical>);
     fn send_rect(&self, rect: Rectangle<i32, Logical>);
     fn get_rect(&self) -> Option<Rectangle<i32, Logical>>;
-    #[allow(dead_code)]
-    fn get_title_and_id(&self) -> Option<(Option<String>, Option<String>)>;
+    fn get_title_and_id(&self) -> (Option<String>, Option<String>);
 }
 
 impl WindowExt for Window {
@@ -109,7 +108,7 @@ impl WindowExt for Window {
         self.user_data().get::<Rc<RefCell<Rectangle<i32, Logical>>>>().and_then(|rect| Some(rect.borrow().clone()))
     }
 
-    fn get_title_and_id(&self) -> Option<(Option<String>, Option<String>)> {
+    fn get_title_and_id(&self) -> (Option<String>, Option<String>) {
         match self.underlying_surface() {
             WindowSurface::Wayland(toplevel) => {
                 compositor::with_states(toplevel.wl_surface(), |states| {
@@ -119,11 +118,13 @@ impl WindowExt for Window {
                         .unwrap()
                         .lock()
                         .unwrap();
-                    Some((roll.title.clone(), roll.app_id.clone()))
+                    (roll.title.clone(), roll.app_id.clone())
                 })
             },
-            WindowSurface::X11(_) => {
-                None
+            WindowSurface::X11(x11_surface) => {
+                let title = x11_surface.title();
+                let class = Some(x11_surface.class());
+                (Some(title), class)
             }
         }
     }
@@ -134,15 +135,18 @@ pub struct WindowManager {
     unmapped: Vec<Window>,
     pub window_workspace: HashMap<Window, WorkspaceId>,
     pub foreign_handle: HashMap<WlSurface, ForeignToplevelHandle>,
+
+    configs: Arc<WindowRulesConfigs>,
 }
 
 impl WindowManager {
-    pub fn new() -> Self {
+    pub fn new(configs: Arc<WindowRulesConfigs>) -> Self {
         Self {
             mapped: Vec::new(),
             unmapped: Vec::new(),
             window_workspace: HashMap::new(),
             foreign_handle: HashMap::new(),
+            configs
         }
     }
 
@@ -363,6 +367,15 @@ impl WindowManager {
         if self.mapped.contains(window) {
             self.mapped.retain(|w| w != window);
             self.mapped.insert(0, window.clone());
+        }
+    }
+
+    pub fn get_opacity(&self, window: &Window) -> Option<f32> {
+        let (_, app_id) = window.get_title_and_id();
+        if let Some(app_id) = app_id {
+            self.configs.global_opacity.get(&app_id).cloned()
+        } else {
+            None
         }
     }
 
