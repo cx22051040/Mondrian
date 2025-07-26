@@ -44,6 +44,9 @@
             wayland
             wayland-protocols
 
+            # gdb debug
+            gdb
+
             # c lib
             clippy
             rustfmt

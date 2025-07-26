@@ -40,6 +40,8 @@ impl ContainerTree {
     }
 
     pub fn update_root_rect(&mut self, root_rect: Rectangle<i32, Logical>, animation_manager: &mut AnimationManager) {
+        let _span = tracy_client::span!("container tree: update_root_rect window");
+
         self.root_rect = root_rect;
         if let Some(tiled_tree) = &mut self.tiled_tree {
             tiled_tree.update_root_rect_recursive(root_rect, animation_manager);
@@ -54,6 +56,8 @@ impl ContainerTree {
         scheme: &TiledScheme,
         animation_manager: &mut AnimationManager,
     ) -> bool {
+        let _span = tracy_client::span!("container tree: insert new window");
+
         let result = match window.get_layout() {
             WindowLayout::Tiled => {
                 if let Some(tiled_tree) = &mut self.tiled_tree {
@@ -98,6 +102,8 @@ impl ContainerTree {
     }
 
     pub fn remove(&mut self, target: &Window, animation_manager: &mut AnimationManager) {
+        let _span = tracy_client::span!("container tree: remove window");
+
         match target.get_layout() {
             WindowLayout::Tiled => {
                 if let Some(tiled_tree) = &mut self.tiled_tree {
@@ -153,6 +159,8 @@ impl ContainerTree {
         offset: i32, 
         is_favour: bool,
     ) {
+        let _span = tracy_client::span!("container tree: resize window");
+
         match target.get_layout() {
             WindowLayout::Tiled => {
                 if let Some(tiled_tree) = &mut self.tiled_tree {
@@ -189,6 +197,8 @@ impl ContainerTree {
     }
 
     pub fn invert(&mut self, target: &Window, animation_manager: &mut AnimationManager) {
+        let _span = tracy_client::span!("container tree: invert window");
+
         match target.get_layout() {
             WindowLayout::Tiled => {
                 if let Some(tiled_tree) = &mut self.tiled_tree {
@@ -205,6 +215,8 @@ impl ContainerTree {
     }
 
     pub fn exchange(&mut self, target: &Window, direction: Direction, is_favour: bool, animation_manager: &mut AnimationManager) {
+        let _span = tracy_client::span!("container tree: exchange window");
+
         match target.get_layout() {
             WindowLayout::Tiled => {
                 if let Some(tiled_tree) = &mut self.tiled_tree {
@@ -221,6 +233,8 @@ impl ContainerTree {
     }    
 
     pub fn expansion(&self, animation_manager: &mut AnimationManager) {
+        let _span = tracy_client::span!("container tree: expansion window");
+
         let total = self.windows().count();
         let max_per_row = 4;
         let gap = self.gap;
@@ -282,6 +296,8 @@ impl ContainerTree {
     }
 
     pub fn recover(&self, animation_manager: &mut AnimationManager) {
+        let _span = tracy_client::span!("container tree: recover window");
+
         for window in self.windows() {
             // set expansion cache
             if let Some(guard) = window.user_data().get::<ExpansionCache>() {

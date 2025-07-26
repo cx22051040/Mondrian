@@ -107,9 +107,19 @@
 
 == 项目开发进度
 
-项目自 3 月启动，初期集中精力对现有 Wayland 合成器框架（如 wlroots、Smithay 等）进行了调研与试验，结合项目可控性与扩展性要求，最终选择 #standout("Rust + Smithay") 作为核心技术栈。
+项目自 3 月 25 日启动，初期集中精力对现有 Wayland 合成器框架（如 wlroots、Smithay 等）进行了调研与试验，结合项目可控性与扩展性要求，最终选择 #standout("Rust + Smithay") 作为核心技术栈。
 
 截至初赛阶段(6.31)，本项目已完成主要基础功能的开发，现已能够在主流 Linux 发行版上部署运行，具备日常使用的基本可用性。
+
+截至决赛阶段（8.12）,本项目进一步实现了更多拓展功能，提升了“个性化定制”这一主题任务。开放多种配置接口提供给用户，用户也可以通过自己编写 shell 代码来实现快捷键的拓展响应事件。
+
+项目目前已实现多后端支持（包括 DRM/KMS 和 Winit 等），显著提升了在不同硬件与环境下的适配能力。
+
+在严格测试下，运行时崩溃情况基本被消除，系统具备良好的稳定性与容错机制。同时，本项目已集成 XWayland 支持，能够无缝运行绝大多数基于 X11 的传统 Linux GUI 应用。
+
+实测环境下，约 90% 以上的常见桌面程序（如 Firefox、VS Code、GIMP、LibreOffice 等）均可稳定运行，确保用户在迁移到本系统时不牺牲原有生态体验。
+
+这些改进标志着项目已从原型阶段迈向实用性，具备成为主力桌面环境的潜力。
 
 在此基础上，为实现更高的性能、更强的可定制性以及更全面的兼容性，后续开发工作将聚焦于以下方向：
 
@@ -119,19 +129,27 @@
     align: center,
     inset: 5pt,
     
-    [*XWayland 支持*], [以兼容传统 X11 应用程序],
     [*多显示器管理*], [支持动态热插拔与独立配置],
     [*多输入设备支持*], [提升对触控板、手写板等外设的适配能力],
-    [*个性化自定义功能*], [允许用户通过配置文件自定义风格与快捷操作],
     [*更优秀的平铺布局方案*], [允许自由切换与自定义排版],
   )
 ]
 
+#pagebreak()
 
 == 项目核心功能
 
+本项目支持在 TTY 模式下直接启动桌面显示系统，基于 DRM/KMS 原生渲染，无需依赖 X 服务或其他 Wayland 合成器进行消息转发。系统启动即加载 compositor，整体流程轻量高效。
 
-/ 代码体量: 累计新增 1.5w 行代码，配套文档逾 2w 字，涵盖架构设计、接口协议与开发细节。
+通过内建的快捷键机制，用户可以快速启动常用应用，实现类似传统桌面环境的流畅体验。
+
+项目设计充分考虑了日常使用场景，默认配置开箱即用，支持多任务管理、窗口操作与主题切换。
+
+无需额外学习成本，普通用户也能轻松迁移，无割裂感，真正做到替代主流桌面环境。
+
+== 项目特点
+
+/ 代码体量: 累计新增 1w+ 行代码。
 
 / 全栈实现: 实现双后端架构：winit 支持桌面环境，tty 支持裸机直启，原生 DRM/KMS 渲染流程：直接控制 GPU 输出，无需依赖 X11 Server。
 
@@ -255,9 +273,7 @@ X11 协议支持网络透明性，即 X Client 和 X Server 可以运行在不�
 )
 
 
-
 #pagebreak()
-
 
 
 === Wayland 协议的优势
@@ -362,6 +378,84 @@ Rust 是一门强调安全性与并发性能的系统级语言，具备以下几
 / 数据并发性（Fearless Concurrency）: Rust 支持无数据竞争的并发操作，允许我们在后台异步处理输入事件、合成器状态更新与渲染流程，确保交互响应流畅且线程安全。
 / 丰富的生态与 tooling: cargo、clippy、rust-analyzer 等工具提供了出色的开发体验和持续集成支持，便于维护大型项目。与 Mesa、WGPU、EGL 等图形库的绑定日趋成熟，为集成硬件加速渲染提供了良好基础。
 
+#pagebreak()
+
+== Wayland 协议交互细节（The Wayland Protocol#cite(<wayland_design_patterns>)）
+
+=== Unix Socket
+
+迄今为止，所有的 Wayland 实现均通过 Unix Socket 工作。 这有个很特别的原因：文件描述符消息。 Unix Socket 是最实用的跨进程文件描述符传输方法，这对大文件传输（如键盘映射、像素缓冲区、剪切板）来说非常必要。 理论上其它传输协议（比如 TCP）是可行的，但是需要开发者实现大文件传输的替代方案。
+
+为了找到 Unix Socket 并连接，大部分实现要做的事和 libwayland 所做的一样：
+
+1. 如果 WAYLAND_SOCKET 已设置，则假设父进程已经为我们配置了连接，将 WAYLAND_SOCKET 解析为文件描述符。
+2. 如果 WAYLAND_DISPLAY 已设置，则与 XDG_RUNTIME_DIR 路径连接，尝试建立 Unix Socket。
+3. 假设 Socket 名称为 wayland-0 并连接 XDG_RUNTIME_DIR 为路径，尝试建立 Unix Socket。
+4. 失败放弃。
+
+=== 接口与事件请求
+
+Wayland 协议通过发出作用于对象的请求和事件来工作。 每个对象都有自己的接口，定义了可行的请求事件以及对应的签名。wl_surface 是最简单的一个接口。
+
+Surface 是可以在屏幕上显示的像素区域， 是我们构建应用程序窗口之类的东西的基本元素之一。 它有个请求名为“damage”（损坏），客户端发送这个请求表示某个 surface 的某些部分发生了变化，需要重绘。 下面是 wire 中的一个 damage 消息的带注释示例（16 进制）：
+
+```bash
+0000000A    对象 ID (10)
+00180002    消息长度 (24) 和请求操作码 (2)
+00000000    X 坐标       (int): 0
+00000000    Y 坐标       (int): 0
+00000100    宽度         (int): 256
+00000100    高度         (int): 256
+```
+
+这是 session 会话的小片段：surface 已经提前分配，它的 ID 为 10。 当服务端收到这条消息后，服务端会查找 ID 为 10 的对象，发现它是一个 wl_surface 实例。 基于此，服务端用请求的 opcode 操作码 2 查找请求的签名。 然后就知道了接下来有四个整型作为参数，这样服务器就能解码这条消息，分派到内部处理。
+
+请求是从客户端发送到服务端，反之，服务端也可以给客户端广播消息，叫做“事件”。 例如，其中一个事件是 wl_surface 的 enter 事件，在 surface 被显示到指定的 output 时，服务端将发送该事件 （客户端可能会响应这一事件，比如为 HiDPI 高分屏调整缩放的比例因数）。
+
+=== 原子性
+
+Wayland 协议设计规范中最重要的是原子性。 Wayland 的一个既定目标是 "每帧都完美"。 为此，大多数接口允许以事务的方式更新，使用多个请求来创建一个新的表示状态，然后一次性提交所有请求。 例如，以下几个属性可以在 wl_surface 上配置：
+
+- 附加的像素缓冲区
+- 需要重新绘制的变更区域
+- 出于优化而设置为不透明的区域
+- 可接受输入事件的区域
+- 变换，比如旋转 90 度
+- 缓冲区的缩放比例，用于 HiDPI
+
+接口为这些配置提供了许多独立的请求，但它们都处于挂起状态（pending）。 仅当发送提交(commit)请求时，挂起状态才会合并到当前状态（current）。 从而可以在单帧内，原子地更新所有这些属性。 结合其他一些关键性的设计决策，Wayland 合成器可以在每一帧中都完美地渲染一切，没有撕裂或更新一半的窗口，每个像素都在它应在的位置，静静地显示。
+
+=== 共享内存缓冲区
+
+从客户端获取像素到混成器最简单，也是唯一被载入 wayland.xml 的方法，就是 wl_shm ——共享内存。简单地说，它允许你为混成器传输一个文件描述符到带有 MAP_SHARED 的内存映射（mmap），然后从这个池中共享像素缓冲区。添加一些简单的同步原语，以防止缓冲区竞争，然后你就有了一个可行且可移植的解决方案。
+
+=== xdg shell
+
+XDG (cross-desktop group) shell 是 Wayland 的一个标准扩展协议，描述了应用窗口的语义。它定义了两个 wl_surface 角色："toplevel" 用于你的顶层应用窗口；"popup" 则用于诸如上下文菜单、下拉菜单、工具提示等等——它们是顶层窗口的子集。有了这些，你可以将其归结于一个树状结构，顶层是根，弹出式或附加式窗口处于顶层的子叶上。该协议还定义了一个定位器接口，用于辅助定位弹窗，并提供有关窗口周围事物的那些信息。
+
+在 xdg-shell 领域内的表面被称为 xdg_surfaces，这个接口带来了两种 XDG 表面所共有的功能——toplevels 和 popups（也即之前提到的顶层窗口和弹窗）。每种 XDG 表面的语义仍然不同，所以必须通过一个额外的角色来明确指定它们。
+
+xdg_surface 接口提供了额外的请求来分配更具体的 popup 和 toplevel 角色。一旦我们将一个全局对象绑定到全局接口 xdg_wm_base，我们就可以使用 get_xdg_surface 请求来获得一个 wl_suraface。
+
+xdg-surface 最重要的 API 就是 configure 和 ack_configure 这一对。Wayland 的一个目标是让每一帧都完美呈现，这意味着任何一帧都没有应用了一半的状态变化（原子性，避免画面撕裂），为了实现这个目标，我们必须要在客户端和服务端之间同步这些变化。对于 XDG 表面来说，这对消息（这两个 API 传递的内容）正是实现这一目的的机制。
+
+当来自服务端的事件通知你配置（或重新配置）一个表面时，将它们设置到一个待定状态。当一个 configure 事件到来时，会应用先前准备好的变化，使用 ack_configure 来确定你已经这样做了，然后渲染并提交一个新的帧。
+
+以下步骤将会从零开始创建一个屏幕上的窗口：
+
+1. 绑定到 wl_compositor 并使用它来创建一个 wl_surface
+2. 绑定到 xdg_wm_base 并用它为你的 wl_surface 创建一个 xdg_surface
+3. 通过 xdg_surface.get_toplevel 从 xdg_surface 创建一个 xdg_toplevel
+4. 为 xdg_surface 创建一个监听器，并且等待 configure 事件的发生。
+5. 绑定到你选择的缓冲区分配机制（如 wl_shm），并分配一个共享缓冲区，然后将你要显示的内容渲染后传入。
+6. 使用 wl_surface.attach 将 wl_buffer 附加到 wl_surface 上。
+7. 使用 xdg_surface.ack_configure 把 configure 的序列信息传给它，确认你已经准备好了一个合适的帧。
+8. 发送一个 wl_surface.commit 请求。
+
+
+#pagebreak()
+
+
 == 项目最小实现
 
 === 架构概览
@@ -427,8 +521,6 @@ FnMut(E, &mut Metadata, &mut State)
 - `E`: 来自事件源的事件本体，类型依赖于事件源。
 - `Metadata`: 事件元信息（通常是 `calloop::generic::GenericMetadata`），包含事件触发时的底层 I/O 状态，例如可读/可写标志。大多数情况下你可以忽略该参数，除非你要做更底层的 I/O 操作。
 - `State`: 传入的全局状态对象，是你自定义的全局状态结构，也就是一开始定义的类型 `EventLoop<'_, State>` 中的 `State`。
-
-*或许你会疑惑我们只是告诉了 `EventLoop` 的 `State` 类型，没有实现 `State` 值的传入，为什么这里可以获取到一个可变借用，别着急，后面就会揭晓答案*
 
 最容易理解的就是客户端连接请求的事件处理：
 
@@ -508,7 +600,7 @@ loop_handle
 - 绑定 `xdg_surface` 与角色：随后，客户端使用 `xdg_wm_base.get_xdg_surface(surface)` 创建`xdg_surface`，再通过 `get_toplevel()` 等调用为其赋予具体角色。
 - 随后就可以通过 `surface.commit()` 向 `compositor` 传递需要显示的内容。
 
-看到如此多的协议信息，不要害怕！让我们一步步的来拆解各个步骤的具体含义，首先有必要介绍一下 `xdg-shell` 协议。
+看到如此多的协议信息，首先有必要介绍一下 `xdg-shell` 协议。
 
 === xdg-shell 协议实现
 
@@ -700,6 +792,7 @@ event_loop
 
 至此，我们就得到了一个简单的，可以响应客户端请求，并且支持鼠标，键盘操作的简易 Wayland Compositor。
 
+#pagebreak()
 
 == 输入设备事件监听
 
@@ -775,7 +868,6 @@ impl InputManager{
     fn load_keybindings(path: &str) -> anyhow::Result<HashMap<String, KeyAction>> {
         let content = fs::read_to_string(path).anyhow_err("Failed to load keybindings config")?;
         let mut bindings = HashMap::<String, KeyAction>::new();
-
         let re =
             // bind = Ctrl + t, command, "kitty"
             // bind = Ctrl + 1, exec, "func1"
@@ -1167,8 +1259,6 @@ libinput 是一个*用户空间库*，提供统一的输入设备管理接口，
 
 === 代码实现细节
 
-Tty 后端部分代码量过大，这里只解释核心的代码部分。
-
 基本数据结构：
 
 ```rust
@@ -1493,203 +1583,144 @@ frame_submmit() // 提交帧，执行 pageflip
 flush_client() // 通知客户端渲染下一帧
 ```
 
+#pagebreak()
 
-=== 平铺式布局算法设计(计划修改算法，使用容器多叉树)
+== 平铺式布局算法设计
 
-在一个窗口管理器中，布局系统扮演着核心角色。为了高效管理窗口的空间排布，本项目采用了一种结构清晰、修改高效的 *容器式二叉树（Contain Binary Tree）* 结构作为窗口布局的基础数据模型。该树结构基于 `SlotMap` 构建，结合唯一键值索引（Key-based access），理论上可以将常规操作如插入、删除、定位的时间复杂度优化至常数级别 `O(1)`，由于窗口数量一般不超过两位数，本项目综合考量时间与空间复杂度，最终实现 `O(n)` 时间复杂度。
+在一个窗口管理器中，布局系统扮演着核心角色。为了高效管理窗口的空间排布，本项目采用了一种结构清晰、修改高效的 *容器式二叉树（Contain Binary Tree）* 结构作为窗口布局的基础数据模型。该树结构基于 `SlotMap` 构建，结合唯一键值索引（Key-based access），理论上可以将常规操作如插入、删除、定位的时间复杂度优化至常数级别 `O(1)`。
 
-由于二叉树的方向表达能力不足，本项目还引入了 *全局窗口邻接表* 作为补充描述数据结构，记录全局所有窗口的临接方向关系。
+=== 平铺树与浮动窗口
 
-为了管理和组织当前活动窗口的空间结构，在 `Workspace` 结构体中维护了两个核心字段：
+在窗口管理中，“浮动”与“平铺”是两种截然不同的布局策略。
 
-```rust
-#[derive(Debug)]
-pub struct Workspace {
-    ...
-    pub scheme: TiledScheme,
-    pub tiled_tree: Option<TiledTree>,
-}
-```
+对于浮动窗口来说，每个窗口都可以自由移动和调整大小，位置与层级由用户直接控制。由于它们彼此之间不存在位置上的约束与影响，因此在布局结构上无需记录窗口之间的相对关系。这类窗口更像是“独立漂浮”的实体，适合用于临时对话框、悬浮工具栏等场景。
 
-- `scheme`：用于指示当前使用的窗口排列方案。
-- `tiled_tree`：存储当前工作区内窗口的具体排布信息，其核心数据结构即为 `TiledTree`。
+相比之下，平铺窗口则要求每个窗口在屏幕空间中占据明确的非重叠区域。窗口的插入、删除与移动都会影响到其他窗口的位置或大小。因此，如何有效地记录和管理窗口之间的关系，成为平铺布局系统设计的核心问题。
 
-==== 布局方案枚举
+本项目采用二叉树（Binary Tree）作为核心数据结构：
 
-为布局方案定义枚举类型，默认跟随鼠标焦点布局方案。
+- 每个叶节点表示一个窗口，内部节点则表示一个分割操作（水平或垂直）。
+- 当插入一个新窗口时，只需将目标节点转换为一个新的内部节点，并将其两个子节点分别指向原窗口和新窗口。
+- 插入时自动按比例分配空间（如均分），形成结构性对等的子窗口布局。
+- 删除窗口时只需将其父节点的另一个子节点提升替代，即可实现布局的自动“复原”，并保持一致的空间占用逻辑。
 
-```rust
-#[derive(Debug, Clone)]
-pub enum TiledScheme {
-    Default,
-    Spiral,
-}
-```
+这种结构的优点在于：
 
-==== 节点信息设计
+- 局部性强：每次操作只影响相邻节点，避免全局调整；
+- 操作直观：插入/删除窗口逻辑与视觉反馈一致，符合用户直觉；
+- 便于导航与重排：通过遍历或修改节点，可以轻松实现焦点移动、窗口交换、尺寸调整等高级操作；
+- 支持持久化与序列化：树结构便于保存当前布局状态，支持布局快照与恢复。
 
-```rust
-pub enum Direction {
-    Left,
-    Up,
-    Right,
-    Down,
-}
+=== 数据结构优化
 
-pub enum NodeData {
-    Leaf { window: Window },
-    Split {
-        direction: Direction,
-        rec: Rectangle<i32, Logical>,
-        offset: Point<i32, Logical>,
-        left: NodeId,
-        right: NodeId,
-    }
-}
-```
+在平铺式窗口管理中，窗口之间的空间分配关系是紧密关联的。对任意一个窗口进行移动、调整大小、关闭等操作，往往会影响到其相邻窗口的布局结构。
+因此，如何快速定位相关窗口并进行相应调整，成为决定系统响应效率的关键。
 
-- *内部节点（父节点）*：代表一个区域被划分的逻辑，存储以下信息：
-  
-  - 分裂方向：上下左右，当窗口新建时，方向被插入窗口的相对位置
-  - 窗口的起点位置与总大小
-  - 子节点的索引（左子节点与右子节点）
-  - offset：内部分裂的偏差值（用于手动更新窗口大小）
+传统以二叉树为基础的实现方式，虽然结构简洁，但在实际操作中常常需要频繁遍历树结构以查找父节点、兄弟节点或子节点。这在窗口数量较多、布局嵌套较深时，会导致性能瓶颈。
 
-- *叶子节点*：表示一个具体窗口的存在，只存储窗口 ID（或 Surface ID），不再包含其他布局信息。
+为此，本项目对数据结构进行了有针对性的优化：
 
-> 说明：每次添加新窗口时，目标叶子节点会被替换为一个新的父节点，并且规定左子节点处于布局的上方/左侧，其两个子节点分别为原窗口和新窗口的 ID。
+- 引入 slotmap（由 slotmap crate 提供的稀疏存储结构），作为节点存储容器，使每个窗口节点可以用稳定的键（Key）进行引用，避免因插入或删除节点而产生的结构失效问题。
 
-==== SlotMap
+- 每个节点中直接维护了与之关联的几个关键字段：
+    - parent：指向其父节点
+    - sibling：标记兄弟节点
 
-为提升树结构的动态操作性能，本项目引入了 [Rust 的 SlotMap](https://docs.rs/slotmap/) 作为节点存储的底层容器。相比传统引用或 `Box` 指针，`SlotMap` 具有以下优势：
+#figure(
+  image("introduce/slotmap.png", width: 60%),
+  caption: "Slotmap"
+)
 
-- *快速访问*：所有节点通过唯一的 Key 标识，可在 O(1) 时间内访问。
-- *插入与删除开销小*：不影响其他节点位置，避免指针更新或数据重排。
-- *避免悬垂指针问题*：因为节点通过 key 而非裸指针引用，内存安全性更高。
+通过这些显式的指针式引用关系，窗口之间的逻辑依赖不再依赖结构遍历获取，从而实现：
 
-每个节点在 `SlotMap` 中都会分配一个唯一的 `NodeId`，父节点只需保存左右子节点的 `NodeId`，大大简化了树的管理和操作逻辑。
+- O(1) 时间复杂度的节点访问与修改
+- 更高效的窗口插入、删除与重排
+- 无需递归或回溯查找节点关系
 
-以下是 `TiledTree` 的基础定义：
+这种结构有效避免了传统树结构中“查找成本高、修改牵一发而动全身”的问题，显著提升了窗口管理操作的实时性和系统的整体响应速度。
 
-```rust
+
+```rs
+use std::time::Duration;
+
+use indexmap::IndexMap;
 use slotmap::{new_key_type, SlotMap};
+use smithay::{desktop::Window, utils::{Logical, Rectangle}};
+
+use crate::{
+    layout::Direction, 
+    manager::{
+        animation::{
+            AnimationManager, AnimationType
+        }, 
+        window::WindowExt
+    }
+};
 
 new_key_type! {
     pub struct NodeId;
 }
 
+#[derive(Debug, Clone)]
+pub enum NodeData {
+    Node {
+        window: Window,
+
+        sibling: NodeId,
+        parent: NodeId,
+    },
+    Container {
+        elements: Vec<NodeId>,
+        rect: Rectangle<i32, Logical>,
+        offset: i32,
+
+        sibling: NodeId,
+        parent: NodeId,
+
+        direction: Direction,
+    },
+}
+
+
 #[derive(Debug)]
 pub struct TiledTree {
     nodes: SlotMap<NodeId, NodeData>,
-    spiral_node: Option<NodeId>,
-    root: Option<NodeId>,
-    neighbor_graph: NeighborGraph,
+    root: NodeId,
 
-    gap: i32,
+    windows: IndexMap<Window, NodeId>,
+
+    gap: i32
 }
 ```
 
-在这个结构中：
+=== 动态平铺
 
-- `nodes`：维护了整个布局树中所有节点的数据。
-- `root`：指向当前布局树的根节点，如果树为空，则为 `None`。
-- `spiral_node`：与螺旋布局有关，记录螺旋部剧的尾部。
-- `neighbor_graph`：全局邻接表。
-- `gap`：样式设置信息，窗口间距。
+传统的平铺式窗口管理器通常采用固定策略（如始终在右侧或下方）来插入新窗口，这种行为简单但不够灵活，容易与用户操作意图脱节。
 
-#figure(
-  image("introduce/slotmap.png", width: 60%),
-  caption: "slotmap 示意图"
-)
+本项目引入了动态平铺机制，使得新建窗口的位置可以根据当前鼠标指针所在的窗口区域动态决定插入方式，从而增强窗口管理的直觉性与交互反馈。
 
-==== 全局窗口邻接表
-
-`全局窗口邻接表` 用于记录所有窗口与邻居窗口之间的位置关系，表示为 A direction B，使用 `HashMap` 进行维护。
-
-```rust
-#[derive(Debug, Clone)]
-pub struct NeighborGraph {
-    edges: HashMap<Window, HashMap<Direction, Vec<Window>>>,
-}
-```
-
-`全局窗口邻接表` 主要完成对新插入窗口，删除窗口，更新窗口后的所有邻接关系的更新与修改。
-
-==== 自动布局算法 - 焦点分布（Focus-Following Mode）
-
-此模式为默认布局策略，所有窗口的插入与删除操作均围绕当前活动窗口（focus）展开：
-
-- 插入窗口时：查找当前焦点所在的叶子节点，并将其作为插入位置。该节点将转换为 `Split` 节点，原窗口与新窗口分别成为左右子节点。
-- 删除窗口时：寻找其父节点与兄弟节点，依据兄弟节点类型进行树结构调整（详见删除操作逻辑）。
+- 当用户打开一个新窗口时，系统会检测当前鼠标所在的活跃窗口或焦点区域；
+- 根据鼠标的位置判断是插入为上方、下方、左侧还是右侧子窗口；
+- 原有窗口区域将被自动分割，新窗口与原窗口共享该区域并重新布局；
+- 插入后焦点自动切换至新窗口，保持操作的连贯性。
 
 #figure(
   image("introduce/focus.png", width: 60%),
-  caption: "focus 布局示意图"
+  caption: "动态平铺示意图"
 )
 
-==== 自动布局算法 - 网格分布（Grid Mode）
+动态平铺的优势：
+- 符合用户操作直觉：用户在哪个窗口区域执行操作，新窗口就出现在哪里，无需额外手动调整；
+- 提高窗口组织效率：避免窗口总是堆叠到同一方向，造成空间浪费；
+- 提升使用流畅性：使窗口布局更具上下文关联性，避免打断用户思路；
 
-此策略试图保持布局树的平衡性，使窗口分布更均匀，避免单边过度嵌套导致的窗口压缩问题：
-
-- 插入窗口时：遍历当前树结构，寻找深度最浅的叶子节点作为插入点，以此保持树结构的对称性与均衡性。
-- 删除窗口时：遵循相同的父子结构替换逻辑，但在后续窗口重排时尽可能维持已有平衡性。
-
-#figure(
-  image("introduce/grid.png", width: 60%),
-  caption: "grid 布局示意图"
-)
-
-==== 自动布局算法 - 螺旋分布（Sprial Mode）
-
-此策略试图实现螺旋状的窗口分布，以左侧为起始，实现动态美观的布局效果。
-
-- 插入窗口时：记录的 `sprial_node` 为插入节点，插入方向为*右下左上*轮换，按照当前窗口的数量计算得到。
-- 删除窗口时：若删除窗口为 `sprial_node` 则设置其兄弟节点为新的 `sprial_node`。
-
-#figure(
-  image("introduce/sprial.png", width: 60%),
-  caption: "sprial 布局示意图"
-)
-
-==== 布局树的基本操作 - 插入窗口
-
-窗口插入遵循当前布局策略，分为以下三个步骤：
-
-1. 确定被插入窗口与插入方向
-2. 计算与设置被插入窗口与新插入窗口的大小与位置
-3. 修改邻接表
-
-`workspace` 根据布局策略，给定被插入窗口与插入方向，`insert_window()` 函数会完成计算与更新修改，这里的设计非常符合直觉。
-
-==== 布局树的基本操作 - 删除窗口
-
-窗口删除操作包含以下四个核心步骤：
-
-- 查找关联节点：通过辅助函数 `find_parent_and_sibling` 定位目标窗口的父节点及其兄弟节点。
-- 结构调整与继承布局：
-  - 若兄弟节点为 `Leaf`，则继承父节点的 `rec` 并替代父节点位置；
-  - 若兄弟节点为 `Split`，则同样继承 `rec`，替代父节点后调用 `modify` 递归更新其子节点的布局信息。
-- 清理节点数据：从 `SlotMap` 中移除被删除的窗口节点，保持结构整洁。
-- 更新邻接表
-
-
-==== 布局树的基本操作 - 倒置窗口
-
-倒置操作主要将 `Split` 类型节点的 `direction` 参数倒置，视觉效果上为水平变竖直，此操作会导致 `rec` 的变化，因此还需要更新所有子节点信息。
-
-主要分为以下三步：
-
-- 找到需要倒置的窗口的父节点。
-- 倒置 `direction` 并且使用 `modify` 递归更新当前父元素为根的树。
-- 修改邻接表。
+该机制不仅保留了平铺窗口自动布局的优势，也引入了一定程度的“空间感知”，增强了用户在窗口空间中的操控自由度，特别适合对窗口组织有较高要求的开发者与高效用户。
 
 
 #pagebreak()
 
 
 == 动画效果实现
-
-动画效果
 
 本吸纳纲目在保持“平铺核心逻辑简洁高效”的前提下，适度引入了 *过渡动画机制*，用于提升用户在窗口焦点切换、窗口布局变换、标签页切换等场景下的感知连贯性。动画不仅是美学设计的体现，更是信息传递与视觉引导的有效方式。
 
@@ -1711,7 +1742,6 @@ pub struct NeighborGraph {
 2. *动画过程可中断、可复用*：新的动画触发可以自然地替换旧的过渡轨迹，增强响应性与一致性。
 
 例如，在窗口移动动画中，我们为每个窗口维护一个 `current_rect`（当前渲染位置）和 `target_rect`（逻辑目标位置），渲染时以时间为参数进行插值过渡，而不是一次性跳转。
-
 
 === Animation 结构体封装
 
@@ -1740,9 +1770,13 @@ pub enum AnimationType {
 }
 ```
 
-在需要触发动画的时刻，将所需内容进行 `Animation` 被包裹，由 `eventloop` 异步触发，在每一帧渲染时进行过程状态处理，即可实现动画效果。
+=== Animation 功能实现
 
-```rust
+在动画未开始状态，触发 start() 函数，开始执行动画内容，并且在此会计算得到当前的插值内容，将大小信息 send 给窗口。
+
+动画执行状态下，每次调用会触发 tick() 函数，代表往前执行一次。在这里需要判断动画时间是否到期，到期则标记结束状态，等待下一次被回收。
+
+```rs
 impl Animation {
     pub fn new(
         from: Rectangle<i32, Logical>,
@@ -1773,6 +1807,11 @@ impl Animation {
         }
     }
 
+    pub fn stop(&mut self) -> Rectangle<i32, Logical> {
+        self.state = AnimationState::Completed;
+        self.to
+    }
+
     pub fn current_value(&self) -> Rectangle<i32, Logical> {
         let progress = (self.elapsed.as_secs_f64() / self.duration.as_secs_f64()).clamp(0.0, 1.0);
         process_rec(
@@ -1780,6 +1819,69 @@ impl Animation {
             self.to,
             self.animation_type.get_progress(progress),
         )
+    }
+}
+```
+
+=== AnimationManager
+
+所有 animation 由 AnimationManager 管理，统一发起动画，回收动画。在发起动画的时候，会判断当前此窗口是否已经存在了动画效果，存在则会强行终止到结束态，准备下一步动画，避免重复的 pending 导致信息错误与冲突。
+
+```rs
+pub struct AnimationManager {
+    animations: HashMap<Window, Animation>,
+}
+
+impl AnimationManager {
+    pub fn new() -> Self {
+        Self { animations: HashMap::new() }
+    }
+
+    pub fn add_animation(
+        &mut self,
+        window: Window,
+        from: Rectangle<i32, Logical>,
+        to: Rectangle<i32, Logical>,
+        duration: Duration,
+        animation_type: AnimationType,
+    ) {
+        // void conflict
+        self.stop_animation(&window);
+
+        let animation = Animation::new(from, to, duration, animation_type);
+        self.animations.insert(window, animation);
+    }
+
+    pub fn get_animation_data(&mut self, window: &Window) -> Option<Rectangle<i32, Logical>> {
+        self.animations.get_mut(window).and_then(|animation| match animation.state {
+            AnimationState::NotStarted => {
+                let rect = animation.start();
+                window.send_rect(rect);
+
+                Some(rect)
+            }
+            AnimationState::Running => {
+                animation.tick();
+                let rect = animation.current_value();
+                window.send_rect(rect);
+
+                Some(rect)
+            }
+            _ => None,
+        })
+    }
+
+    pub fn stop_animation(&mut self, window: &Window) {
+        if let Some(animation) = self.animations.get_mut(window) {
+            let rect = animation.stop();
+            window.send_rect(rect);
+        }
+    }
+
+    pub fn refresh(&mut self) {
+        // clean dead animations
+        self.animations
+            .retain(|_, animation| !matches!(animation.state, AnimationState::Completed));
     }
 }
 ```
@@ -1799,39 +1901,58 @@ impl Animation {
 pub struct RenderManager {
     // no need now
     start_time: Instant,
-    animations: HashMap<Window, Animation>,
 }
 
 ...
-for window in workspace_manager.elements() {
-    let location = match self.animations.get_mut(window) {
-        Some(animation) => {
-            match animation.state {
-                AnimationState::NotStarted => {
-                    let rec = animation.start();
-                    window.set_rec(rec.size);
-                    rec.loc
+    // windows
+for window in windows {
+        let rect = match animation_manager.get_animation_data(window) {
+            Some(rect) => {
+                rect
+            }
+            None => {
+                if let Some(rect) = window
+                    .user_data()
+                    .get::<ExpansionCache>()
+                    .and_then(|cache| cache.0.borrow().clone())
+                    .or_else(|| window.get_rect())
+                {
+                    rect
+                } else {
+                    continue;
                 }
-                AnimationState::Running => {
-                    animation.tick();
-                    let rec = animation.current_value();
-                    window.set_rec(rec.size);
-                    // info!("{:?}", rec);
-                    rec.loc
-                }
-                _ => break,
+            }
+        };
+        // windows border
+        if let Some(focus) = &focus {
+            if focus == window {
+                elements.extend(self.get_border_render_elements(renderer, rect));
             }
         }
-        None => {
-            let window_rec = workspace_manager.window_geometry(window).unwrap();
-            window_rec.loc
+        
+        let render_loc = (rect.loc - window.geometry().loc).to_physical_precise_round(output_scale);
+        
+        // set alpha
+        let mut alpha  = 0.85;
+        if let WindowLayout::Floating = window.get_layout() {
+            alpha = 1.0
+        } else if let Some(val) = window_manager.get_opacity(window) {
+            alpha = val;
         }
-    };
+        elements.extend(window
+            .render_elements::<WaylandSurfaceRenderElement<R>>(
+                renderer,
+                render_loc,
+                Scale::from(output_scale),
+                alpha,
+            ).into_iter().map(CustomRenderElements::Surface)
+        );
+    }
 ...
 
 pub fn refresh(&mut self) {
     // clean dead animations
-    self.animations
+    AnimationManager
         .retain(|_, animation| !matches!(animation.state, AnimationState::Completed));
 }
 ```
@@ -1859,49 +1980,175 @@ pub fn refresh(&mut self) {
 
 ```rust
 ...
-loop_handle.insert_idle(move |data| {
-    data.render_manager.add_animation(
-        target,
-        rec,
-        original_rec,
-        Duration::from_millis(30),
-        crate::animation::AnimationType::EaseInOutQuad,
-    );
-    let mut from = new_rec;
-    match direction {
-        Direction::Right => {
-            from.loc.x += from.size.w;
-        }
-        Direction::Left => {
-            from.loc.x -= from.size.w;
-        }
-        Direction::Up => {
-            from.loc.y -= from.size.h;
-        }
-        Direction::Down => {
-            from.loc.y += from.size.h;
-        }
+// target node
+animation_manager.add_animation(
+    old_window,
+    old_rect,
+    target_rect,
+    Duration::from_millis(15),
+    AnimationType::EaseInOutQuad,
+);
+
+// new node
+let mut from = new_rect;
+if matches!(direction, Direction::Horizontal) {
+    if is_favour {
+        from.loc.x -= from.size.w;
+    } else {
+        from.loc.x += from.size.w;
     }
-    data.render_manager.add_animation(
-        new_window,
-        from,
-        new_rec,
-        Duration::from_millis(30),
-        crate::animation::AnimationType::OvershootBounce,
-    );
-});
+} else if matches!(direction, Direction::Vertical){
+    if is_favour {
+        from.loc.y -= from.size.h;
+    } else {
+        from.loc.y += from.size.h;
+    }
+}
+
+animation_manager.add_animation(
+    window,
+    from,
+    new_rect,
+    Duration::from_millis(45),
+    AnimationType::OvershootBounce,
+);
 ...
 ```
 
 
 #pagebreak()
 
+== Configs manager
 
-== 拓展协议实现
+Mondrian 致力于打造一个极简而灵活的平铺式窗口管理器，核心理念是将窗口管理逻辑与用户界面完全解耦，将控制权交还给用户。
 
-=== Layer-Shell 支持
+因此，项目不仅具备轻量的架构，还提供了丰富的个性化配置选项，以满足不同用户的使用习惯与美学偏好。
+
+配置项计划预期涵盖：
+- 自启动程序：用户可定义系统启动后自动运行的应用与服务，如网络管理器、输入法守护进程、壁纸设置等；
+- 快捷键绑定：基于直观的数据结构实现键盘绑定逻辑，支持常见的窗口控制命令（如切换焦点、窗口移动、分屏操作、关闭等），也允许用户自由扩展；
+- 窗口规则系统：为特定窗口设定行为规则，如指定浮动、默认尺寸、工作区绑定、焦点抢占策略等，实现窗口级的个性化控制；
+- 布局默认配置：用户可以指定初始布局风格，决定窗口插入的默认策略（水平、垂直、动态等）；
+
+配置文件均采用结构清晰、易编辑的格式，配合热重载机制，使得用户可以在不重启管理器的前提下即时生效更改，提升了开发效率与使用灵活度。
+
+```sh
+# █▀▄▀█ █▀█ █▄░█ █ ▀█▀ █▀█ █▀█
+# █░▀░█ █▄█ █░▀█ █ ░█░ █▄█ █▀▄
+
+# --------------------------------------
+
+monitor = 3440x1440@100
+
+
+# █░░ ▄▀█ █░█ █▄░█ █▀▀ █░█
+# █▄▄ █▀█ █▄█ █░▀█ █▄▄ █▀█
+
+# --------------------------------------
+
+exec-once = fcitx5 -d
+exec-once = swww-daemon -f xrgb
+exec-once = waybar -l off
+# exec-once = kitty
+```
+
+*极简核心，生态协作*
+
+Mondrian 遵循最小窗口管理器（Minimal Window Manager）的设计原则，不试图一体化实现桌面所有功能，而是专注于窗口管理本身。
+为了实现完整的现代化桌面体验，用户可灵活选择与以下组件搭配使用：
+
+- Rofi / wofi：程序启动器与切换器；
+- Waybar：顶部状态栏与系统信息展示；
+- mako / dunst：Wayland 下的通知系统；
+- swww：动态壁纸支持；
+- kitty：兼容终端模拟器；
+- pipewire：音频控制；
+
+Mondrian 提供了一份默认的美化模板，涵盖基本的主题配色、字体设置、透明度、圆角边框、Waybar 配置等，使用户开箱即用即可获得现代美观的桌面体验。
+同时，用户也可以基于该模板进行深度自定义，例如修改主题色调、调整布局逻辑、替换系统组件，构建属于自己的独特桌面环境。
+
+用户还可以实现编写 shell 脚本来绑定快捷键，实现更丰富的内容。
+
+```sh
+bind = Super_L+a, command, "sh ${MONDRIAN_SRC_PATH}/resource/rofilaunch.sh"
+
+#!/usr/bin/env sh
+
+# Rofi 样式编号，对应 style_*.rasi
+rofiStyle="1"
+
+# 字体大小（整数）
+rofiScale="10"
+
+# 窗口宽度 / 边框设置
+width=2
+border=4
+
+# rofi 配置目录（根据实际路径修改）
+confDir="${HOME}/.config"
+
+# ===== 🗂️ 自动选择主题文件 =====
+
+roconf="${confDir}/rofi/styles/style_${rofiStyle}.rasi"
+
+# fallback: 如果指定样式不存在，就选第一个可用样式
+if [ ! -f "${roconf}" ]; then
+    roconf="$(find "${confDir}/rofi/styles" -type f -name "style_*.rasi" | sort -t '_' -k 2 -n | head -1)"
+fi
+
+# ===== 🧭 参数解析（运行模式） =====
+
+case "${1}" in
+    d|--drun) r_mode="drun" ;;
+    w|--window) r_mode="window" ;;
+    f|--filebrowser) r_mode="filebrowser" ;;
+    h|--help)
+        echo -e "$(basename "${0}") [action]"
+        echo "d :  drun mode"
+        echo "w :  window mode"
+        echo "f :  filebrowser mode"
+        exit 0
+        ;;
+    *) r_mode="drun" ;;
+esac
+
+# ===== 🎨 动态样式注入 =====
+
+wind_border=$(( border * 3 ))
+[ "${border}" -eq 0 ] && elem_border=10 || elem_border=$(( border * 2 ))
+
+r_override="window {border: ${width}px; border-radius: ${wind_border}px;} element {border-radius: ${elem_border}px;}"
+r_scale="configuration {font: \"JetBrainsMono Nerd Font ${rofiScale}\";}"
+
+# 获取当前 GNOME 图标主题（如果可用）
+if command -v gsettings >/dev/null; then
+    i_theme="$(gsettings get org.gnome.desktop.interface icon-theme | sed "s/'//g")"
+    i_override="configuration {icon-theme: \"${i_theme}\";}"
+else
+    i_override=""
+fi
+
+# ===== 🚀 启动 rofi =====
+
+rofi -show "${r_mode}" \
+     -theme-str "${r_scale}" \
+     -theme-str "${r_override}" \
+     -theme-str "${i_override}" \
+     -config "${roconf}"
+
+```
+
+#pagebreak()
+
+
+== Layer-Shell 支持
 
 为了实现桌面组件如状态栏、启动器、壁纸容器等持久性窗口，_Mondrian_ 支持 _*wlr-layer-shell*_ 协议。这一协议最初由 wlroots 提出，是实现 Wayland 桌面环境中“系统层级窗口”的标准手段。
+
+#figure(
+  image("introduce/layer_shell.png", width: 70%),
+  caption: "layer_shell 协议示意图"
+)
 
 `layer-shell` 允许客户端以特定“图层”（layer）方式向合成器注册自身位置、对齐方式、屏幕边缘锚定，以及交互区域排除等属性，用于构建如：
 
@@ -2016,48 +2263,328 @@ impl GlobalData {
 }
 ```
 
+#pagebreak()
+
+== XWayland 协议实现
+
+在 Wayland 架构下，原生应用需通过 Wayland 协议与 Compositor 进行通信。但当前 Linux 桌面软件生态中，仍有大量基于 X11 的应用尚未迁移至 Wayland。为了兼容这些应用，XWayland 提供了一套桥接机制，使得 Wayland Compositor 能够托管 X11 应用窗口，从而保障传统应用的可用性。
+
+XWayland 是一个运行在 Wayland 上的 X 服务器（Xwayland 进程），其核心作用是：
+
+- 拦截所有 X11 应用的绘图请求；
+- 将窗口绘制结果转交给 Wayland Compositor；
+- 模拟必要的 X11 特性（窗口类型、输入事件等）以实现兼容性；
+- 与 Wayland Compositor 通过特殊协议交互，例如 xwayland_surface_v1；
+
 #figure(
-  image("introduce/layer_shell.png", width: 70%),
-  caption: "layer_shell 协议示意图"
+  image("introduce/xwayland.png", width: 100%),
+  caption: "Xwayland 通信实现"
 )
+
+在 Mondrian 中，已成功集成对 XWayland 的支持，流程如下：
+
+- 自动启动 XWayland：Compositor 在启动时会监听相关环境并自动拉起 Xwayland 进程；
+- Wayland 端监听 XWayland 连接请求，并通过 wlroots 或 Smithay 提供的接口（如 XWaylandSurface）管理其生命周期；
+- 桥接输入与绘图事件：鼠标、键盘事件被准确转发给 X11 应用，绘图结果被嵌入 Wayland 的渲染流程；
+- 统一窗口管理：XWayland 窗口被纳入与原生 Wayland 窗口一致的管理体系中（如平铺布局、快捷键切换等）；
+
+*用户收益：*
+
+- 无需额外配置即可运行大量现有 X11 应用（如 Firefox、GIMP、VS Code、Steam 等）；
+- 兼容传统 GUI 工具链，用户可以继续使用熟悉的桌面软件；
+- 窗口行为一致，X11 应用在 Compositor 中表现与原生窗口完全一致（可浮动、可平铺、可聚焦）；
+- 加速用户迁移至 Wayland 环境，不牺牲现有生态；
+
+*技术难点与解决方案：*
+
+/ XWayland 启动时机:由 compositor 主动监听并拉起，保证连接时序正确
+/ 输入事件的映射:与 Seat 统一处理，保持输入行为一致性
+/ 窗口行为控制:提供 hooks 管理 XWayland surface 的生命周期与属性（例如 override_redirect）
+/ 与原生窗口混合管理:所有窗口统一进入 layout 树，实现视觉一致性
+
+```rust
+impl XwmHandler for GlobalData {
+    fn xwm_state(&mut self, _xwm: XwmId) -> &mut X11Wm {
+        self.state.xwm.as_mut().unwrap()
+    }
+
+    fn new_window(&mut self, _xwm: XwmId, surface: X11Surface) {
+        // judge layout
+        // TODO: a wired bug, some client may start many no type windows
+        // and the windows has no info, cannot judge layout
+        let layout = if let Some(window_type) = surface.window_type() {
+            match window_type {
+                WmWindowType::Normal => {
+                    if surface.is_popup() || surface.is_transient_for().is_some() {
+                        WindowLayout::Floating
+                    } else {
+                        WindowLayout::Tiled
+                    } 
+                }
+                _ => {
+                    WindowLayout::Floating
+                }
+            }
+        } else {
+            WindowLayout::Floating
+        };
+
+        // create new window
+        let window = Window::new_x11_window(surface);
+        window.set_layout(layout);
+
+        // add unmapped window in window_manager
+        self.window_manager.add_window_unmapped(
+            window.clone(),
+            self.workspace_manager.current_workspace().id()
+        );
+    }
+
+    fn new_override_redirect_window(&mut self, _xwm: XwmId, surface: X11Surface) {
+        let layout = WindowLayout::Floating;
+
+        // create new window
+        let window = Window::new_x11_window(surface);
+        window.set_layout(layout);
+
+        // add unmapped window in window_manager
+        self.window_manager.add_window_unmapped(
+            window.clone(),
+            self.workspace_manager.current_workspace().id()
+        );
+    }
+
+    fn map_window_request(&mut self, _xwm: XwmId, surface: X11Surface) {
+        surface.set_mapped(true).unwrap();
+
+        if let Some(window) = self.window_manager.get_unmapped(&surface.into()).cloned() {
+            self.set_mapped(&window);
+            self.map_window(window);
+        }
+    }
+
+    fn mapped_override_redirect_window(&mut self, _xwm: XwmId, _window: X11Surface) { }
+
+    fn unmapped_window(&mut self, _xwm: XwmId, window: X11Surface) {
+        if let Some(window) = self.window_manager.get_mapped(&window.into()) {
+            self.unmap_window(&window.clone());
+        }
+    }
+
+    fn destroyed_window(&mut self, _xwm: XwmId, window: X11Surface) {
+        if let Some(window) = self.window_manager.get_mapped(&window.into()) {
+            self.destroy_window(&window.clone());
+        }
+    }
+
+    fn configure_request(
+        &mut self,
+        _xwm: XwmId,
+        surface: X11Surface,
+        x: Option<i32>,
+        y: Option<i32>,
+        w: Option<u32>,
+        h: Option<u32>,
+        _reorder: Option<Reorder>,
+    ) {
+        // we just set the new size, but don't let windows move themselves around freely
+        if let Some(window) = self.window_manager.get_unmapped(&surface.clone().into()) {
+            let mut rect = window.geometry();
+            if let Some(x) = x {
+                rect.loc.x = x;
+            }
+            if let Some(y) = y {
+                rect.loc.y = y;
+            }
+            if let Some(w) = w {
+                rect.size.w = w as i32;
+            }
+            if let Some(h) = h {
+                rect.size.h = h as i32;
+            }
+            window.set_rect_cache(rect);
+            window.send_rect(rect);
+        } else if let Some(window) = self.window_manager.get_mapped(&surface.clone().into()) {
+            match window.get_layout() {
+                WindowLayout::Floating => {
+                    let mut rect = window.geometry();
+                    if let Some(x) = x {
+                        rect.loc.x = x;
+                    }
+                    if let Some(y) = y {
+                        rect.loc.y = y;
+                    }
+                    if let Some(w) = w {
+                        rect.size.w = w as i32;
+                    }
+                    if let Some(h) = h {
+                        rect.size.h = h as i32;
+                    }
+                    window.set_rect_cache(rect);
+                    window.send_rect(rect);
+                }
+                WindowLayout::Tiled => {
+                    let rect = window.get_rect();
+                    let _ = surface.configure(rect);
+                }
+            }
+        }
+    }
+
+    fn configure_notify(
+        &mut self,
+        _xwm: XwmId,
+        _window: X11Surface,
+        _geometry: Rectangle<i32, Logical>,
+        _above: Option<x11rb::protocol::xproto::Window>,
+    ) {
+        // modify cache
+        // info!("configure_notify");
+    }
+
+    fn fullscreen_request(&mut self, _xwm: XwmId, surface: X11Surface) {
+        if let Some(window) = self.window_manager.get_mapped(&surface.clone().into()) {
+            let output = self.output_manager.current_output();
+            let output_rect = self.output_manager.output_geometry(output).unwrap();
+            
+            let _ = surface.configure(output_rect);
+            
+            surface.set_fullscreen(true).unwrap();
+            self.fullscreen(window, output);
+        }
+    }
+
+    fn unfullscreen_request(&mut self, _xwm: XwmId, surface: X11Surface) {
+        if let Some(window) = self.window_manager.get_mapped(&surface.clone().into()) {
+            surface.set_fullscreen(false).unwrap();
+
+            if let Some(rect) = window.get_rect() {
+                let _ = surface.configure(rect);
+            }
+
+            let output = self.output_manager.current_output().clone();
+            self.unfullscreen(&output);
+        }
+    }
+
+    fn resize_request(&mut self, _xwm: XwmId, window: X11Surface, _button: u32, _resize_edge: X11ResizeEdge) {
+        if !self.input_manager.is_mainmod_pressed() {
+            return
+        }
+
+        let pointer = match self.input_manager.get_pointer() {
+            Some(pointer) => pointer,
+            None => {
+                warn!("Failed to get pointer");
+                return
+            }
+        };
+        
+        let start_data = match pointer.grab_start_data() {
+            Some(start_data) => start_data,
+            None => {
+                warn!("Failed to get start_data from: {:?}", pointer);
+                return;
+            }
+        };
+
+        self.resize_move_request(&PointerFocusTarget::X11Surface(window), &pointer, start_data, SERIAL_COUNTER.next_serial());
+    }
+
+    fn move_request(&mut self, _xwm: XwmId, window: X11Surface, _button: u32) {
+        if !self.input_manager.is_mainmod_pressed() {
+            return
+        }
+
+        let pointer = match self.input_manager.get_pointer() {
+            Some(pointer) => pointer,
+            None => {
+                warn!("Failed to get pointer");
+                return
+            }
+        };
+        
+        let start_data = match pointer.grab_start_data() {
+            Some(start_data) => start_data,
+            None => {
+                warn!("Failed to get start_data from: {:?}", pointer);
+                return;
+            }
+        };
+
+        self.grab_move_request(&PointerFocusTarget::X11Surface(window), &pointer, start_data, SERIAL_COUNTER.next_serial());
+    }
+}
+```
+
 
 
 #pagebreak()
 
 
+= 性能测试与分析
 
-= 性能测试与分析(仍在优化，决赛期间完成)
-
-== Rust Tracy 跟踪分析 
+== HeapStrack 内存与 CPU 使用率分析
 
 #figure(
-  image("introduce/tracy3.png", width: 100%),
-  caption: "tty 后端tracy跟踪图"
+  image("introduce/heapstrack1.png", width: 100%),
+  caption: "heap strack cpu 与内存使用测试"
 )
 
 #figure(
+  image("introduce/heapstrack2.png", width: 60%),
+  caption: "heap strack cpu 与内存使用测试"
+)
+
+#figure(
+  image("introduce/heapstrack3.png", width: 60%),
+  caption: "heap strack cpu 与内存使用测试"
+)
+
+使用 heap strack 追踪本项目的运行，执行三分钟左右，最终得到 memory consumption 大约在 204.8kB，对于动辄上百MB的桌面环境来说，此内存使用量几乎可以忽略不计，并且在开始创建完成后能保持稳定（此时正执行视频播放与帧率测试）。
+
+RSS 的使用量较大，推测是加载了 OpenGL、图形驱动、Wayland libs 等资源导致。
+
+检查热力图发现，大部分的开销来自 client 与 compositor 的通信损耗，以及 compositor 进行事件处理的损耗。还有一部分则是来自 render manager 收集 wl_surface 导致的开销。
+
+== Tracy profilter 跟踪分析 
+
+tracy 可以用来方便的跟踪某个函数的生命周期与执行时间，在代码函数开头设置 span，等到函数结束退出，自动释放生命周期，这期间的信息会被 tracy 捕获。
+
+#figure(
+  image("introduce/tracy1.png", width: 100%),
+  caption: "Tracy profilter 跟踪分析"
+)
+
+#figure(
+  image("introduce/tracy2.png", width: 80%),
+  caption: "Tracy profilter 跟踪分析"
+)
+
+在 Mondrian 中，耗时最大的操作是 render 与 tiled tree 的相关操作。
+
+高刷显示器的普遍帧率在 120Hz 左右，因此每一帧的时间要在 8ms 左右，才能够有较好的体验。在本次跟踪分析中，我们一共打开了13个窗口，其中有 steam 游戏商城界面，firefox 视频播放，还有其他的 CLI 终端应用。平均的渲染操作时间在 792.23微秒，远远小于 8ms，因此能够做到稳定的高刷高帧率显示。
+
+对于平铺树，我们已经使用了 HashMap 与 SlopMap 进行高度优化，实现了常数级别的操作，最复杂的 resize 操作，平均时间在 261 纳秒，insert 与 remove 操作涉及到树的更新与替换，时间损耗上反而比 resize 要高，但是平均只有 8.5 微秒与 2.17 微秒。可以说效果非常好。
+
+#figure(
   image("introduce/tracy4.png", width: 100%),
-  caption: "tty 后端tracy跟踪图"
+  caption: "Tracy profilter 跟踪分析"
 )
 
 #figure(
   image("introduce/tracy5.png", width: 100%),
-  caption: "tty 后端tracy跟踪图"
+  caption: "Tracy profilter 跟踪分析"
 )
 
-== 帧率性能测试
+在 tty 模式下，主要跟踪查看 Vblank 是否正常实现。可以看到，程序在接受到 vblank 通知后，才执行下一帧的渲染，然后将 frame callback 推送到 client 里去，这一步的逻辑是没有问题的。
+
+在 tty 模式下，我们没有实现非常优秀的 GPU 渲染优化，比如 damage 区域的管理，scanout 的处理，但是平均时间来到了 1.44 ms，但这也是可以接受的，测试下来也是能够稳定显示显示器刷新率 - 100Hz
 
 #figure(
   image("introduce/GPU.png", width: 100%),
-  caption: "tty 后端 GPU 帧率测试"
+  caption: "Tracy profilter 跟踪分析"
 )
-
-
-== GPU 压力测试
-
-
-#pagebreak()
-
 
 = 项目总结
 
@@ -2066,3 +2593,7 @@ impl GlobalData {
 项目采用自定义的平铺式窗口管理算法，支持键盘驱动的高效交互模式，兼顾性能、美学与个性化配置；同时，已成功兼容多种 layer-shell 客户端，具备构建完整桌面环境的基础能力。
 
 在保持稳定运行的基础上，本项目充分体现了现代合成器的核心特性——灵活、可拓展、安全、高效，为探索下一代 Linux 桌面提供了可行路径。后续将在多显示器支持、输入扩展、XWayland 兼容等方向持续推进，朝着高度可定制化与完整生态支持的目标不断完善。
+
+
+#bibliography("ref.bib")
+

@@ -8,7 +8,6 @@ extern crate tracing;
 extern crate serde;
 extern crate serde_json;
 
-mod animation;
 mod backend;
 mod config;
 mod input;

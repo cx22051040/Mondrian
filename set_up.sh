@@ -5,7 +5,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SOURCE_DIR="$SCRIPT_DIR/configs"
 
-TARGET_DIR="$HOME/.config/Mondrian"
+TARGET_DIR="$HOME/.config/"
 
 echo "Source: $SOURCE_DIR"
 echo "Target: $TARGET_DIR"

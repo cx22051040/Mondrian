@@ -27,7 +27,7 @@
 
 ### 基本信息
 
-- 比赛类型：OS功能赛道：模块实验创新赛道
+- 比赛类型：OS功能赛道
 - 学校名称：杭州电子科技大学
 - 队伍编号：T202510336995660
 - 队伍名称：进栈不排队
@@ -59,7 +59,7 @@ ppt与视频链接：[https://pan.baidu.com/s/1rbNUo9MPMoF6pzZGAx5mGw?pwd=51vr](
 
 - **代码体量**
   
-  - 累计修改超 **20,000** 行代码，新增 **10,000+** 行，配套文档逾 **20,000** 字，涵盖架构设计、接口协议与开发细节。
+  - 新增 **10,000+** 行 Rust 代码，配套有 markdown 文档与基础 config 配置文件。
 
 - **全栈实现**
   
@@ -93,6 +93,10 @@ Wayland 基础协议配置：
 
 ```bash
 
+# for nixos 
+nix develop --impure
+
+# else linux version:
 # base depends
 libwayland
 libxkbcommon
@@ -102,9 +106,8 @@ libgbm
 libseat
 xwayland
 
-# ubuntu must use 25.05 or above, don't need any operations
-
-# nixos use nix develop --impure
+# for ubuntu 
+# must use 25.05 or above, don't need any operations
 
 # extra
 # fcitx5 输入法安装
@@ -153,8 +156,35 @@ cargo build --release
 ├── 📁 resource             # 外部资源文件，如图标、字体等
 ├── 📁 wiki                 # 技术文档与开发记录
 ├── 📄 Cargo.toml           # Rust 配置文件，包含依赖与元信息
+├── 📄 flake.lock           # nix 版本控制文件
+├── 📄 flake.nix            # nix flake 文件，一键复原开发环境
 ├── 📄 README.md            # 项目英文说明
 └── 📄 README_zh-CN.md      # 项目中文说明与竞赛背景
+```
+
+```bash
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ Language              Files        Lines         Code     Comments       Blanks
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ CSS                       1          126          100           10           16
+ Fish                      1           32           20            5            7
+ GLSL                      7         2172         1633          162          377
+ Nix                       1           82           61           10           11
+ Shell                     4          109           68           15           26
+ Plain Text                1           21            0           17            4
+ TOML                      1           58           54            0            4
+ Typst                     1         2068         1506           36          526
+─────────────────────────────────────────────────────────────────────────────────
+ Markdown                  5          710            0          407          303
+ |- BASH                   1           35           15           11            9
+ |- Rust                   1          129          101           14           14
+ (Total)                              874          116          432          326
+─────────────────────────────────────────────────────────────────────────────────
+ Rust                     41         9193         7555          373         1265
+ |- Markdown               4           21            0           18            3
+ (Total)                             9214         7555          391         1268
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ Total                    63        14756        11113         1078         2565
 ```
 
 ### 项目进度
@@ -169,6 +199,8 @@ cargo build --release
 | 2025.5.20 | 完成 `tty` 裸机模式下的直连启动             |
 | 2025.6.6 | 实现窗口动画效果            |
 | 2025.6.19 | 完成 `layer-shell` 协议    |
+| 2025.7.15 | 更新动态平铺二叉树的算法，优化了通信 cache    |
+| 2025.7.21 | 完成 `Xwayland` 协议，现在支持打开 steam 玩游戏了    |
 
 
 #### 🎯 项目启动与协议实现
@@ -264,6 +296,8 @@ cargo build --release
 ![gpu](wiki/README/GPU.png)
 
 使用 weston-simple-egl 进行帧率测试，能够稳定达到 100帧（显示器帧率）
+
+完整的性能分析测试见 wiki 报告。
 
 ## 参考文件
 

@@ -315,10 +315,10 @@ impl WindowManager {
                 }
             }
 
-            let window_rect = window.get_rect().unwrap();
-
-            if window_rect.contains(pointer_loc.to_i32_round()) {
-                return Some(window.clone())
+            if let Some(window_rect) = window.get_rect() {
+                if window_rect.contains(pointer_loc.to_i32_round()) {
+                    return Some(window.clone())
+                }
             }
         }
 
@@ -334,11 +334,11 @@ impl WindowManager {
             if matches!(window.get_layout(), WindowLayout::Floating) {
                 continue;
             }
-
-            let window_rect = window.get_rect().unwrap();
-
-            if window_rect.contains(pointer_loc.to_i32_round()) {
-                return Some(window.clone())
+            
+            if let Some(window_rect) = window.get_rect() {
+                if window_rect.contains(pointer_loc.to_i32_round()) {
+                    return Some(window.clone())
+                }
             }
         }
 

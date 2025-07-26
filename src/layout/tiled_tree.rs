@@ -107,6 +107,8 @@ impl TiledTree {
             insert new_target and old_target
         */
 
+        let _span = tracy_client::span!("tiled tree: insert new window");
+
         if let Some(target_id) = self.find_node_id(target).cloned() {
             if let Some(NodeData::Node { window: old_window, sibling: old_sibling, parent: old_parent }) = self.nodes.get(target_id) {
                 let old_window = old_window.clone();
@@ -217,6 +219,8 @@ impl TiledTree {
             delete target and old_sibling node
         */
 
+        let _span = tracy_client::span!("tiled tree: remove window");
+
         if let Some(target_id) = self.find_node_id(target).cloned() {
             if let Some(NodeData::Node { sibling: target_sibling, parent: target_parent, .. }) = self.nodes.get(target_id) {
                 // only root node
@@ -317,6 +321,8 @@ impl TiledTree {
             update recursive 
         */
 
+        let _span = tracy_client::span!("tiled tree: invert window");
+
         if let Some(target_id) = self.find_node_id(target).cloned() {
             if let Some(NodeData::Node { parent: target_parent, .. }) = self.nodes.get(target_id) {
                 let target_parent = target_parent.clone();
@@ -337,6 +343,8 @@ impl TiledTree {
             if none, get parent and continue until find root,
             exchange node
         */
+
+        let _span = tracy_client::span!("tiled tree: exchange window");
 
         if let Some(target_id) = self.windows.get(target).cloned() {
             if self.root == target_id {
@@ -406,6 +414,8 @@ impl TiledTree {
             resize the max container's elements
         */
 
+        let _span = tracy_client::span!("tiled tree: resize window");
+
         if let Some(target_id) = self.find_node_id(target).cloned() {
             if self.root == target_id {
                 return;
@@ -441,6 +451,7 @@ impl TiledTree {
             jump to parent's parent and continue,
             return current node id and resize target node id
         */
+        let _span = tracy_client::span!("tiled tree: find_neighbor");
 
         if self.root == node_id {
             return None;
@@ -479,6 +490,8 @@ impl TiledTree {
     }
 
     fn find_neighbor_only_node(&self, target_id: NodeId, direction: Direction, origin_idx: usize, is_favour: bool) -> Option<NodeId> {
+        let _span = tracy_client::span!("tiled tree: find_neighbor_only_node");
+
         self.find_neighbor(target_id, direction, is_favour).and_then(|(_, neigbor_id)| {
             self.nodes.get(neigbor_id).and_then(|node_data| match node_data {
                 NodeData::Node { .. } => {
@@ -492,6 +505,8 @@ impl TiledTree {
     }
 
     fn find_node_in_container(&self, node_id: NodeId, direction: Direction, origin_idx: usize, is_favour: bool) -> Option<NodeId> {
+        let _span = tracy_client::span!("tiled tree: find_node_in_container");
+
         if let Some(NodeData::Node { .. }) = self.nodes.get(node_id) {
             return Some(node_id);
         }
@@ -517,6 +532,8 @@ impl TiledTree {
     }
 
     fn update_rect_recursive(&mut self, node_id: NodeId, new_rect: Rectangle<i32, Logical>, animation_manager: &mut AnimationManager) {
+        let _span = tracy_client::span!("tiled tree: update_rect_recursive");
+
         if let Some(node_data) = self.nodes.get_mut(node_id) {
             match node_data {
                 NodeData::Node { window, .. } => {
@@ -549,6 +566,8 @@ impl TiledTree {
     }
 
     fn update_rect_recursive_without_animation(&mut self, node_id: NodeId, new_rect: Rectangle<i32, Logical>) {
+        let _span = tracy_client::span!("tiled tree: update_rect_recursive_without_animation");
+
         if let Some(node_data) = self.nodes.get_mut(node_id) {
             match node_data {
                 NodeData::Node { window, .. } => {
