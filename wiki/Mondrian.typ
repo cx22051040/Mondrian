@@ -1719,6 +1719,779 @@ pub struct TiledTree {
 
 #pagebreak()
 
+=== 平铺树插入算法
+
+在动态平铺布局中，窗口的插入不仅需要考虑目标窗口的位置，还要明确插入的方向与插入策略，以决定新窗口在布局中的具体位置。
+
+我们引入了 is_favour 字段来标记插入行为是否为优先插入。所谓“优先插入”，是指将新窗口插入到目标窗口的左侧或上方。这种插入方式会导致原有窗口的位置发生变化，特别是其左上角坐标（x, y）将被新窗口“向右或向下推移”。
+
+相较之下，若新窗口插入在右侧或下方，则原窗口的位置保持不变，仅占用的空间被压缩，因此不需要额外处理其坐标。
+
+为了保持布局一致性和视觉连贯性，对于“优先插入”的情况，系统需对原窗口的位置进行调整，以确保：
+
+- 所有窗口在视觉上对齐，避免重叠或错位；
+- 插入操作符合用户直觉，例如“向上插入”意味着新窗口在上方而旧窗口向下移动；
+- 坐标系统在插入后保持一致，避免渲染异常；
+
+插入时，获取被插入节点的信息，使用 split() 函数计算新窗口的大小（对半分），并且添加动画效果与向客户端确认 configure 等。
+
+在这里操作的时间复杂度是 O(1)，但是由于树的修改与窗口大小的设置，会导致一定耗时。
+
+```rs
+pub fn insert(
+    &mut self, 
+    target: &Window, 
+    direction: Direction, 
+    window: Window, 
+    is_favour: bool, 
+    animation_manager: &mut AnimationManager
+) -> bool {
+    /*
+        split new_rect from target nodes,
+        convert target (nodes) into parent (container),
+        insert new_target and old_target
+    */
+
+    let _span = tracy_client::span!("tiled tree: insert new window");
+
+    if let Some(target_id) = self.find_node_id(target).cloned() {
+        if let Some(NodeData::Node { window: old_window, sibling: old_sibling, parent: old_parent }) = self.nodes.get(target_id) {
+            let old_window = old_window.clone();
+            let old_sibling = old_sibling.clone();
+            let old_parent = old_parent.clone();
+
+            let old_rect = old_window.get_rect().unwrap();
+
+            // get new rect
+            let (target_rect, new_rect) = split_rect(old_rect, direction, 0, self.gap, is_favour);
+            old_window.set_rect_cache(target_rect);
+            window.set_rect_cache(new_rect);
+
+            // insert target_copy and new nodes
+            let target_copy_id = self.nodes.insert(
+                NodeData::Node { 
+                    window: old_window.clone(), 
+                    sibling: NodeId::default(), 
+                    parent: target_id
+                }  
+            );
+
+            let new_id = self.nodes.insert(
+                NodeData::Node { 
+                    window: window.clone(), 
+                    sibling: target_copy_id, 
+                    parent: target_id 
+                }
+            );
+
+            self.windows.insert(old_window.clone(), target_copy_id);
+            self.windows.insert(window.clone(), new_id);
+
+            if let Some(NodeData::Node { sibling, .. }) = self.nodes.get_mut(target_copy_id) {
+                *sibling = new_id;
+            }
+
+            // convert target from node to container inplace
+            let mut elements = vec![];
+
+            if is_favour {
+                elements.push(new_id);
+                elements.push(target_copy_id);
+            }else {
+                elements.push(target_copy_id);
+                elements.push(new_id);
+            }
+
+            if let Some(target_data) = self.nodes.get_mut(target_id) {
+                *target_data = NodeData::Container { 
+                    elements, 
+                    rect: old_rect,
+                    offset: 0,
+                    sibling: old_sibling, 
+                    parent: old_parent, 
+                    direction 
+                };
+            }
+
+            // add animation
+            {
+                // target node
+                animation_manager.add_animation(
+                    old_window,
+                    old_rect,
+                    target_rect,
+                    Duration::from_millis(15),
+                    AnimationType::EaseInOutQuad,
+                );
+
+                // new node
+                let mut from = new_rect;
+                if matches!(direction, Direction::Horizontal) {
+                    if is_favour {
+                        from.loc.x -= from.size.w;
+                    } else {
+                        from.loc.x += from.size.w;
+                    }
+                } else if matches!(direction, Direction::Vertical){
+                    if is_favour {
+                        from.loc.y -= from.size.h;
+                    } else {
+                        from.loc.y += from.size.h;
+                    }
+                }
+
+                animation_manager.add_animation(
+                    window,
+                    from,
+                    new_rect,
+                    Duration::from_millis(45),
+                    AnimationType::OvershootBounce,
+                );
+                
+            }
+        }
+        return true;
+    }
+
+    false
+}
+```
+
+在插入新窗口的时候，我们认为将 target 复制一份，原先的 target 转化类型为 Container 节点，复制的 target 与新窗口根据 is_favour 执行插入操作，这样的好处是，无需修改 target 节点以外的节点的信息，比如 target 的 sibling 的 sibling 信息，在代码层面上会更简洁。
+
+对于第一个窗口的建立，此时没有任何的 target 节点，我们直接将其作为 root 节点，大小设置为 workspace 提供的 root_rect 大小，设置其 parent 与 sibling 都为自身。
+
+```rs
+pub fn new_with_first_node(window: Window, root_rect: Rectangle<i32, Logical>, gap: i32animation_manager: &mut AnimationManager) -> TiledTree {
+    window.set_rect_cache(root_rect);
+    window.send_rect(root_rect);
+
+    let mut nodes = SlotMap::with_key();
+    let mut windows = IndexMap::new();
+
+    let first_node = NodeData::Node { 
+        window: window.clone(), 
+        sibling: NodeId::default(), 
+        parent: NodeId::default()
+    };
+
+    let first_id = nodes.insert(first_node);
+    windows.insert(window.clone(), first_id);
+
+    // set sibling and parent to itself
+    if let Some(NodeData::Node { sibling, parent, .. }) = nodes.get_mut(first_id) {
+        *sibling = first_id;
+        *parent = first_id;
+    }
+
+    // add animation
+    let mut from = root_rect;
+    from.loc.y += from.size.h;
+
+    animation_manager.add_animation(
+        window,
+        from,
+        root_rect,
+        Duration::from_millis(30),
+        AnimationType::EaseInOutQuad,
+    );
+
+    Self { 
+        nodes, 
+        root: first_id,
+
+        windows,
+        gap,
+    }
+}
+```
+
+=== 平铺树删除算法
+
+由于我们使用的是二叉树，删除某个节点，只需要让 sibling 节点直接获取 container 节点存储的 rectangle 大小，并且将 container 节点转化为 sibling 对应的节点（sibling 可能是node，也可能是container）。这样无需修改无关节点的信息，实现高效简洁的操作。
+
+```rs
+pub fn remove(&mut self, target: &Window, animation_manager: &mut AnimationManager) {
+    /*
+        convert parent (Container) into sibling (Node),
+        inherit parent's parent and sibling,
+        use parent's rect,
+        delete target and old_sibling node
+    */
+
+    let _span = tracy_client::span!("tiled tree: remove window");
+
+    if let Some(target_id) = self.find_node_id(target).cloned() {
+        if let Some(NodeData::Node { sibling: target_sibling, parent: target_parent, .. }) = self.nodes.get(target_id) {
+            // only root node
+            if target_id == self.root {
+                self.nodes.remove(target_id);
+                self.windows.shift_remove(target);
+
+                return;
+            }
+
+            let target_parent = target_parent.clone();
+            let target_sibling = target_sibling.clone();
+
+            // convert parent into sibling node
+            // use container's sibling & parent
+            if let Some(sibling_data) = self.nodes.get(target_sibling) {
+                match sibling_data {
+                    NodeData::Node { window: sibling_window, .. } => {
+                        let sibling_window = sibling_window.clone();
+
+                        if let Some(NodeData::Container { rect: parent_rect, sibling: parent_sibling, parent: parent_parent, .. }) = self.nodes.get(target_parent) {
+                            let sibling_window = sibling_window.clone();
+                            let parent_rect = parent_rect.clone();
+
+                            // merge target rect and sibling rect
+                            let sibling_rect = sibling_window.get_rect().unwrap();
+                            sibling_window.set_rect_cache(parent_rect.clone());
+
+                            self.windows.insert(sibling_window.clone(), target_parent);
+                            self.nodes[target_parent] = NodeData::Node {
+                                window: sibling_window.clone(),
+                                sibling: parent_sibling.clone(),
+                                parent: parent_parent.clone(),
+                            };
+
+                            // add animation
+                            animation_manager.add_animation(
+                                sibling_window.clone(),
+                                sibling_rect,
+                                parent_rect,
+                                Duration::from_millis(30),
+                                AnimationType::EaseInOutQuad,
+                            );
+                        }
+
+                        // remove old_sibling nodes
+                        self.windows.insert(sibling_window.clone(), target_parent);
+                    }
+                    NodeData::Container { offset: sibling_offset, elements: sibling_elements, direction: sibling_direction, .. } => {
+                        if let Some(NodeData::Container { rect: parent_rect, sibling: parent_sibling, parent: parent_parent, .. }) = self.nodes.get(target_parent) {
+                            let sibling_elements = sibling_elements.clone();
+                            let parent_rect = parent_rect.clone();
+                            
+                            self.nodes[target_parent] = NodeData::Container { 
+                                elements: sibling_elements.clone(), 
+                                rect: parent_rect.clone(), 
+                                offset: sibling_offset.clone(),
+
+                                sibling: parent_sibling.clone(), 
+                                parent: parent_parent.clone(), 
+                                direction: sibling_direction.clone()
+                            };
+
+                            self.update_rect_recursive(target_parent, parent_rect, animation_manager);
+
+                            sibling_elements.iter().for_each(|node_id| {
+                                if let Some(node_data) = self.nodes.get_mut(*node_id) {
+                                    match node_data {
+                                        NodeData::Node { parent, .. } => *parent = target_parent,
+                                        NodeData::Container { parent, .. } => *parent = target_parent,
+                                    }
+                                }
+                            });
+                        }
+                    }
+                }
+            }
+
+            // remove from nodes and windows
+            self.nodes.remove(target_id);
+            self.nodes.remove(target_sibling);
+            self.windows.shift_remove(target);
+        }
+    }
+}
+```
+
+#pagebreak()
+
+=== 平铺树更新算法
+
+平铺树中，最复杂的就是更新算法，尤其是 resize 行为导致的更新。我们假设目前有这样的一个窗口布局：
+
+#figure(
+  image("introduce/resize.png", width: 80%),
+  caption: "resize 操作"
+)
+
+左侧为当前屏幕中的窗口布局，右侧展示其对应的平铺树结构。在这种结构中，每一个容器节点（Container）代表一个空间划分操作，而叶子节点对应具体的窗口。
+
+我们考虑如下场景：用户尝试对编号为 3 的窗口进行调整（resize），例如拖动其右边缘、上边缘或左边缘：
+- 拖动 右侧边缘：只需与其右邻窗口（如窗口 4）联动更新；
+- 拖动 上边缘：涉及与上方窗口（如窗口 2 和 4）共同调整；
+- 拖动 左边缘：可能影响到整个左侧窗口组（窗口 1、2、3 等），更新范围较广。
+
+上述情况表明，不同方向的拖动会引起不同粒度的区域更新，若逐一判断并精确维护每条边的依赖关系，将导致代码复杂度与维护成本大幅提升。
+
+为简化更新逻辑，我们在平铺树的 Container 节点中引入了一个抽象属性：offset（偏移量）。该值用于记录从父节点到当前节点的矩形偏移，从而使得更新操作可以通过一次递归遍历统一下发到所有子节点，无需每次重新计算全局坐标。
+
+具体而言：
+
+- 当布局变更或触发重排时，调用 update_rect_recursive 函数；
+- 每个 Container 节点根据其方向（水平或垂直）计算并更新其子节点的 rectangle 区域；
+- 子节点递归调用自身的 update_rect_recursive 方法，传递并累加偏移值；
+- 直至叶子节点，最终确定其在屏幕上的实际坐标与大小；
+
+```rs
+fn update_rect_recursive(&mut self, node_id: NodeId, new_rect: Rectangle<i32, Logical>, animation_manager: &mut AnimationManager) {
+        let _span = tracy_client::span!("tiled tree: update_rect_recursive");
+
+        if let Some(node_data) = self.nodes.get_mut(node_id) {
+            match node_data {
+                NodeData::Node { window, .. } => {
+                    let old_rect = window.get_rect().unwrap();
+                    window.set_rect_cache(new_rect);
+
+                    // add animation
+                    let window = window.clone();
+                    animation_manager.add_animation(
+                        window,
+                        old_rect,
+                        new_rect,
+                        Duration::from_millis(30),
+                        AnimationType::EaseInOutQuad,
+                    );
+                }
+
+                NodeData::Container { elements, rect, offset, direction, .. } => {
+                    *rect = new_rect;
+
+                    let (rect_1, rect_2) = split_rect(new_rect, direction.clone(), offset.clone(), self.gap, false);
+                    
+                    let children = elements.clone();
+                    for (child_id, sub_rect) in children.into_iter().zip([rect_1, rect_2]) {
+                        self.update_rect_recursive(child_id, sub_rect, animation_manager);
+                    }
+                }
+            }
+        }
+    }
+```
+
+接下来的问题就是如何找到最大的 Container 节点。
+
+首先在设计数据结构的时候，我们有一个小巧思：
+
+```rs
+Container {
+    elements: Vec<NodeId>,
+    rect: Rectangle<i32, Logical>,
+    offset: i32,
+
+    sibling: NodeId,
+    parent: NodeId,
+
+    direction: Direction,
+},
+```
+
+虽然二叉树只包含两个节点，但是我们使用 Vec[] 来存储子节点的值，这能够提供一个非常大的优势，具有了描述左右（上下）关系的能力。
+
+在 Left 和 Right 的设计下，我们需要先判断这个节点是否是 Left 或者 Right，为其进行特殊的判断，代码层面上非常复杂。但是使用 Vec[] 有这样的好处：如果我们往右查询，则将 pos+1，检查是否有值。这样能够极大的简化代码复杂度，所有的节点都可以执行一致性操作。
+
+有了这样的设计，在找寻 resize target 节点的时候会方便很多。
+
+在原先的窗口布局假设上，我们考虑这个情况，水平移动，拖拽3号窗口的左边缘，应当修改全部的窗口。
+
+直观的来说，我们直到 3号窗口的左侧是 1号窗口，他们的最大container 是 root 节点，所有直接修改 root 节点的 offset 再使用 update 函数遍历更新就可以实现 resize 操作。
+
+所以 find_max_parent 的操作实际上就是：
+
+1. 根据当前的 parent，判断 resize 操作的方向与 parent 的方向是否一致，如果一致则执行 2，如果不一致，则直接执行 3 
+2. 根据 is_favour 判断 +1, -1（true则是左或者上），如果值存在，则将当前的 parent 作为 max parent，更新 offset 即可，若不存在，执行 3
+3. 找到 parent 的 parent，将原 parent 作为节点，继续根据 is_favour 和 parent 的方向执行 2 操作，直到遇到 root 节点。
+
+```rs
+fn find_neighbor(&self, node_id: NodeId, direction: Direction, is_favour: bool) -> Option<(NodeId, NodeId)> {
+    /*
+        find node with direction and favour,
+        if not, jump to parent and continue,
+        if parent's direction is not eqult to given diretion,
+        jump to parent's parent and continue,
+        return current node id and resize target node id
+    */
+    let _span = tracy_client::span!("tiled tree: find_neighbor");
+
+    if self.root == node_id {
+        return None;
+    }
+
+    if let Some(node_data) = self.nodes.get(node_id) {
+        let parent = match node_data {
+            NodeData::Node { parent, .. } => {
+                parent.clone()
+            },
+            NodeData::Container { parent, .. } => {
+                parent.clone()
+            }  
+        };
+
+        if let Some(NodeData::Container { elements, direction: parent_direction, .. }) = self.nodes.get(parent) {
+            if direction == *parent_direction {
+                if let Some(idx) = elements.iter().position(|id| *id == node_id) {
+                    let neighbor = if is_favour {
+                        idx.checked_sub(1).and_then(|i| elements.get(i))
+                    } else {
+                        elements.get(idx + 1)
+                    };
+
+                    if let Some(neighbor) = neighbor {
+                        return Some((parent, neighbor.clone()));
+                    }
+                }
+            }
+
+            return self.find_neighbor(parent, direction, is_favour);
+        }
+    }
+
+    return None;
+}
+```
+
+至此，我们的 resize 函数就可以给出:
+
+```rs
+pub fn resize(&mut self, target: &Window, direction: Direction, offset: i32, is_favour: bool) {
+    /*
+        find the target nodes and resize target nodes,
+        get the max container,
+        resize the max container's elements
+    */
+
+    let _span = tracy_client::span!("tiled tree: resize window");
+
+    if let Some(target_id) = self.find_node_id(target).cloned() {
+        if self.root == target_id {
+            return;
+        }
+
+        if let Some((max_parent_id, _)) = self.find_neighbor(target_id, direction, is_favour) {
+            if let Some(NodeData::Container { rect, offset: parent_offset, .. }) = self.nodes.get_mut(max_parent_id) {
+                let rect = rect.clone();
+                // TODO: use client's given
+                let min = 175;
+
+                let half = match direction {
+                    Direction::Horizontal => {
+                        (rect.size.w - self.gap) / 2 - min
+                    }
+                    Direction::Vertical => {
+                        (rect.size.h - self.gap) / 2 - min
+                    }
+                };
+                *parent_offset = (*parent_offset + offset).clamp(-half, half);
+
+                self.update_rect_recursive_without_animation(max_parent_id, rect);
+            }
+        }
+    }
+}
+```
+
+=== 平铺树窗口交换算法
+
+在处理 resize 的时候，我们只需要考虑最大 parent 节点，然后遍历更新就可以了，在处理两个相邻窗口交换的问题上，会更复杂一些，我们必须找到 node 节点。
+
+resize 的操作可以将 container 视为一个 node，进行整体的操作，而 exchange 操作则必须找到 node 节点，考虑以下的情况：
+
+#figure(
+  image("introduce/exchange.png", width: 80%),
+  caption: "exchange 操作"
+)
+
+如果此时要让 3号和左侧窗口交换，显然应该与4号进行交换，根据 resize 的 find_neighbor() 函数，我们只能找到包含 1,4 的 contianer，因此还需要做以下的事情：
+
+1. 如果 neighbor 的 direction 与移动的 direction 相同，说明此时只有一个窗口能够邻接，根据 is_favour 选择反向的即可（往左找则用右节点）
+2. 如果 neighbor 的 direction 与移动的 direction 不同，说明此时是一个多窗口邻接的情况，为了符合交互直觉，我们认为：根据移动的窗口的原先 pos 来选择，如果原先在下方或者右方，那么就选择下方或者右方的窗口。
+
+```rs
+fn find_neighbor_only_node(&self, target_id: NodeId, direction: Direction, origin_idx: usize, is_favour: bool) -> Option<NodeId> {
+    let _span = tracy_client::span!("tiled tree: find_neighbor_only_node");
+
+    self.find_neighbor(target_id, direction, is_favour).and_then(|(_, neigbor_id)| {
+        self.nodes.get(neigbor_id).and_then(|node_data| match node_data {
+            NodeData::Node { .. } => {
+                Some(neigbor_id)
+            }
+            NodeData::Container { .. } => {
+                self.find_node_in_container(neigbor_id, direction,origin_idx, is_favour)
+            }
+        })
+    })
+}
+
+fn find_node_in_container(&self, node_id: NodeId, direction: Direction, origin_idx: usize, is_favour: bool) -> Option<NodeId> {
+    let _span = tracy_client::span!("tiled tree: find_node_in_container");
+
+    if let Some(NodeData::Node { .. }) = self.nodes.get(node_id) {
+        return Some(node_id);
+    }
+
+    else if let Some(NodeData::Container { elements, direction: container_direction, .. }) = self.nodes.get(node_id) {
+        if &direction == container_direction {
+            if is_favour {
+                // invert because we need neighbor
+                return self.find_node_in_container(elements[1], direction, origin_idx, is_favour);
+            } else {
+                return self.find_node_in_container(elements[0], direction, origin_idx, is_favour);
+            }
+        } else {
+            return self.find_node_in_container(elements[origin_idx], direction, origin_idx, is_favour);
+        }
+    }
+
+    None
+}
+```
+
+之后处理 slotmap 与 windows 的存储内容
+
+```rs
+pub fn exchange(&mut self, target: &Window, direction: Direction, is_favour: bool, animation_manager: &mutAnimationManager) {
+    /*
+        find exchange node with vec add or sub,
+        if none, get parent and continue until find root,
+        exchange node
+    */
+
+    let _span = tracy_client::span!("tiled tree: exchange window");
+
+    if let Some(target_id) = self.windows.get(target).cloned() {
+        if self.root == target_id {
+            return;
+        }
+
+        if let Some(NodeData::Node { window: target_window, parent, .. }) = self.nodes.get(target_id) {
+            let target_window_copy = target_window.clone();
+            let mut neighbor_window_copy = None;
+            let mut origin_idx = 0;
+
+            // get orifin idx
+            if let Some(NodeData::Container { elements, .. }) = self.nodes.get(parent.clone()) {
+                if let Some(idx) = elements.iter().position(|id| *id == target_id) {
+                    origin_idx = idx;
+                }
+            }
+
+            // find neighbor and exchange
+            if let Some(neighbor_id) = self.find_neighbor_only_node(target_id, direction, origin_idx, is_favour) {
+                if let Some(NodeData::Node { window: neighbor_window, .. }) = self.nodes.get_mut(neighbor_id) {
+                    self.windows.insert(target_window_copy.clone(), neighbor_id);
+                    self.windows.insert(neighbor_window.clone(), target_id);
+
+                    neighbor_window_copy = Some(neighbor_window.clone());
+                    *neighbor_window = target_window_copy.clone();
+                }
+            }
+
+            // change target
+            if let Some(neighbor_window_copy) = neighbor_window_copy {
+                if let Some(NodeData::Node { window: target_window, .. }) = self.nodes.get_mut(target_id) {
+                    *target_window = neighbor_window_copy.clone();
+                }
+
+                let target_rect = target_window_copy.get_rect().unwrap();
+                let neighbor_rect = neighbor_window_copy.get_rect().unwrap();
+                
+                // exchange rect cache
+                target_window_copy.set_rect_cache(neighbor_rect);
+                neighbor_window_copy.set_rect_cache(target_rect);
+
+                // add animation
+                animation_manager.add_animation(
+                    target_window_copy,
+                    target_rect,
+                    neighbor_rect,
+                    Duration::from_millis(30),
+                    AnimationType::EaseInOutQuad,
+                );
+                animation_manager.add_animation(
+                    neighbor_window_copy,
+                    neighbor_rect,
+                    target_rect,
+                    Duration::from_millis(30),
+                    AnimationType::EaseInOutQuad,
+                );
+            }
+        }
+    }
+}
+```
+
+=== expansion
+
+Mondrian 还提供了一个类似全窗口看板的操作，将所有的平铺窗口与浮动窗口，设定为统一的大小，规整的排列在一起，方便用户进行窗口查询。
+
+在计算行数的时候，我们使用了特殊的算法，确保了视觉上效果的和谐。
+
+假设用户给定的设置是每行最多 4个窗口，如果此时有 5个窗口，此算法会产生 [3,2] 的布局而不是 [4,1]。
+
+```rs
+fn split_rows(total: usize, max_per_row: usize) -> Vec<usize> {
+    let rows = (total + max_per_row - 1) / max_per_row;
+    let base = total / rows;
+    let mut remainder = total % rows;
+    let mut result = Vec::new();
+
+    for _ in 0..rows {
+        if remainder > 0 {
+            result.push(base + 1);
+            remainder -= 1;
+        } else {
+            result.push(base);
+        }
+    }
+
+    result
+}
+```
+
+```rs
+pub fn expansion(&self, animation_manager: &mut AnimationManager) {
+    let _span = tracy_client::span!("container tree: expansion window");
+
+    let total = self.windows().count();
+    let max_per_row = 4;
+    let gap = self.gap;
+    let screen = self.root_rect;
+
+    let row_counts = split_rows(total, max_per_row);
+    
+    #[cfg(feature = "trace_layout")]
+    info!("expansion row counts: {:?}", row_counts);
+
+    let row_count = row_counts.len();
+    let win_height = (screen.size.h - gap * (row_count - 1) as i32) / row_count as i32;
+    
+    let total_gap = gap * (max_per_row + 1 - 1) as i32;
+    let win_width = (screen.size.w - total_gap) / (max_per_row + 1) as i32;
+
+    let mut window_iter = self.windows();
+
+    let mut y = screen.loc.y;
+    for &cols in &row_counts {
+        let total_width = win_width * cols as i32 + total_gap;
+        let start_x = screen.loc.x + (screen.size.w - total_width) / 2;
+
+        for i in 0..cols {
+            let x = start_x + i as i32 * (win_width + gap);
+            let rect = Rectangle {loc: (x, y).into(), size: (win_width, win_height).into()};
+            
+            #[cfg(feature = "trace_layout")]
+            info!("expansion rect: {:?}", rect);
+
+            if let Some(window) = window_iter.next().cloned() {
+                if window
+                    .user_data()
+                    .get::<ExpansionCache>()
+                    .map(|guard| guard.0.borrow().is_none())
+                    .unwrap_or(true) 
+                {
+                    let window_rect = window.get_rect().unwrap();
+
+                    // ExpansionCache
+                    let guard = window.user_data().get_or_insert::<ExpansionCache, _>(|| {
+                        ExpansionCache(RefCell::new(Some(rect)))
+                    });
+                    *guard.0.borrow_mut() = Some(rect);
+
+                    animation_manager.add_animation(
+                        window,
+                        window_rect,
+                        rect,
+                        Duration::from_millis(30),
+                        AnimationType::EaseInOutQuad,
+                    );
+                }
+            }
+        }
+
+        y += win_height + gap;
+    }
+}
+```
+
+=== invert
+
+Mondrian 提供更改 Container direction 的操作，比如将水平分布的窗口转变为竖直分布。
+
+只需要重新计算新窗口的大小并且通知 client 即可实现，我们使用 update 函数来统一处理。
+
+```rs
+pub fn invert(&mut self, target: &Window, animation_manager: &mut AnimationManager) {
+    /*
+        invert parent (Container) direction
+        update recursive 
+    */
+
+    let _span = tracy_client::span!("tiled tree: invert window");
+
+    if let Some(target_id) = self.find_node_id(target).cloned() {
+        if let Some(NodeData::Node { parent: target_parent, .. }) = self.nodes.get(target_id) {
+            let target_parent = target_parent.clone();
+
+            if let Some(NodeData::Container { rect, direction, .. }) = self.nodes.get_mut(target_parent) {
+                *direction = direction.invert();
+                let rect = rect.clone();
+
+                self.update_rect_recursive(target_parent, rect, animation_manager);
+            }
+        }
+    }
+}
+```
+
+=== float 与 tiled 切换
+
+Mondrian 允许 float窗口与 tiled窗口共存与转换。
+
+将 tiled窗口转化为 float非常简单，直接删除其在平铺树中的布局信息，将其弹出，设定大小为原布局的一定尺寸（或者向client发送事件，获取其推荐的大小），并且将鼠标的当前位置设定为整个窗口的中心。
+
+将 float窗口转化为 tiled窗口则需要重新执行插入 map 逻辑，根据释放的位置，找到 target 窗口，执行 insert 操作。
+
+```rs
+pub fn switch_layout(&mut self, window: &Window, pointer_loc: Point<f64, Logical>) {
+    self.workspace_manager.unmap_window(window, &mut self.animation_manager);
+
+    match window.get_layout() {
+        WindowLayout::Tiled => {
+            // insert floating window
+            self.window_manager.switch_layout(window);
+
+            set_pointer_as_center(window, pointer_loc.to_i32_round(), &mut self.animation_manager);
+
+            self.workspace_manager.map_window(None, window.clone(), ResizeEdge::TopLeft, &mut self.animation_manager);
+        }
+        WindowLayout::Floating => {
+            // insert tiled window
+            self.window_manager.switch_layout(window);
+
+            if let Some(focus) = self.window_manager.window_under_tiled(pointer_loc, self.workspace_manager.current_workspace().id()) {
+                let focus_rect = focus.get_rect().unwrap();
+
+                let edge = detect_pointer_quadrant(pointer_loc, focus_rect.to_f64());
+                self.workspace_manager.map_window(Some(&focus), window.clone(), edge, &mut self.animation_manager);
+            } else {
+                self.workspace_manager.map_window(
+                    None,
+                    window.clone(),
+                    ResizeEdge::BottomRight,
+                    &mut self.animation_manager,
+                );
+            }
+        }
+    }
+
+}
+```
+
+#pagebreak()
 
 == 动画效果实现
 
