@@ -44,6 +44,21 @@ impl FullscreenSurface {
 
 impl GlobalData {
     pub fn map_window(&mut self, window: Window) -> bool {
+        // fake fullscreen, no border fullscreen
+        if let Some(is_fullscreen) = self.window_manager.get_fullscreen(&window) {
+            if is_fullscreen {
+                window.set_layout(WindowLayout::Floating);
+                self.window_manager.raise_window(&window);
+
+                let output = self.output_manager.current_output();
+                let output_rect = self.output_manager.output_geometry(&output).unwrap();
+                window.set_rect_cache(output_rect);
+                window.send_rect(output_rect);
+
+                self.fullscreen(&window, output);
+            }
+        }
+        
         // map window for current workspace
         let pointer = self.input_manager.get_pointer();
         let pointer = match pointer {
@@ -65,7 +80,7 @@ impl GlobalData {
 
         self.workspace_manager.map_window(
             target_tiled.as_ref(),
-            window,
+            window.clone(),
             edge,
             &mut self.animation_manager,
         )
@@ -77,6 +92,13 @@ impl GlobalData {
     }
 
     pub fn unmap_window(&mut self, window: &Window) {
+        if let Some(is_fullscreen) = self.window_manager.get_fullscreen(window) {
+            if is_fullscreen {
+                let output = self.output_manager.current_output().clone();
+                self.unfullscreen(&output);
+            }
+        }
+
         // is unmapped
         if self.window_manager.set_unmapped(window) {
             self.workspace_manager.unmap_window(window, &mut self.animation_manager);

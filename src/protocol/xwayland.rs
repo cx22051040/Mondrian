@@ -162,6 +162,14 @@ impl XwmHandler for GlobalData {
             window.set_rect_cache(rect);
             window.send_rect(rect);
         } else if let Some(window) = self.window_manager.get_mapped(&surface.clone().into()) {
+            if let Some(is_fullscreen) = self.window_manager.get_fullscreen(window) {
+                if is_fullscreen {
+                    let rect = window.get_rect();
+                    let _ = surface.configure(rect);
+                    return
+                }
+            }
+
             match window.get_layout() {
                 WindowLayout::Floating => {
                     let mut rect = window.geometry();

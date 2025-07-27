@@ -118,12 +118,20 @@ impl WindowExt for Window {
                         .unwrap()
                         .lock()
                         .unwrap();
+
+                    #[cfg(feature = "trace_protocol")]
+                    info!("title: {:?}, app_id: {:?}", roll.title.clone(), roll.app_id.clone());
+
                     (roll.title.clone(), roll.app_id.clone())
                 })
             },
             WindowSurface::X11(x11_surface) => {
                 let title = x11_surface.title();
                 let class = Some(x11_surface.class());
+
+                #[cfg(feature = "trace_protocol")]
+                info!("title: {:?}, app_id: {:?}", title, class);
+
                 (Some(title), class)
             }
         }
@@ -374,6 +382,15 @@ impl WindowManager {
         let (_, app_id) = window.get_title_and_id();
         if let Some(app_id) = app_id {
             self.configs.global_opacity.get(&app_id).cloned()
+        } else {
+            None
+        }
+    }
+
+    pub fn get_fullscreen(&self, window: &Window) -> Option<bool> {
+        let (_, app_id) = window.get_title_and_id();
+        if let Some(app_id) = app_id {
+            self.configs.fullscreen.get(&app_id).cloned()
         } else {
             None
         }
