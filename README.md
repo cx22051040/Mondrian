@@ -79,13 +79,13 @@ ppt与视频链接：[https://pan.baidu.com/s/1rbNUo9MPMoF6pzZGAx5mGw?pwd=51vr](
 
 ### 项目演示
 
+![show4](wiki/README/show4.gif)
+
 ![show](wiki/README/show.png)
 
 ![show2](wiki/README/show2.png)
 
 ![show3](wiki/README/show3.png)
-
-![show4](wiki/README/show4.png)
 
 ### 项目运行
 
@@ -106,8 +106,16 @@ libgbm
 libseat
 xwayland
 
-# for ubuntu 
-# must use 25.05 or above, don't need any operations
+# ubuntu
+# wayland
+sudo apt install wayland-protocols
+# lib
+sudo apt install libseat-dev libinput-dev libxkbcommon-dev libgbm-dev
+# opengl
+sudo apt install libgl1 mesa-utils libgl1-mesa-dev libdrm-dev libgl1-mesa-dri libegl-mesa0 
+
+# add video groups
+sudo usermod -aG video $USER
 
 # extra
 # fcitx5 输入法安装
@@ -290,14 +298,6 @@ cargo build --release
 - [x] 使用 tracing 进行事件耗时追踪
 
 - [ ] 实现 GPU 渲染优化
-
-## 性能分析
-
-![gpu](wiki/README/GPU.png)
-
-使用 weston-simple-egl 进行帧率测试，能够稳定达到 100帧（显示器帧率）
-
-完整的性能分析测试见 wiki 报告。
 
 ## 参考文件
 

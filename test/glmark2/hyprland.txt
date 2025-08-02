@@ -1,0 +1,93 @@
+=======================================================
+    glmark2 2023.01
+=======================================================
+    OpenGL Information
+    GL_VENDOR:      NVIDIA Corporation
+    GL_RENDERER:    NVIDIA GeForce RTX 4060/PCIe/SSE2
+    GL_VERSION:     4.6.0 NVIDIA 570.153.02
+    Surface Config: buf=32 r=8 g=8 b=8 a=8 depth=24 stencil=0 samples=0
+    Surface Size:   800x600 windowed
+=======================================================
+[build] use-vbo=false: FPS: 5170 FrameTime: 0.193 ms
+[build] use-vbo=true: FPS: 7817 FrameTime: 0.128 ms
+[texture] texture-filter=nearest: FPS: 7080 FrameTime: 0.141 ms
+[texture] texture-filter=linear: FPS: 6999 FrameTime: 0.143 ms
+[texture] texture-filter=mipmap: FPS: 6510 FrameTime: 0.154 ms
+[shading] shading=gouraud: FPS: 6725 FrameTime: 0.149 ms
+[shading] shading=blinn-phong-inf: FPS: 6768 FrameTime: 0.148 ms
+[shading] shading=phong: FPS: 6727 FrameTime: 0.149 ms
+[shading] shading=cel: FPS: 6836 FrameTime: 0.146 ms
+[bump] bump-render=high-poly: FPS: 6623 FrameTime: 0.151 ms
+[bump] bump-render=normals: FPS: 7459 FrameTime: 0.134 ms
+[bump] bump-render=height: FPS: 7029 FrameTime: 0.142 ms
+[effect2d] kernel=0,1,0;1,-4,1;0,1,0;: FPS: 6730 FrameTime: 0.149 ms
+[effect2d] kernel=1,1,1,1,1;1,1,1,1,1;1,1,1,1,1;: FPS: 6728 FrameTime: 0.149 ms
+[pulsar] light=false:quads=5:texture=false: FPS: 7292 FrameTime: 0.137 ms
+[desktop] blur-radius=5:effect=blur:passes=1:separable=true:windows=4: FPS: 4094 FrameTime: 0.244 ms
+[desktop] effect=shadow:windows=4: FPS: 4867 FrameTime: 0.205 ms
+[buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=map: FPS: 1703 FrameTime: 0.587 ms
+[buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=subdata: FPS: 1719 FrameTime: 0.582 ms
+[buffer] columns=200:interleave=true:update-dispersion=0.9:update-fraction=0.5:update-method=map: FPS: 1857 FrameTime: 0.539 ms
+[ideas] speed=duration: FPS: 5115 FrameTime: 0.196 ms
+[jellyfish] <default>: FPS: 6192 FrameTime: 0.162 ms
+[terrain] <default>: FPS: 1497 FrameTime: 0.668 ms
+[shadow] <default>: FPS: 6107 FrameTime: 0.164 ms
+[refract] <default>: FPS: 3541 FrameTime: 0.282 ms
+[conditionals] fragment-steps=0:vertex-steps=0: FPS: 8017 FrameTime: 0.125 ms
+[conditionals] fragment-steps=5:vertex-steps=0: FPS: 7102 FrameTime: 0.141 ms
+[conditionals] fragment-steps=0:vertex-steps=5: FPS: 6890 FrameTime: 0.145 ms
+[function] fragment-complexity=low:fragment-steps=5: FPS: 6860 FrameTime: 0.146 ms
+[function] fragment-complexity=medium:fragment-steps=5: FPS: 6929 FrameTime: 0.144 ms
+[loop] fragment-loop=false:fragment-steps=5:vertex-steps=5: FPS: 6991 FrameTime: 0.143 ms
+[loop] fragment-steps=5:fragment-uniform=false:vertex-steps=5: FPS: 6799 FrameTime: 0.147 ms
+[loop] fragment-steps=5:fragment-uniform=true:vertex-steps=5: FPS: 6868 FrameTime: 0.146 ms
+=======================================================
+                                  glmark2 Score: 5927 
+=======================================================
+
+=======================================================
+    glmark2 2023.01
+=======================================================
+    OpenGL Information
+    GL_VENDOR:      NVIDIA Corporation
+    GL_RENDERER:    NVIDIA GeForce RTX 4060/PCIe/SSE2
+    GL_VERSION:     4.6.0 NVIDIA 570.153.02
+    Surface Config: buf=32 r=8 g=8 b=8 a=8 depth=24 stencil=0 samples=0
+    Surface Size:   800x600 windowed
+=======================================================
+[build] use-vbo=false: FPS: 5108 FrameTime: 0.196 ms
+[build] use-vbo=true: FPS: 7419 FrameTime: 0.135 ms
+[texture] texture-filter=nearest: FPS: 7120 FrameTime: 0.140 ms
+[texture] texture-filter=linear: FPS: 7296 FrameTime: 0.137 ms
+[texture] texture-filter=mipmap: FPS: 7269 FrameTime: 0.138 ms
+[shading] shading=gouraud: FPS: 7061 FrameTime: 0.142 ms
+[shading] shading=blinn-phong-inf: FPS: 6953 FrameTime: 0.144 ms
+[shading] shading=phong: FPS: 7010 FrameTime: 0.143 ms
+[shading] shading=cel: FPS: 6956 FrameTime: 0.144 ms
+[bump] bump-render=high-poly: FPS: 6762 FrameTime: 0.148 ms
+[bump] bump-render=normals: FPS: 7301 FrameTime: 0.137 ms
+[bump] bump-render=height: FPS: 7172 FrameTime: 0.139 ms
+[effect2d] kernel=0,1,0;1,-4,1;0,1,0;: FPS: 7108 FrameTime: 0.141 ms
+[effect2d] kernel=1,1,1,1,1;1,1,1,1,1;1,1,1,1,1;: FPS: 6817 FrameTime: 0.147 ms
+[pulsar] light=false:quads=5:texture=false: FPS: 7044 FrameTime: 0.142 ms
+[desktop] blur-radius=5:effect=blur:passes=1:separable=true:windows=4: FPS: 4012 FrameTime: 0.249 ms
+[desktop] effect=shadow:windows=4: FPS: 4812 FrameTime: 0.208 ms
+[buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=map: FPS: 1761 FrameTime: 0.568 ms
+[buffer] columns=200:interleave=false:update-dispersion=0.9:update-fraction=0.5:update-method=subdata: FPS: 1754 FrameTime: 0.570 ms
+[buffer] columns=200:interleave=true:update-dispersion=0.9:update-fraction=0.5:update-method=map: FPS: 1862 FrameTime: 0.537 ms
+[ideas] speed=duration: FPS: 5007 FrameTime: 0.200 ms
+[jellyfish] <default>: FPS: 6272 FrameTime: 0.159 ms
+[terrain] <default>: FPS: 1420 FrameTime: 0.705 ms
+[shadow] <default>: FPS: 5887 FrameTime: 0.170 ms
+[refract] <default>: FPS: 3326 FrameTime: 0.301 ms
+[conditionals] fragment-steps=0:vertex-steps=0: FPS: 7371 FrameTime: 0.136 ms
+[conditionals] fragment-steps=5:vertex-steps=0: FPS: 7065 FrameTime: 0.142 ms
+[conditionals] fragment-steps=0:vertex-steps=5: FPS: 6952 FrameTime: 0.144 ms
+[function] fragment-complexity=low:fragment-steps=5: FPS: 7120 FrameTime: 0.140 ms
+[function] fragment-complexity=medium:fragment-steps=5: FPS: 7029 FrameTime: 0.142 ms
+[loop] fragment-loop=false:fragment-steps=5:vertex-steps=5: FPS: 7192 FrameTime: 0.139 ms
+[loop] fragment-steps=5:fragment-uniform=false:vertex-steps=5: FPS: 6971 FrameTime: 0.143 ms
+[loop] fragment-steps=5:fragment-uniform=true:vertex-steps=5: FPS: 7073 FrameTime: 0.141 ms
+=======================================================
+                                  glmark2 Score: 5977 
+=======================================================
