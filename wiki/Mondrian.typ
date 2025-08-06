@@ -56,10 +56,15 @@
 
 // 封面
 #align(center)[
-  #image("introduce/logo.png", width: 80%)
+  #text(weight: "bold", size: 30pt)[杭州电子科技大学]
+  \
+  #text(size: 15pt, style:"italic")[Hangzhou Dianzi University]
 
-  #linebreak()#linebreak()#linebreak()#linebreak()#linebreak()#linebreak()
-  
+  #text(weight: "bold", size: 36pt)[全国大学生计算机系统能力大赛]
+  \
+  #text(weight: "bold", size: 20pt)[Computer System Development Capability Competition]
+  #linebreak()#linebreak()
+  #image("introduce/HDU_logo.png", width: 190pt, fit: "contain")
   #par(leading: 1em, spacing: 10em)[  
     #text(
       weight: "bold",
@@ -69,7 +74,7 @@
     #text(size: 14pt)[Wayland 协议下的平铺式桌面显示系统]
   ]
 
-  #text(size: 14pt)[小组成员： 林灿，吴悦怡，陈序]
+  #text(size: 14pt)[参赛人员： 林灿，吴悦怡，陈序]
 
   #text(size: 14pt)[2025 年 6 月]
 ]
@@ -86,13 +91,12 @@
 
 == 项目简介
 
-本项目基于 Smithay 使用 Rust 开发了一个使用 Wayland 协议的
-#standout_color[平铺式桌面显示系统]。
-项目能够在裸机终端中自行初始化 DRM/KMS 图形管线，并通过 GBM 和 EGL 建立 GPU 渲染上下文，使用 OpenGLES 进行硬件加速合成显示。启动后该 Compositor 接管系统图形输出，并成为客户端程序（如终端模拟器、浏览器）的 Wayland 显示服务。
+本项目基于 Rust 语言与 Smithay 框架，通过 Wayland 协议实现了一个#standout_color[平铺式桌面显示系统]。
+项目能够在裸机终端中自行初始化 DRM/KMS 图形管线，并通过 GBM  和 EGL 建立 GPU 渲染上下文，使用 OpenGLES 进行硬件加速合成显示。启动后该 Compositor 接管系统图形输出，为客户端程序（如终端模拟器、浏览器）的 Wayland 提供显示服务。
 
 #standout[“Beauty is the promise of happiness.” — Stendhal]
 
-本项目秉持“优雅即力量”的设计哲学，力求在系统结构与用户体验之间取得和谐平衡。无论是内部代码逻辑还是外部交互呈现，都追求简洁、清晰而富有韵律的表达。
+本项目秉持“优雅即力量”的设计哲学，致力于在系统结构与用户体验之间实现和谐平衡。无论是内部代码逻辑，还是外部交互呈现，都追求简洁、清晰而富有韵律的表达。
 
 #figure(
   image("introduce/show1.png", width: 100%),
@@ -107,17 +111,17 @@
 
 == 项目开发进度
 
-项目自 3 月 25 日启动，初期集中精力对现有 Wayland 合成器框架（如 wlroots、Smithay 等）进行了调研与试验，结合项目可控性与扩展性要求，最终选择 #standout("Rust + Smithay") 作为核心技术栈。
+项目自 3 月 25 日启动，初期集中精力对现有 Wayland 合成器框架（如 wlroots、Smithay 等）进行了调研与试验，结合项目可控性与扩展性要求，最终选择 #standout("Rust + Smithay") 作为核心技术栈。 
 
-截至初赛阶段(6.31)，本项目已完成主要基础功能的开发，现已能够在主流 Linux 发行版上部署运行，具备日常使用的基本可用性。
+截至初赛阶段( 6 月 30 日 )，本项目已完成主要基础功能的开发，现已能够在主流 Linux 发行版上部署运行，具备日常使用的基本可用性。
 
-截至决赛阶段（8.12）,本项目进一步实现了更多拓展功能，提升了“个性化定制”这一主题任务。开放多种配置接口提供给用户，用户也可以通过自己编写 shell 代码来实现快捷键的拓展响应事件。
+截至决赛阶段（ 8 月 17 日 ）,本项目进一步实现了更多拓展功能，提升了“个性化定制”这一主题任务。开放多种配置接口提供给用户，用户也可以通过自己编写 shell 代码来实现快捷键的拓展响应事件。
 
-项目目前已实现多后端支持（包括 DRM/KMS 和 Winit 等），显著提升了在不同硬件与环境下的适配能力。
+系统现已支持多后端（DRM/KMS、Winit 等），显著提升了跨硬件和多环境适配能力。
 
 在严格测试下，运行时崩溃情况基本被消除，系统具备良好的稳定性与容错机制。同时，本项目已集成 XWayland 支持，能够无缝运行绝大多数基于 X11 的传统 Linux GUI 应用。
 
-实测环境下，约 90% 以上的常见桌面程序（如 Firefox、VS Code、GIMP、LibreOffice 等）均可稳定运行，确保用户在迁移到本系统时不牺牲原有生态体验。
+实测环境下，90% 以上的常见桌面程序（如 Firefox、VS Code、GIMP、LibreOffice 等）均可稳定运行，确保用户在迁移到本系统时不牺牲原有生态体验。
 
 这些改进标志着项目已从原型阶段迈向实用性，具备成为主力桌面环境的潜力。
 
@@ -139,9 +143,9 @@
 
 == 项目核心功能
 
-本项目支持在 TTY 模式下直接启动桌面显示系统，基于 DRM/KMS 原生渲染，无需依赖 X 服务或其他 Wayland 合成器进行消息转发。系统启动即加载 compositor，整体流程轻量高效。
+本项目支持在 TTY 模式下直接启动桌面显示系统，基于 DRM/KMS 原生渲染，无需依赖 X 服务或其他 Wayland 合成器进行消息转发。系统启动即加载 Compositor，整体流程轻量高效。
 
-通过内建的快捷键机制，用户可以快速启动常用应用，实现类似传统桌面环境的流畅体验。
+通过内置的快捷键机制，用户可以快速启动常用应用，实现类似传统桌面环境的流畅体验。
 
 项目设计充分考虑了日常使用场景，默认配置开箱即用，支持多任务管理、窗口操作与主题切换。
 
@@ -149,13 +153,13 @@
 
 == 项目特点
 
-/ 代码体量: 累计新增 1w+ 行代码。
+/ 代码体量: 累计新增代码量超 1 万行，总代码修改量已超 5 万行。
 
-/ 全栈实现: 实现双后端架构：winit 支持桌面环境，tty 支持裸机直启，原生 DRM/KMS 渲染流程：直接控制 GPU 输出，无需依赖 X11 Server。
+/ 全栈架构: 实现双后端架构：winit 支持桌面环境，TTY 支持裸机直启，原生 DRM/KMS 渲染流程：直接控制 GPU 输出，无需依赖 X11 Server。
 
-/ 数据结构与算法: 引入改造后的容器式二叉树布局方案，实现灵活的平铺与窗口变换；结合 SlotMap 实现节点的常数时间复杂度插入、删除与查找，极大提升动态性能。
+/ 数据结构与算法: 采用改良的容器式二叉树布局方案，实现平铺与窗口变换灵活切换；结合 SlotMap 实现节点的常数时间复杂度插入、删除与查找，动态响应性能大幅提升。
 
-/ 个性化与可编程定制能力: 使用统一配置文件控制主题样式、键位绑定、布局策略等，用户可通过 shell 脚本绑定快捷键，实现更复杂的自动化操作。
+/ 个性化与可编程定制能力: 使用统一配置文件控制主题样式、键位绑定、布局策略等，用户亦可通过 shell 脚本绑定快捷键，实现更复杂的自动化操作。
 
 / 动画与渲染: 自定义过渡动画与渲染逻辑，配合手写 GLSL shader，实现流畅、响应式的交互体验，视觉层次统一且精致。
 
@@ -181,7 +185,7 @@ proj340 - 实现一个简单的平铺式管理的Wayland合成器
 
 === 预期目标
 
-程序运行后自动展示一个终端窗口，在终端窗口中输入命令可启动其它程序，新打开的Wayland窗口与已有的窗口无遮挡
+程序运行后自动展示一个终端窗口，在其中输入命令可启动其它程序，新打开的Wayland窗口与已有的窗口无遮挡
 
 == Linux 图形栈
 
@@ -194,7 +198,7 @@ proj340 - 实现一个简单的平铺式管理的Wayland合成器
   caption: "linux图形人机交互"
 )
 
-== 桌面显示系统
+== Wayland 协议与 X11 协议
 
 在 Linux 操作系统中，图形显示系统由多个层级组成，从底层的内核显卡驱动到用户态的图形协议，再到最终的 GUI 应用。整个图形栈主要包括以下几部分：
 
@@ -227,25 +231,25 @@ _*用户层*_
 
 === Wayland 协议
 
-Wayland 是设计用于替代 X11 的现代图形协议，由 wayland.freedesktop.org 开发，强调简洁、安全、高性能。其基本架构如下：
+Wayland 是由 wayland.freedesktop.org 推出的现代图形协议，旨在取代 X11。它以简洁、安全和高性能为设计核心。其基本架构如下：
 
 Compositor so Display Server：
 
-- 直接管理窗口、图像合成与缓冲交换。
-- 处理输入事件，并直接分发到正确的客户端。
+- 管理窗口、图像合成与缓冲交换。
+- 接收输入事件，并直接分发至相应的客户端。
 - 实现窗口管理逻辑（如平铺、浮动等）。
-  
+   
 Client：
 
 - 负责自行渲染窗口内容（通过 GPU 渲染或 CPU 绘图）。
 - 使用 wl_surface 等原语将渲染结果提交给 Compositor。
-- 与 Compositor 通过共享内存或 DMA Buffer 实现高效图像交换。
+- 通过与 Compositor 共享内存或 DMA Buffer 实现高效图像交换。
 
 Protocols：
 
 - 基于 Unix Domain Socket 通信，使用 wl_display 进行连接。
-- 使用对象-事件模型（Object/Interface），类似面向对象远程调用。
-- 无需往返确认，大部分请求为异步执行，提高响应效率。
+- 使用对象-事件模型（Object/Interface），类似面向对象的远程调用机制。
+- 绝大多数请求异步处理，无需等待确认，显著提升响应效率。
 
 #figure(
   image("introduce/wayland.png", width: 60%),
@@ -261,11 +265,11 @@ X11 是诞生于 1984 年的图形窗口系统，其核心是 client - server �
 
 X11 协议支持网络透明性，即 X Client 和 X Server 可以运行在不同主机上。但其通信模型较为复杂：
 
-- 每个窗口请求都需往返服务器确认（Round Trip），带来额外延迟。
+- 每个窗口请求都需往返服务器确认（Round Trip），导致额外延迟。
 - 图形渲染与窗口管理被分离为多个组件（如 WM、Compositor、Toolkit），难以协调。
-- 输入事件先由 X Server 捕获，后由 Window Manager 转发，路径冗长且易出现冲突。
+- 输入事件先由 X Server 捕获，再由 Window Manager 转发，路径冗长且易出现冲突。
 
-尽管历经多年优化，X11 的架构问题已难以适应现代图形性能与安全性的需求。
+尽管X11历经多年优化， 其架构已难以满足现代图形系统对性能和安全性的需求。
 
 #figure(
   image("introduce/x11.png", width: 70%),
@@ -282,11 +286,11 @@ X11 协议支持网络透明性，即 X Client 和 X Server 可以运行在不�
 
 _*简洁的架构设计*_
 
-Wayland 取消了中间代理（如 Xlib/XCB），让客户端直接负责渲染，Compositor 仅做图像合成与事件路由。这种 *单一控制点设计* 更加清晰易控。
+Wayland 取消了中间代理（如 Xlib/XCB），客户端直接负责渲染，Compositor 专注于图像合成与事件路由。这种 *单一控制点设计* 更加清晰易控。
 
 _*异步通信模型*_
 
-大多数请求为 异步非阻塞，大幅降低绘制窗口所需的 round-trip，提升性能表现，尤其在高帧率与多窗口场景下优势明显。
+Wayland 采用异步非阻塞通信模型，避免了频繁的往返确认，大幅减少延迟，显著提升高帧率与多窗口场景下的性能表现。
 
 _*安全性与隔离性更好*_
 
@@ -312,7 +316,7 @@ Wayland 协议采用模块化设计，核心协议只定义基础对象（如 wl
 
 _*原生合成支持*_
 
-每个窗口的图像由 Client 渲染后交给 Compositor 直接合成，因此减少了冗余图层绘制流程，更容易实现视觉效果（圆角、阴影、动画），支持真正的无撕裂与高刷新率渲染。
+每个窗口的图像由客户端渲染后交给 Compositor 直接合成，减少冗余图层绘制流程，便于实现视觉效果（圆角、阴影、动画），同时支持真正的无撕裂与高刷新率渲染。
 
 
 #pagebreak()
@@ -320,7 +324,7 @@ _*原生合成支持*_
 
 == 平铺式布局管理
 
-传统的桌面环境普遍采用堆叠式（Stacking）窗口管理模型，其核心思想是通过层叠多个可自由移动和缩放的窗口，来完成用户的窗口组织。窗口的可见性与交互依赖于 Z 轴层级与遮挡关系。在窗口数量增多、频繁切换任务时，这种模型容易导致空间浪费、管理混乱、用户认知负担增大，不利于快速切换和管理窗口。
+传统的桌面环境普遍采用堆叠式（Stacking）窗口管理模型，其核心思想是通过层叠多个可自由移动和缩放的窗口来组织界面。窗口的可见性与交互依赖于 Z 轴层级与遮挡关系。随着窗口数量增多、任务频繁切换，该模型易产生空间浪费、管理混乱、用户认知负担，不利于高效使用。
 
 #figure(
   image("introduce/stack.png", width: 100%),
@@ -332,18 +336,15 @@ _*原生合成支持*_
   caption: "平铺式布局示意图（来自GNOME）"
 )
 
-平铺式（Tiling）窗口管理是一种高度结构化的布局方式，屏幕被划分为若干区域，每个窗口占据一个不重叠的矩形区域，并根据特定的布局算法自动排列。其核心原则是：
+平铺式（Tiling）窗口管理采用高度结构化的布局方式，屏幕被划分为若干区域，每个窗口占据一个不重叠的矩形区域，并根据特定的布局算法自动排列。其核心原则是：
 
 #standout_color[所有活动窗口在空间上无重叠，完全平铺填充屏幕空间。]
 
-/ 窗口自动布局: 每当有新窗口创建，它不会以浮动方式出现，而是根据当前焦点窗口的位置与所选布局算法（如垂直分裂、水平分裂、主从结构等）自动插入到屏幕分区中。
-/ 无重叠区域，最大化利用空间: 所有窗口矩形区域互不重叠，窗口大小由布局决定而非用户拖拽（当然存在平铺式与堆叠式一同使用的情况，允许鼠标进行一定的操作），避免空间浪费。
+/ 窗口自动布局: 新窗口创建后不会以浮动形式出现，而是根据当前焦点窗口的位置与所选布局算法（如垂直分裂、水平分裂、主从结构等）自动嵌入屏幕分区。
+/ 无重叠区域，最大化利用空间: 所有窗口矩形区域互不重叠，其大小由布局算法自动决定，而非依赖用户拖拽（当然存在平铺式与堆叠式一同使用的情况，允许鼠标进行一定的操作），避免空间浪费。
 / 键盘优先交互: 平铺管理器强调键盘操控，通过快捷键进行窗口聚焦、移动、交换、调整布局比例等操作，效率远高于传统的鼠标驱动方式。
-/ 一致性与可预测性: 所有布局变化均可通过布局算法精确复现，不依赖“拖拽”或“随机叠放”这种不可重现的行为，便于自动化与脚本控制。
+/ 一致性与可预测性: 所有窗口行为均由算法驱动，具有高度可预测性。不依赖“拖拽”或“随机叠放”这种不可重现的行为，便于自动化与脚本控制。
 
-研究发现，开发者每次任务中断后平均需要约 23 分钟 才能完全恢复工作状态。频繁的任务切换严重打断“心流”，影响深度工作效率。#cite(<TechWorld>)
-
-“上下文切换疲劳模型”：将桌面环境中频繁的窗口隐藏/Alt-Tab 操作建模为“心理堆栈”，探索其在多任务高强度使用下对工作流的负面影响。这可能为 Tiling WM 提供一种“认知开销更低”的科学解释。
 
 #pagebreak()
 
@@ -353,11 +354,11 @@ _*原生合成支持*_
 
 == 技术选型
 
-_Mondrian_ 的核心目标是实现一个 #standout[面向未来的、结构可控的] 平铺式桌面环境，因此我们选择了 Rust 作为主要开发语言，并基于 Smithay 框架进行构建。这一组合在性能、可靠性、安全性和协议支持方面表现出极高的适配性。
+_Mondrian_ 的核心目标是实现一个 #standout[面向未来的、结构可控的] 平铺式桌面环境，因此我们选择了 Rust 作为主要开发语言，并基于 Smithay 框架进行构建。该组合在性能、可靠性、安全性与协议支持方面表现出优异的适配性。
 
 == Smithay
 
-Smithay 是一个专为构建 Wayland 合成器而设计的 Rust 框架，提供了协议实现、后端抽象、渲染集成等基础模块。它不是一个完整的 window manager，而是一个合成器构建工具箱。
+Smithay 是一个专为构建 Wayland 合成器而设计的 Rust 框架，提供了协议实现、后端抽象、渲染集成等基础模块。它并非完整的窗口管理器，而是一个合成器构建工具箱。
 
 #figure(
   image("introduce/smithay.png", width: 100%),
@@ -368,8 +369,8 @@ Smithay 是一个专为构建 Wayland 合成器而设计的 Rust 框架，提供
 
 / 模块化设计: Smithay 拆分为多个可选模块，如 wayland-backend, wayland-protocols, input, output 等。
 / Wayland 协议支持广泛: 支持核心协议如 wl_compositor, wl_seat, xdg-shell，并集成 xdg-output, layer-shell, wlr-protocols 等常见扩展。可以在合成器层自由定制协议行为，例如限制窗口行为、插入布局钩子等。
-/ 后端抽象能力: 支持多个图形后端（EGL, GLES2, WGPU）、输入后端（Winit、libinput）与输出设备管理（DRM/KMS、virtual output）。允许在不同平台（如嵌入式、TTY、X11）运行，底层支持度高。
-/ 灵活可插拔架构: 不像 Weston 或 wlroots 那样强绑定窗口管理逻辑，Smithay 允许合成器设计者自行定义事件循环、窗口模型与渲染策略，非常适合实现平铺式或动态布局系统。
+/ 后端抽象能力: 支持多个图形后端（EGL, GLES2, WGPU）、输入后端（Winit、libinput）以及输出设备管理（DRM/KMS、virtual output）。允许在不同平台（如嵌入式、TTY、X11）运行，底层支持度高。
+/ 灵活可插拔架构: 区别于 Weston 或 wlroots 的高度集成设计，Smithay 并不绑定特定的窗口管理逻辑。开发者可自由定义事件循环、窗口模型与渲染策略，尤其适用于实现平铺式或动态窗口布局系统。
 / 社区活跃、长期演进: Smithay 拥有稳定的维护团队，与 Mesa、wlroots 社区保持良好协作，能持续跟进最新的 Wayland 标准与实践。
 
 
@@ -387,9 +388,9 @@ Rust 是一门强调安全性与并发性能的系统级语言，具备以下几
 
 === Unix Socket
 
-迄今为止，所有的 Wayland 实现均通过 Unix Socket 工作。 这有个很特别的原因：文件描述符消息。 Unix Socket 是最实用的跨进程文件描述符传输方法，这对大文件传输（如键盘映射、像素缓冲区、剪切板）来说非常必要。 理论上其它传输协议（比如 TCP）是可行的，但是需要开发者实现大文件传输的替代方案。
+迄今为止，所有的 Wayland 实现均通过 Unix Socket 工作。 这一选择的核心原因在于：文件描述符消息。 Unix Socket 是最实用的跨进程文件描述符传输方法，这对大文件传输（如键盘映射、像素缓冲区、剪切板）来说非常必要。 尽管理论上可使用其它传输协议（比如 TCP），但是需要开发者实现大文件传输的替代方案。
 
-为了找到 Unix Socket 并连接，大部分实现要做的事和 libwayland 所做的一样：
+为了找到 Unix Socket 并连接，大部分实现（包括libwayland）遵循如下顺序：
 
 1. 如果 WAYLAND_SOCKET 已设置，则假设父进程已经为我们配置了连接，将 WAYLAND_SOCKET 解析为文件描述符。
 2. 如果 WAYLAND_DISPLAY 已设置，则与 XDG_RUNTIME_DIR 路径连接，尝试建立 Unix Socket。
@@ -398,9 +399,9 @@ Rust 是一门强调安全性与并发性能的系统级语言，具备以下几
 
 === 接口与事件请求
 
-Wayland 协议通过发出作用于对象的请求和事件来工作。 每个对象都有自己的接口，定义了可行的请求事件以及对应的签名。wl_surface 是最简单的一个接口。
+Wayland 协议通过发出作用于对象的请求和事件来工作。 每个对象都遵循特定的接口，定义了可行的请求事件以及对应的签名。wl_surface 是最简单的一个接口。
 
-Surface 是可以在屏幕上显示的像素区域， 是我们构建应用程序窗口之类的东西的基本元素之一。 它有个请求名为“damage”（损坏），客户端发送这个请求表示某个 surface 的某些部分发生了变化，需要重绘。 下面是 wire 中的一个 damage 消息的带注释示例（16 进制）：
+Surface 表示屏幕上可显示的像素区域， 是构建窗口等图形元素的基本单元。 定义请求名为“damage”（损坏），客户端发送该请求表示某个 surface 的某些部分发生了变化，需要重绘。 下面是 wire 中的一个 damage 消息的带注释示例（16 进制）：
 
 ```bash
 0000000A    对象 ID (10)
@@ -411,7 +412,7 @@ Surface 是可以在屏幕上显示的像素区域， 是我们构建应用程�
 00000100    高度         (int): 256
 ```
 
-这是 session 会话的小片段：surface 已经提前分配，它的 ID 为 10。 当服务端收到这条消息后，服务端会查找 ID 为 10 的对象，发现它是一个 wl_surface 实例。 基于此，服务端用请求的 opcode 操作码 2 查找请求的签名。 然后就知道了接下来有四个整型作为参数，这样服务器就能解码这条消息，分派到内部处理。
+这是 session 会话的小片段：surface 已被提前分配，它的 ID 为 10。 当服务端收到该请求消息后，会根据ID查找对应对象，确认其类型为 wl_surface。 基于此，服务端用请求的 opcode 操作码 2 查找请求的签名。 从而识别出后续包含四个整型参数，这样服务器就能解码这条消息，分派到内部处理。
 
 请求是从客户端发送到服务端，反之，服务端也可以给客户端广播消息，叫做“事件”。 例如，其中一个事件是 wl_surface 的 enter 事件，在 surface 被显示到指定的 output 时，服务端将发送该事件 （客户端可能会响应这一事件，比如为 HiDPI 高分屏调整缩放的比例因数）。
 
@@ -426,21 +427,21 @@ Wayland 协议设计规范中最重要的是原子性。 Wayland 的一个既定
 - 变换，比如旋转 90 度
 - 缓冲区的缩放比例，用于 HiDPI
 
-接口为这些配置提供了许多独立的请求，但它们都处于挂起状态（pending）。 仅当发送提交(commit)请求时，挂起状态才会合并到当前状态（current）。 从而可以在单帧内，原子地更新所有这些属性。 结合其他一些关键性的设计决策，Wayland 合成器可以在每一帧中都完美地渲染一切，没有撕裂或更新一半的窗口，每个像素都在它应在的位置，静静地显示。
+接口为这些配置提供了许多独立的请求，但它们都处于挂起状态（pending）。 仅当发送提交(commit)请求时，挂起状态才会合并到当前状态（current）。 从而可以在单帧内，原子地更新所有这些属性。 结合其他一些关键性的设计决策，Wayland 合成器可以在每一帧中都完美地渲染一切，没有撕裂或更新一半的窗口，每个像素都恰如其分地显示在应在的位置。
 
 === 共享内存缓冲区
 
-从客户端获取像素到混成器最简单，也是唯一被载入 wayland.xml 的方法，就是 wl_shm ——共享内存。简单地说，它允许你为混成器传输一个文件描述符到带有 MAP_SHARED 的内存映射（mmap），然后从这个池中共享像素缓冲区。添加一些简单的同步原语，以防止缓冲区竞争，然后你就有了一个可行且可移植的解决方案。
+从客户端获取像素到混成器最简单，也是唯一被载入 wayland.xml 的方法，就是 wl_shm ——共享内存。其原理是，它允许你为混成器传输一个文件描述符到带有 MAP_SHARED 的内存映射（mmap），然后从这个池中共享像素缓冲区。添加一些简单的同步原语，以防止缓冲区竞争。这一机制构成了一个可行且可移植的解决方案。
 
 === xdg shell
 
-XDG (cross-desktop group) shell 是 Wayland 的一个标准扩展协议，描述了应用窗口的语义。它定义了两个 wl_surface 角色："toplevel" 用于你的顶层应用窗口；"popup" 则用于诸如上下文菜单、下拉菜单、工具提示等等——它们是顶层窗口的子集。有了这些，你可以将其归结于一个树状结构，顶层是根，弹出式或附加式窗口处于顶层的子叶上。该协议还定义了一个定位器接口，用于辅助定位弹窗，并提供有关窗口周围事物的那些信息。
+xdg shell 是 Wayland 的标准扩展之一，由XDG(cross-desktop group)制定，用于描述应用窗口的语义。它定义了两个 wl_surface 角色："toplevel" 表示顶层应用窗口；"popup" 则用于诸如上下文菜单、下拉菜单、工具提示等等——它们是顶层窗口的子集。基于这些角色，客户端可以构建一个树状结构，顶层是根，弹出式或附加式窗口处于顶层的子叶上。该协议还定义了一个定位器接口，用于辅助定位弹窗，并提供有关窗口周围事物的那些信息。
 
 在 xdg-shell 领域内的表面被称为 xdg_surfaces，这个接口带来了两种 XDG 表面所共有的功能——toplevels 和 popups（也即之前提到的顶层窗口和弹窗）。每种 XDG 表面的语义仍然不同，所以必须通过一个额外的角色来明确指定它们。
 
 xdg_surface 接口提供了额外的请求来分配更具体的 popup 和 toplevel 角色。一旦我们将一个全局对象绑定到全局接口 xdg_wm_base，我们就可以使用 get_xdg_surface 请求来获得一个 wl_suraface。
 
-xdg-surface 最重要的 API 就是 configure 和 ack_configure 这一对。Wayland 的一个目标是让每一帧都完美呈现，这意味着任何一帧都没有应用了一半的状态变化（原子性，避免画面撕裂），为了实现这个目标，我们必须要在客户端和服务端之间同步这些变化。对于 XDG 表面来说，这对消息（这两个 API 传递的内容）正是实现这一目的的机制。
+xdg-surface 最重要的 API 就是 configure 和 ack_configure 。Wayland 的一个目标是让每一帧都完美呈现，这意味着任何一帧都没有应用了一半的状态变化（原子性，避免画面撕裂），为了实现这个目标，我们必须要在客户端和服务端之间同步这些变化。对于 XDG 表面来说，这对消息（这两个 API 传递的内容）正是实现这一目的的机制。
 
 当来自服务端的事件通知你配置（或重新配置）一个表面时，将它们设置到一个待定状态。当一个 configure 事件到来时，会应用先前准备好的变化，使用 ack_configure 来确定你已经这样做了，然后渲染并提交一个新的帧。
 
@@ -469,7 +470,7 @@ Smithay 采用 _calloop_ 作为主事件循环框架，其优势在于：
 - 高性能的非阻塞式事件分发
 - 原生支持定时器、通道等常用异步通信模型
 
-Smithay 为 Winit 后端提供了优秀的兼容模式，可以很方便的进行开发。
+Smithay 为 Winit 后端提供了优秀的兼容支持，使得在桌面环境开发中更加便捷高效。
 
 === EventLoop 事件分发机制
 
@@ -477,14 +478,14 @@ Smithay 为 Winit 后端提供了优秀的兼容模式，可以很方便的进�
 
 _*定义*_
 
-在 `main` 函数中定义一个 `EventLoop` 主体非常简单，直接调用相关的库函数：
+在 `main` 函数中初始化 `EventLoop` 主体非常简单，直接调用相关的库函数：
 
 ```rust
 use smithay::reexports::calloop::EventLoop;
 let mut event_loop: EventLoop<'_, State> = EventLoop::try_new().unwrap();
 ```
 
-在这里，`State` 类型是全局状态结构体，由我们自己定义，目前暂时不谈论细节，你只需知道这个结构体管理所有的程序状态即可。
+此处的`State` 类型是我们自定义的全局状态结构体，用于统一管理合成器运行期间的内部状态（此处暂不展开）。
 
 通过获取 `LoopHandle` 就来执行事件的插入，删除与执行操作：
 
@@ -496,7 +497,7 @@ event_loop
     })?;
 ```
 
-在这里，我们通过 `handle()` 函数获取操作入口，使用 `insert_source` 函数来注册 `EventSource`，其会将一个监听对象添加到主循环中，并且绑定一个处理函数（回调闭包），每当事件产生时，就会调用这个函数。
+通过 `handle()` 函数获取操作入口，使用 `insert_source` 函数来注册 `EventSource`，其会将一个监听对象添加到主循环中，并且绑定一个处理函数（回调闭包），每当事件产生时，就会调用这个函数。
 
 事件循环可以绑定多个事件源，常见类别如下：
 
@@ -540,17 +541,17 @@ loop_handle
     .expect("Failed to init wayland socket source.");
 ```
 
-`Wayland` 是一个基于 `UNIX 域套接字（UNIX domain socket）` 的通信协议，`Client` 与 `Compositor` 之间的所有协议交互，都是通过一个共享的本地套接字进行的。
+`Wayland` 是一个基于 `UNIX `域套接字（UNIX domain socket）的通信协议，`Client` 与 `Compositor` 之间的所有协议交互，都是通过一个共享的本地套接字进行的。
 
 `ListeningSocketSource::new_auto()` 会自动创建一个新的 `UNIX 域套接字`，并监听客户端连接请求。默认在 `/run/user/UID/` 下创建 `socket` 文件，例如 `wayland-0`。本地调试时我们需要设置环境变量 `WAYLAND_DISPLAY=wayland-0` 来绑定测试的 `Compositor`。
 
 当有客户端连接或请求发生时，对应的事件将触发该回调闭包，并调用 `.display_handle.insert_client` 以执行客户端初始化、资源绑定或协议处理等逻辑。
 
-详细的创建内容在 *Client事件源* 篇会详细讲解。
+详细的创建内容在 *Client事件源* 篇会详细介绍。
 
 _*事件执行*_
 
-此前我们只是将需要监听的事件源和需要执行的函数内容加入到了 `EventLoop` 中，但还未真正的下达指令 - 你可以开始监听了，因此，我们还需要以下代码来真正开启循环：
+此前我们只是将需要监听的事件源和需要执行的函数内容加入到了 `EventLoop` 中，但此时事件循环尚未真正启动。要开始事件的监听与调度，还需调用run()方法：
 
 ```rust
 event_loop
@@ -560,7 +561,7 @@ event_loop
     .unwrap();
 ```
 
-此时，我们可以解答在事件源插入中遗留的问题了，可变借用是此时才被传入其中的，顺序上也许会让人疑惑，但这就是 Rust 的“延迟状态绑定”机制的奇妙之处。
+至此，我们可以解答在事件源插入中遗留的问题，可变借用是此时才被传入其中的，顺序上也许会让人疑惑，但这就是 Rust 的“延迟状态绑定”机制的设计优势。
 
 在调用 `insert_source` 时，事件循环尚未开始运行，只是注册了事件源与回调；
 
@@ -572,7 +573,7 @@ event_loop
 
 它确保了事件循环中所有 `state` 的使用都在 `run()` 的生命周期范围内发生，且绝不会出现悬垂引用或数据竞争。
 
-至此，核心的框架就已经被我们解决了，接下来就是真正的进行对不同事件源的处理。
+至此，我们已经构建完成事件主循环的基础框架，接下来即可着手实现对不同事件源的具体处理逻辑。
 
 
 === Client 事件源
@@ -693,7 +694,7 @@ impl XdgShellHandler for State {
 delegate_xdg_shell!(State);
 ```
 
-设置 `xdg-shell` 协议的相关代码也非常简单，只需要使用 `smithay` 提供的框架即可。具体函数内部实现的方法，参考基础框架代码。
+设置 `xdg-shell` 协议的相关支持逻辑相对简洁，可直接使用 `smithay` 提供的框架函数进行实现。具体函数内部实现的方法，参考基础框架代码。
 
 至此，我们已经完成了核心的 `surface` 分配机制，相当于给画家提供了画板，还设置了画板最后展出的场馆 - `toplevel` 或 `popup` 。
 
@@ -793,7 +794,7 @@ event_loop
 
 具体的状态如： `InputEvent::Keyboard`，`InputEvent::PointerMotion` 等这里不再详细讲解，具体参考基础框架代码内容。
 
-至此，我们就得到了一个简单的，可以响应客户端请求，并且支持鼠标，键盘操作的简易 Wayland Compositor。
+至此，我们已构建完成一个具备基本输入响应能力的Wayland合成器，能够接收客户端连接，并处理键盘与鼠标等交互事件。
 
 #pagebreak()
 
@@ -1722,7 +1723,7 @@ pub struct TiledTree {
 
 #pagebreak()
 
-=== 平铺树插入
+=== 平铺树插入算法
 
 在动态平铺布局中，窗口的插入不仅需要考虑目标窗口的位置，还要明确插入的方向与插入策略，以决定新窗口在布局中的具体位置。
 
@@ -1909,7 +1910,7 @@ pub fn new_with_first_node(window: Window, root_rect: Rectangle<i32, Logical>, g
 }
 ```
 
-=== 平铺树删除
+=== 平铺树删除算法
 
 由于我们使用的是二叉树，删除某个节点，只需要让 sibling 节点直接获取 container 节点存储的 rectangle 大小，并且将 container 节点转化为 sibling 对应的节点（sibling 可能是node，也可能是container）。这样无需修改无关节点的信息，实现高效简洁的操作。
 
@@ -2013,7 +2014,7 @@ pub fn remove(&mut self, target: &Window, animation_manager: &mut AnimationManag
 
 #pagebreak()
 
-=== 平铺树更新
+=== 平铺树更新算法
 
 平铺树中，最复杂的就是更新算法，尤其是 resize 行为导致的更新。我们假设目前有这样的一个窗口布局：
 
@@ -2197,7 +2198,7 @@ pub fn resize(&mut self, target: &Window, direction: Direction, offset: i32, is_
 }
 ```
 
-=== 平铺树窗口交换
+=== 平铺树窗口交换算法
 
 在处理 resize 的时候，我们只需要考虑最大 parent 节点，然后遍历更新就可以了，在处理两个相邻窗口交换的问题上，会更复杂一些，我们必须找到 node 节点。
 
@@ -2327,7 +2328,7 @@ pub fn exchange(&mut self, target: &Window, direction: Direction, is_favour: boo
 }
 ```
 
-=== 平铺树看板
+=== expansion
 
 Mondrian 还提供了一个类似全窗口看板的操作，将所有的平铺窗口与浮动窗口，设定为统一的大小，规整的排列在一起，方便用户进行窗口查询。
 
@@ -2420,7 +2421,7 @@ pub fn expansion(&self, animation_manager: &mut AnimationManager) {
 }
 ```
 
-=== 平铺树容器排列方向交换
+=== invert
 
 Mondrian 提供更改 Container direction 的操作，比如将水平分布的窗口转变为竖直分布。
 
@@ -2495,90 +2496,6 @@ pub fn switch_layout(&mut self, window: &Window, pointer_loc: Point<f64, Logical
 ```
 
 #pagebreak()
-
-== Workspace 工作区
-
-在平铺式窗口管理器中，*工作区（Workspace）*是实现窗口组织与切换的重要机制，是动态布局的核心功能之一。与传统的浮动式窗口管理器相比，平铺式窗口不依赖“最小化”或“隐藏”操作来管理暂时不使用的窗口，而是通过将窗口分布在多个工作区中，以维持清晰的窗口结构。
-
-#figure(
-  image("introduce/workspace.png", width: 100%),
-  caption: "workspace"
-)
-
-每个工作区通常包含一组逻辑相关的应用窗口，用户可以通过快捷键在各个工作区间快速切换，达到在不同任务间高效上下文切换的效果。这种方式不仅提升了操作效率，也避免了窗口层叠带来的混乱，使用户始终保持对当前活动窗口的聚焦。
-
-此外，工作区的切换具有高度的可预期性和空间记忆优势。用户可以为不同工作内容分配固定的工作区（如：编程、网页浏览、通信等），从而形成肌肉记忆式的使用习惯，极大提升多任务操作的流畅度。
-
-在动态平铺布局下，工作区不仅仅是窗口的分组容器，更是用户管理复杂窗口环境的核心手段。
-
-Mondrian 中实现了高效的工作区切换实现，允许用户自由的创建与切换工作区，并且各个工作区之间的元素不会互相干扰，只有当前工作区能够获取 focus 焦点与渲染事件。
-
-workspace 由 WorkspaceManager 管理， WorkspaceManager 管理多个 Workspace 对象：
-
-```rs
-#[derive(Debug)]
-pub struct Workspace {
-    workspace_id: WorkspaceId,
-
-    scheme: TiledScheme, 
-    container_tree: ContainerTree,
-
-    output_working_geometry: Rectangle<i32, Logical>,
-
-    configs: Arc<WorkspaceConfigs>,
-}
-
-#[derive(Debug)]
-pub struct WorkspaceManager {
-    workspaces: HashMap<WorkspaceId, Workspace>,
-    activated_workspace: Option<WorkspaceId>,
-    configs: Arc<WorkspaceConfigs>,
-}
-```
-
-每个 Workspace 拥有一个 ContianerTree，可以说 Workspace 是窗口管理的逻辑容器，承载所有窗口布局信息，是组织与调度窗口的关键单元。
-
-Workspace 主要与 WindowManager 进行联动，用来判断某个窗口是否是当前工作区的窗口，判断是否需要呈现以及给予焦点等操作：
-
-```rs
-...
-    pub fn mapped_windows(&self, workspace_id: WorkspaceId) -> impl Iterator<Item = &Window> {
-        self.mapped.iter().filter(move |window| {
-            self.window_workspace.get(*window) == Some(&workspace_id)
-        })
-    }
-    
-    pub fn window_under(&self, pointer_loc: Point<f64, Logical>, workspace_id: WorkspaceId) -> Option<Window> {
-        for window in &self.mapped {
-            if Some(&workspace_id) != self.window_workspace.get(window) {
-                continue;
-            }
-
-            // expansion window
-            if let Some(guard) = window.user_data().get::<ExpansionCache>() {
-                if let Some(window_rect) = guard.get() {
-                    if window_rect.contains(pointer_loc.to_i32_round()) {
-                        return Some(window.clone())
-                    }
-                    continue;
-                }
-            }
-
-            if let Some(window_rect) = window.get_rect() {
-                if window_rect.contains(pointer_loc.to_i32_round()) {
-                    return Some(window.clone())
-                }
-            }
-        }
-
-        None
-    }
-...
-```
-
-
-#pagebreak()
-
 
 == 动画效果实现
 
@@ -2878,242 +2795,6 @@ animation_manager.add_animation(
 
 #pagebreak()
 
-== 合成器统一渲染
-
-在 Wayland Compositor 中，所有客户端的可视内容最终由合成器统一处理与呈现。该过程由 RenderManager 模块负责协调与执行，具体包括以下核心职责：
-
-1. 渲染管线初始化：在启动阶段，RenderManager 负责创建并配置 GPU 着色器程序（Shader Program）、帧缓冲对象（FBO）以及相关渲染资源，构建完整的渲染流水线，以支持高效的图像合成与后处理操作。
-2. 图层收集与合成调度：在每一帧的渲染周期中，RenderManager 会收集当前所有需显示的表面（Surface）信息，包括客户端窗口、系统界面层（如 Bar、背景、Overlay 等），依据 Z-Index、透明度、几何变换等属性进行排序，并驱动底层渲染 API（如 OpenGL、Vulkan 或 GLES）逐层绘制，最终合成为一张完整的输出帧，提交至 DRM 进行显示。
-
-```rs
-impl RenderManager {
-    pub fn compile_shaders(&self, renderer: &mut GlesRenderer) {
-        BorderRenderElement::complie_shaders(renderer);
-        BackgroundRenderElement::complie_shaders(renderer);
-    }
-
-    pub fn get_render_elements<R: MondrianRenderer>(
-        &mut self,
-        renderer: &mut R,
-        output_manager: &OutputManager,
-        workspace_manager: &WorkspaceManager,
-        window_manager: &WindowManager,
-        cursor_manager: &mut CursorManager,
-        input_manager: &InputManager,
-        animation_manager: &mut AnimationManager
-    ) -> Vec<OutputRenderElements<R>> {
-        let _span = tracy_client::span!("get_render_elements");
-
-        let mut output_elements = vec![];
-
-        // First is Cursor
-        output_elements.extend(
-            self.get_cursor_render_elements(
-                renderer,
-                output_manager,
-                cursor_manager,
-                input_manager,
-            )
-            .into_iter()
-            .map(OutputRenderElements::Custom),
-        );
-
-        // Then Some Control elements
-
-        // Then Windows, Borders and Layer-shell
-        output_elements.extend(
-            self.get_windows_render_elements(
-                    renderer, 
-                    output_manager, 
-                    workspace_manager, 
-                    window_manager, 
-                    input_manager,
-                    animation_manager,
-                )
-                .into_iter()
-                .map(OutputRenderElements::Custom),
-        );
-
-        // output_elements.extend(
-        //     self.get_background_render_elements(renderer, output_manager)
-        //         .into_iter()
-        //         .map(OutputRenderElements::Custom),
-        // );
-
-        output_elements
-    }
-}
-```
-
-RenderManager 还负责设计 render_elements 对象的具体 trait 实现，确保渲染元素能够统一的被处理。这里使用的是 niri #cite(<niri>) 提供的宏定义模板，规定了渲染元素需要完成的函数行为。
-
-```rs
-niri_render_elements! {
-    ShaderRenderElement => {
-        Border=BorderRenderElement,
-        Background=BackgroundRenderElement,
-    }
-}
-
-niri_render_elements! {
-    CustomRenderElements<R> => {
-        Surface=WaylandSurfaceRenderElement<R>,
-        NamedPointer=MemoryRenderBufferRenderElement<R>,
-        Shader=ShaderRenderElement,
-    }
-}
-
-niri_render_elements! {
-    OutputRenderElements<R> => {
-        Space=SpaceRenderElements<R, WaylandSurfaceRenderElement<R>>,
-        Custom=CustomRenderElements<R>,
-    }
-}
-```
-
-#pagebreak()
-
-*获取窗口渲染元素*
-
-对于窗口渲染内容来说，我们以这样的顺序进行处理：
-
-1. 上层 layer_map：在 fullscreen 的情况下，我们允许启动上层的 layer 应用，但是在进入 fullscreen 时已经存在的会暂时隐藏
-2. fullscreen：全屏界面，这时候会进入 scanout 流程，也就是直接渲染输出。
-3. 获取 windows 元素： 根据 focus 的情况，判断是否要为其渲染焦点选中边框，边框有 shader 编写实现。
-4. 下层 layer_map
-
-```rs
-pub fn get_windows_render_elements<R: MondrianRenderer>(
-    &mut self,
-    renderer: &mut R,
-    output_manager: &OutputManager,
-    workspace_manager: &WorkspaceManager,
-    window_manager: &WindowManager,
-    input_manager: &InputManager,
-    animation_manager: &mut AnimationManager
-) -> Vec<CustomRenderElements<R>> {
-    let _span = tracy_client::span!("get_windows_render_elements");
-
-    let mut elements: Vec<CustomRenderElements<R>> = vec![];
-
-    let output = output_manager.current_output();
-    let output_geo = output_manager.output_geometry(output).unwrap();
-    let output_scale = output.current_scale().fractional_scale();
-
-    // layer shell top and overlap
-    let layer_map = layer_map_for_output(output);
-    for layer in [Layer::Overlay, Layer::Top] {
-        for layer_surface in layer_map.layers_on(layer) {
-            let layout_rec = layer_map.layer_geometry(layer_surface).unwrap();
-            elements.extend(
-                layer_surface.render_elements::<WaylandSurfaceRenderElement<R>>(
-                    renderer,
-                    (layout_rec.loc + output_geo.loc).to_physical_precise_round(output_scale),
-                    Scale::from(output_scale),
-                    1.0,
-                ).into_iter().map(CustomRenderElements::Surface)
-            );
-        }
-    }
-
-    // fullscreen surface
-    if let Some((window, _)) = output
-        .user_data()
-        .get::<FullscreenSurface>()
-        .and_then(|f| f.get())
-    {
-        let location: Point<i32, Logical> = (0, 0).into();
-        elements.extend(window
-            .render_elements::<WaylandSurfaceRenderElement<R>>(
-                renderer,
-                (location - window.geometry().loc).to_physical_precise_round(output_scale),
-                Scale::from(output_scale),
-                1.0,
-            ).into_iter().map(CustomRenderElements::Surface)
-        );
-
-        return elements;
-    }
-
-    // get focus
-    let focus = input_manager
-        .get_keyboard_focus()
-        .and_then(|t| match t {
-            KeyboardFocusTarget::Window(w) => Some(w),
-            _ => None,
-        });
-
-    // windows
-    for window in window_manager.mapped_windows(workspace_manager.current_workspace().id()) {
-        let rect = match animation_manager.get_animation_data(window) {
-            Some(rect) => {
-                rect
-            }
-            None => {
-                if let Some(rect) = window
-                    .user_data()
-                    .get::<ExpansionCache>()
-                    .and_then(|cache| cache.0.borrow().clone())
-                    .or_else(|| window.get_rect())
-                {
-                    rect
-                } else {
-                    continue;
-                }
-            }
-        };
-
-        // windows border
-        if let Some(focus) = &focus {
-            if focus == window {
-                elements.extend(self.get_border_render_elements(renderer, rect));
-            }
-        }
-        
-        let render_loc = (rect.loc - window.geometry().loc).to_physical_precise_round(output_scale);
-        
-        // set alpha
-        let mut alpha  = 0.85;
-        if let WindowLayout::Floating = window.get_layout() {
-            alpha = 1.0
-        } else if let Some(val) = window_manager.get_opacity(window) {
-            alpha = val;
-        }
-
-        elements.extend(window
-            .render_elements::<WaylandSurfaceRenderElement<R>>(
-                renderer,
-                render_loc,
-                Scale::from(output_scale),
-                alpha,
-            ).into_iter().map(CustomRenderElements::Surface)
-        );
-    }
-
-    // layer shell bottom and background
-    for layer in [Layer::Bottom, Layer::Background] {
-        for layer_surface in layer_map.layers_on(layer) {
-            let layout_rec = layer_map.layer_geometry(layer_surface).unwrap();
-            elements.extend(
-                layer_surface.render_elements::<WaylandSurfaceRenderElement<R>>(
-                    renderer,
-                    (layout_rec.loc + output_geo.loc).to_physical_precise_round(output_scale),
-                    Scale::from(output_scale),
-                    1.0,
-                ).into_iter().map(CustomRenderElements::Surface),
-            );
-        }
-    }
-
-    elements
-}
-```
-
-
-
-#pagebreak()
-
-
 == Configs manager
 
 Mondrian 致力于打造一个极简而灵活的平铺式窗口管理器，核心理念是将窗口管理逻辑与用户界面完全解耦，将控制权交还给用户。
@@ -3162,8 +2843,6 @@ Mondrian 遵循最小窗口管理器（Minimal Window Manager）的设计原则�
 
 Mondrian 提供了一份默认的美化模板，涵盖基本的主题配色、字体设置、透明度、圆角边框、Waybar 配置等，使用户开箱即用即可获得现代美观的桌面体验。
 同时，用户也可以基于该模板进行深度自定义，例如修改主题色调、调整布局逻辑、替换系统组件，构建属于自己的独特桌面环境。
-
-=== 自定义 shell 脚本
 
 用户还可以实现编写 shell 脚本来绑定快捷键，实现更丰富的内容。
 
@@ -3235,19 +2914,6 @@ rofi -show "${r_mode}" \
      -config "${roconf}"
 
 ```
-
-=== nixos 复现
-
-NixOS 是一个以 函数式配置管理 为核心理念的 Linux 发行版，构建在 Nix 包管理器之上。它最显著的特点之一是强大的 系统状态可复现能力（reproducibility）。
-
-在 NixOS 中，整个系统的配置（包括内核、服务、用户环境等）都通过声明式的 .nix 文件描述，类似于函数的输入参数。只要这些配置文件和对应的 Nix 包版本一致，就能构建出完全相同的系统环境。这种方式使得：
-
-1. 系统可以快速重建或迁移到另一台机器上
-2. 不同机器之间共享一致的开发环境
-
-Mondrian 为 NixOS 的开发制作了开箱即用的开发环境与完整配置 #link("github.com/linermao/nixos");
-
-直接使用 nix develop --impure 即可复现开发环境。
 
 #pagebreak()
 
@@ -3379,11 +3045,6 @@ impl GlobalData {
 == XWayland 协议实现
 
 在 Wayland 架构下，原生应用需通过 Wayland 协议与 Compositor 进行通信。但当前 Linux 桌面软件生态中，仍有大量基于 X11 的应用尚未迁移至 Wayland。为了兼容这些应用，XWayland 提供了一套桥接机制，使得 Wayland Compositor 能够托管 X11 应用窗口，从而保障传统应用的可用性。
-
-#figure(
-  image("introduce/steam.png", width: 100%),
-  caption: "x应用测试"
-)
 
 XWayland 是一个运行在 Wayland 上的 X 服务器（Xwayland 进程），其核心作用是：
 
@@ -3633,41 +3294,7 @@ impl XwmHandler for GlobalData {
 }
 ```
 
-=== 伪全屏实现
 
-在实现 xwayland 并成功运行 Steam 后，我们在测试 黑神话：悟空 时遇到了全屏显示相关的问题。该游戏基于 Unreal Engine 5（UE5）开发，UE5 应用普遍存在不通过标准协议主动发送 fullscreen 请求的现象。这导致我们的 compositor 无法接收到 set_fullscreen 的有效信号，窗口被错误地处理为平铺窗口（tiled window）而非全屏显示。
-
-更复杂的是，当我们尝试强制将该窗口设为全屏（例如通过 surface.set_fullscreen(true)），应用会立即发出 unfullscreen 请求以撤回该状态。如果我们忽略这一请求，游戏在资源加载过程中将出现渲染错误或直接崩溃。
-
-为了解决该问题，我们实现了一种 伪全屏（fake fullscreen） 机制。该策略包括以下几个关键步骤：
-
-1. 将窗口切换为浮动状态（floating）以规避平铺约束；
-2. 设置窗口大小为覆盖整个输出设备（即屏幕）的分辨率；
-3. 临时隐藏所有上层 layer-shell 元素（如 top bar、launcher）；
-4. 在 compositor 内部将该窗口标记为“逻辑全屏”状态，但不向客户端发送 fullscreen 协议事件。
-
-通过这种方式，游戏客户端认为自己仍处于普通窗口模式，避免了 UE5 的兼容性问题；而用户看到的则是完整的全屏体验。该方法在 Wayland 环境下运行 UE5 系游戏提供了良好的兼容性和稳定性。
-
-```rs
-...
-    pub fn map_window(&mut self, window: Window) -> bool {
-        // fake fullscreen, no border fullscreen
-        if let Some(is_fullscreen) = self.window_manager.get_fullscreen(&window) {
-            if is_fullscreen {
-                window.set_layout(WindowLayout::Floating);
-                self.window_manager.raise_window(&window);
-
-                let output = self.output_manager.current_output();
-                let output_rect = self.output_manager.output_geometry(&output).unwrap();
-                window.set_rect_cache(output_rect);
-                window.send_rect(output_rect);
-
-                self.fullscreen(&window, output);
-            }
-        }
-    ...
-    }
-```
 
 #pagebreak()
 
@@ -3713,9 +3340,9 @@ tracy 可以用来方便的跟踪某个函数的生命周期与执行时间，�
 
 在 Mondrian 中，耗时最大的操作是 render 与 tiled tree 的相关操作。
 
-高刷显示器的普遍帧率在 120Hz 左右，因此每一帧的时间要在 8ms 左右，才能够有较好的体验。在本次跟踪分析中，我们一共打开了13个窗口，其中有 steam 游戏商城界面，firefox 视频播放，还有其他的 CLI 终端应用。平均的渲染操作时间在 792.23微秒，远远小于 8ms，因此能够做到稳定的高刷高帧率显示。
+在高刷显示器（通常为120Hz）上，为保证流畅体验，每帧的处理时间需控制在约8毫秒以内。在本次跟踪分析中，我们一共打开了13个窗口，其中有 steam 游戏商城界面，firefox 视频播放，还有其他的 CLI 终端应用。平均的渲染操作时间在 792.23微秒，远低于 8ms，系统能够稳定支持高帧率输出。
 
-对于平铺树，我们已经使用了 HashMap 与 SlopMap 进行高度优化，实现了常数级别的操作，最复杂的 resize 操作，平均时间在 261 纳秒，insert 与 remove 操作涉及到树的更新与替换，时间损耗上反而比 resize 要高，但是平均只有 8.5 微秒与 2.17 微秒。可以说效果非常好。
+对于平铺树，我们已经使用了 HashMap 与 SlopMap 进行高度优化，实现了常数级别的操作，最复杂的 resize 操作，平均时间在 261 纳秒，insert 与 remove 操作涉及到树的更新与替换，时间损耗上反而比 resize 要高，但是平均只有 8.5 微秒与 2.17 微秒。所有核心操作均保持在微秒级别，展现出良好的时间复杂度控制与执行性能。
 
 #figure(
   image("introduce/tracy4.png", width: 100%),
@@ -3727,86 +3354,14 @@ tracy 可以用来方便的跟踪某个函数的生命周期与执行时间，�
   caption: "Tracy profilter 跟踪分析"
 )
 
-在 tty 模式下，主要跟踪查看 Vblank 是否正常实现。可以看到，程序在接受到 vblank 通知后，才执行下一帧的渲染，然后将 frame callback 推送到 client 里去，这一步的逻辑是没有问题的。
+在 TTY 模式下，主要跟踪查看 VBlank 的实现情况。实测结果表明，程序在接收到 vBlank 通知后，才开始执行下一帧的渲染，并在渲染完成后向客户端发送frame callback，整体流程符合协议设计，逻辑验证正常。
 
-在 tty 模式下，我们没有实现非常优秀的 GPU 渲染优化，比如 damage 区域的管理，scanout 的处理，但是平均时间来到了 1.44 ms，但这也是可以接受的，测试下来也是能够稳定显示显示器刷新率 - 100Hz
+在 TTY 模式下，当前尚未实现完整的 GPU 渲染优化机制，比如 damage 区域的管理，scanout 的处理。尽管如此，系统的平均帧渲染时间为 1.44 ms，测试满足稳定显示显示器刷新率 - 100Hz
 
 #figure(
   image("introduce/GPU.png", width: 100%),
   caption: "Tracy profilter 跟踪分析"
 )
-
-整体来看，Mondrian 在稳态渲染场景下可以保持 2ms 内响应，但在高频窗口管理下，存在由 SlotMap 引起的布局延迟和内存瞬时暴涨问题，后续将考虑引入更深入的优化。
-
-== Glmark2-wayland测试
-
-glmark2 本身主要是一个 OpenGL (X11/EGL) 下的基准测试工具，我们使用 glmark2-wayland 来测试渲染的性能。
-
-```sh
-=======================================================
-    OpenGL Information
-    GL_VENDOR:      NVIDIA Corporation
-    GL_RENDERER:    NVIDIA GeForce RTX 4060/PCIe/SSE2
-    GL_VERSION:     4.6.0 NVIDIA 570.153.02
-    Surface Config: buf=32 r=8 g=8 b=8 a=8 depth=24 stencil=0 samples=0
-    Surface Size:   800x600 windowed
-=======================================================
-```
-
-#figure(
-  image("introduce/glmark2.png", width: 100%),
-  caption: "glmark2 空窗测试"
-)
-
-#figure(
-  image("introduce/glmark2-multi.png", width: 100%),
-  caption: "glmark2 正常情况测试"
-)
-
-平均分数比较：
-
-#align(center)[
-  #table(
-    columns: (3),
-    align: center,
-    inset: 5pt,
-    
-    [*程序*], [空窗下分数], [正常窗口下分数],
-    [*hyprland*], [5977], [5927],
-    [*tty模式*], [5234], [5163],
-    [*winit模式*], [7210], [6950],
-  )
-]
-
-本机显卡为 RTX4060，根据基准，超过 5000 就是高性能的象征，5000～6000 属于中高端卡的常见范围（具体取决于驱动、优化和系统环境）。
-
-测试能够体现 Mondrian，图形驱动安装正确，性能发挥良好，在 Winit 模式下，效果非常优秀，能够达到7000的高分，但是在 tty 模式下仍然有优化空间：
-
-1. blur/shadow：明显下降
-
-- Blur: 2532 FPS（0.395ms）
-- Shadow: 3669 FPS（0.273ms）
-
-可能原因：某些 effects 用到了 FBO 或 shader 特效，GPU 优化不足，frame buffer swap 没有完全与 vsync 同步。
-
-2. buffer update 渲染瓶颈
-- buffer 项目 FPS 降至 1380～1798，非常明显的下滑。
-- 对应的 FrameTime 达到了 0.5~0.7ms，说明这里在大量 CPU/GPU 交互 或 buffer map/subdata 中有问题。
-
-可能原因：CPU 和 GPU 同步太频繁，需要 buffer 更新策略（双 buffer 或 persistent map）
-
-3. [terrain], [refract] 项目 FPS 偏低
-- terrain 仅有 982 FPS，refract 为 1910 FPS
-- 它们是 重型 shader + 多层贴图 + geometry 的典型代表
-
-可能原因：没有开启部分高阶 OpenGL feature（比如 anisotropic filtering）， framebuffer 配置没有开启合适的 depth / stencil / FBO attachments。
-
-这些优化问题短时间内难以解决与处理，望后续学习相关内容后继续开发优化。
-
-
-
-#pagebreak()
-
 
 = 项目总结
 
@@ -3818,3 +3373,4 @@ glmark2 本身主要是一个 OpenGL (X11/EGL) 下的基准测试工具，我们
 
 
 #bibliography("ref.bib")
+
