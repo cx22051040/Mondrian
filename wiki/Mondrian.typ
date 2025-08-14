@@ -56,15 +56,10 @@
 
 // 封面
 #align(center)[
-  #text(weight: "bold", size: 30pt)[杭州电子科技大学]
-  \
-  #text(size: 15pt, style:"italic")[Hangzhou Dianzi University]
+  #image("introduce/logo.png", width: 80%)
 
-  #text(weight: "bold", size: 36pt)[全国大学生计算机系统能力大赛]
-  \
-  #text(weight: "bold", size: 20pt)[Computer System Development Capability Competition]
-  #linebreak()#linebreak()
-  #image("introduce/HDU_logo.png", width: 190pt, fit: "contain")
+  #linebreak()#linebreak()#linebreak()#linebreak()#linebreak()#linebreak()
+  
   #par(leading: 1em, spacing: 10em)[  
     #text(
       weight: "bold",
@@ -92,7 +87,7 @@
 == 项目简介
 
 本项目基于 Rust 语言与 Smithay 框架，通过 Wayland 协议实现了一个#standout_color[平铺式桌面显示系统]。
-项目能够在裸机终端中自行初始化 DRM/KMS 图形管线，并通过 GBM  和 EGL 建立 GPU 渲染上下文，使用 OpenGLES 进行硬件加速合成显示。启动后该 Compositor 接管系统图形输出，为客户端程序（如终端模拟器、浏览器）的 Wayland 提供显示服务。
+项目能够在裸机终端中自行初始化 DRM/KMS 图形管线，并通过 GBM 和 EGL 建立 GPU 渲染上下文，使用 OpenGLES 进行硬件加速合成显示。启动后该 Compositor 接管系统图形输出，为客户端程序（如终端模拟器、浏览器）的 Wayland 提供显示服务。
 
 #standout[“Beauty is the promise of happiness.” — Stendhal]
 
@@ -121,7 +116,7 @@
 
 在严格测试下，运行时崩溃情况基本被消除，系统具备良好的稳定性与容错机制。同时，本项目已集成 XWayland 支持，能够无缝运行绝大多数基于 X11 的传统 Linux GUI 应用。
 
-实测环境下，90% 以上的常见桌面程序（如 Firefox、VS Code、GIMP、LibreOffice 等）均可稳定运行，确保用户在迁移到本系统时不牺牲原有生态体验。
+实测环境下，约 90% 以上的常见桌面程序（如 Firefox、VS Code、GIMP、LibreOffice 等）均可稳定运行，确保用户在迁移到本系统时不牺牲原有生态体验。
 
 这些改进标志着项目已从原型阶段迈向实用性，具备成为主力桌面环境的潜力。
 
@@ -153,7 +148,7 @@
 
 == 项目特点
 
-/ 代码体量: 累计新增代码量超 1 万行，总代码修改量已超 5 万行。
+/ 代码体量: 累计新增代码量超 1.2 万行。
 
 / 全栈架构: 实现双后端架构：winit 支持桌面环境，TTY 支持裸机直启，原生 DRM/KMS 渲染流程：直接控制 GPU 输出，无需依赖 X11 Server。
 
@@ -2328,7 +2323,7 @@ pub fn exchange(&mut self, target: &Window, direction: Direction, is_favour: boo
 }
 ```
 
-=== expansion
+=== 平铺树看板算法
 
 Mondrian 还提供了一个类似全窗口看板的操作，将所有的平铺窗口与浮动窗口，设定为统一的大小，规整的排列在一起，方便用户进行窗口查询。
 
@@ -2421,7 +2416,7 @@ pub fn expansion(&self, animation_manager: &mut AnimationManager) {
 }
 ```
 
-=== invert
+=== 平铺树容器排列方向交换算法
 
 Mondrian 提供更改 Container direction 的操作，比如将水平分布的窗口转变为竖直分布。
 
@@ -2496,6 +2491,90 @@ pub fn switch_layout(&mut self, window: &Window, pointer_loc: Point<f64, Logical
 ```
 
 #pagebreak()
+
+== Workspace 工作区
+
+在平铺式窗口管理器中，*工作区（Workspace）*是实现窗口组织与切换的重要机制，是动态布局的核心功能之一。与传统的浮动式窗口管理器相比，平铺式窗口不依赖“最小化”或“隐藏”操作来管理暂时不使用的窗口，而是通过将窗口分布在多个工作区中，以维持清晰的窗口结构。
+
+#figure(
+  image("introduce/workspace.png", width: 100%),
+  caption: "workspace"
+)
+
+每个工作区通常包含一组逻辑相关的应用窗口，用户可以通过快捷键在各个工作区间快速切换，达到在不同任务间高效上下文切换的效果。这种方式不仅提升了操作效率，也避免了窗口层叠带来的混乱，使用户始终保持对当前活动窗口的聚焦。
+
+此外，工作区的切换具有高度的可预期性和空间记忆优势。用户可以为不同工作内容分配固定的工作区（如：编程、网页浏览、通信等），从而形成肌肉记忆式的使用习惯，极大提升多任务操作的流畅度。
+
+在动态平铺布局下，工作区不仅仅是窗口的分组容器，更是用户管理复杂窗口环境的核心手段。
+
+Mondrian 中实现了高效的工作区切换实现，允许用户自由的创建与切换工作区，并且各个工作区之间的元素不会互相干扰，只有当前工作区能够获取 focus 焦点与渲染事件。
+
+workspace 由 WorkspaceManager 管理， WorkspaceManager 管理多个 Workspace 对象：
+
+```rs
+#[derive(Debug)]
+pub struct Workspace {
+    workspace_id: WorkspaceId,
+
+    scheme: TiledScheme, 
+    container_tree: ContainerTree,
+
+    output_working_geometry: Rectangle<i32, Logical>,
+
+    configs: Arc<WorkspaceConfigs>,
+}
+
+#[derive(Debug)]
+pub struct WorkspaceManager {
+    workspaces: HashMap<WorkspaceId, Workspace>,
+    activated_workspace: Option<WorkspaceId>,
+    configs: Arc<WorkspaceConfigs>,
+}
+```
+
+每个 Workspace 拥有一个 ContianerTree，可以说 Workspace 是窗口管理的逻辑容器，承载所有窗口布局信息，是组织与调度窗口的关键单元。
+
+Workspace 主要与 WindowManager 进行联动，用来判断某个窗口是否是当前工作区的窗口，判断是否需要呈现以及给予焦点等操作：
+
+```rs
+...
+    pub fn mapped_windows(&self, workspace_id: WorkspaceId) -> impl Iterator<Item = &Window> {
+        self.mapped.iter().filter(move |window| {
+            self.window_workspace.get(*window) == Some(&workspace_id)
+        })
+    }
+    
+    pub fn window_under(&self, pointer_loc: Point<f64, Logical>, workspace_id: WorkspaceId) -> Option<Window> {
+        for window in &self.mapped {
+            if Some(&workspace_id) != self.window_workspace.get(window) {
+                continue;
+            }
+
+            // expansion window
+            if let Some(guard) = window.user_data().get::<ExpansionCache>() {
+                if let Some(window_rect) = guard.get() {
+                    if window_rect.contains(pointer_loc.to_i32_round()) {
+                        return Some(window.clone())
+                    }
+                    continue;
+                }
+            }
+
+            if let Some(window_rect) = window.get_rect() {
+                if window_rect.contains(pointer_loc.to_i32_round()) {
+                    return Some(window.clone())
+                }
+            }
+        }
+
+        None
+    }
+...
+```
+
+
+#pagebreak()
+
 
 == 动画效果实现
 
@@ -2795,6 +2874,242 @@ animation_manager.add_animation(
 
 #pagebreak()
 
+== 合成器统一渲染
+
+在 Wayland Compositor 中，所有客户端的可视内容最终由合成器统一处理与呈现。该过程由 RenderManager 模块负责协调与执行，具体包括以下核心职责：
+
+1. 渲染管线初始化：在启动阶段，RenderManager 负责创建并配置 GPU 着色器程序（Shader Program）、帧缓冲对象（FBO）以及相关渲染资源，构建完整的渲染流水线，以支持高效的图像合成与后处理操作。
+2. 图层收集与合成调度：在每一帧的渲染周期中，RenderManager 会收集当前所有需显示的表面（Surface）信息，包括客户端窗口、系统界面层（如 Bar、背景、Overlay 等），依据 Z-Index、透明度、几何变换等属性进行排序，并驱动底层渲染 API（如 OpenGL、Vulkan 或 GLES）逐层绘制，最终合成为一张完整的输出帧，提交至 DRM 进行显示。
+
+```rs
+impl RenderManager {
+    pub fn compile_shaders(&self, renderer: &mut GlesRenderer) {
+        BorderRenderElement::complie_shaders(renderer);
+        BackgroundRenderElement::complie_shaders(renderer);
+    }
+
+    pub fn get_render_elements<R: MondrianRenderer>(
+        &mut self,
+        renderer: &mut R,
+        output_manager: &OutputManager,
+        workspace_manager: &WorkspaceManager,
+        window_manager: &WindowManager,
+        cursor_manager: &mut CursorManager,
+        input_manager: &InputManager,
+        animation_manager: &mut AnimationManager
+    ) -> Vec<OutputRenderElements<R>> {
+        let _span = tracy_client::span!("get_render_elements");
+
+        let mut output_elements = vec![];
+
+        // First is Cursor
+        output_elements.extend(
+            self.get_cursor_render_elements(
+                renderer,
+                output_manager,
+                cursor_manager,
+                input_manager,
+            )
+            .into_iter()
+            .map(OutputRenderElements::Custom),
+        );
+
+        // Then Some Control elements
+
+        // Then Windows, Borders and Layer-shell
+        output_elements.extend(
+            self.get_windows_render_elements(
+                    renderer, 
+                    output_manager, 
+                    workspace_manager, 
+                    window_manager, 
+                    input_manager,
+                    animation_manager,
+                )
+                .into_iter()
+                .map(OutputRenderElements::Custom),
+        );
+
+        // output_elements.extend(
+        //     self.get_background_render_elements(renderer, output_manager)
+        //         .into_iter()
+        //         .map(OutputRenderElements::Custom),
+        // );
+
+        output_elements
+    }
+}
+```
+
+RenderManager 还负责设计 render_elements 对象的具体 trait 实现，确保渲染元素能够统一的被处理。这里使用的是 niri #cite(<niri>) 提供的宏定义模板，规定了渲染元素需要完成的函数行为。
+
+```rs
+niri_render_elements! {
+    ShaderRenderElement => {
+        Border=BorderRenderElement,
+        Background=BackgroundRenderElement,
+    }
+}
+
+niri_render_elements! {
+    CustomRenderElements<R> => {
+        Surface=WaylandSurfaceRenderElement<R>,
+        NamedPointer=MemoryRenderBufferRenderElement<R>,
+        Shader=ShaderRenderElement,
+    }
+}
+
+niri_render_elements! {
+    OutputRenderElements<R> => {
+        Space=SpaceRenderElements<R, WaylandSurfaceRenderElement<R>>,
+        Custom=CustomRenderElements<R>,
+    }
+}
+```
+
+#pagebreak()
+
+*获取窗口渲染元素*
+
+对于窗口渲染内容来说，我们以这样的顺序进行处理：
+
+1. 上层 layer_map：在 fullscreen 的情况下，我们允许启动上层的 layer 应用，但是在进入 fullscreen 时已经存在的会暂时隐藏
+2. fullscreen：全屏界面，这时候会进入 scanout 流程，也就是直接渲染输出。
+3. 获取 windows 元素： 根据 focus 的情况，判断是否要为其渲染焦点选中边框，边框有 shader 编写实现。
+4. 下层 layer_map
+
+```rs
+pub fn get_windows_render_elements<R: MondrianRenderer>(
+    &mut self,
+    renderer: &mut R,
+    output_manager: &OutputManager,
+    workspace_manager: &WorkspaceManager,
+    window_manager: &WindowManager,
+    input_manager: &InputManager,
+    animation_manager: &mut AnimationManager
+) -> Vec<CustomRenderElements<R>> {
+    let _span = tracy_client::span!("get_windows_render_elements");
+
+    let mut elements: Vec<CustomRenderElements<R>> = vec![];
+
+    let output = output_manager.current_output();
+    let output_geo = output_manager.output_geometry(output).unwrap();
+    let output_scale = output.current_scale().fractional_scale();
+
+    // layer shell top and overlap
+    let layer_map = layer_map_for_output(output);
+    for layer in [Layer::Overlay, Layer::Top] {
+        for layer_surface in layer_map.layers_on(layer) {
+            let layout_rec = layer_map.layer_geometry(layer_surface).unwrap();
+            elements.extend(
+                layer_surface.render_elements::<WaylandSurfaceRenderElement<R>>(
+                    renderer,
+                    (layout_rec.loc + output_geo.loc).to_physical_precise_round(output_scale),
+                    Scale::from(output_scale),
+                    1.0,
+                ).into_iter().map(CustomRenderElements::Surface)
+            );
+        }
+    }
+
+    // fullscreen surface
+    if let Some((window, _)) = output
+        .user_data()
+        .get::<FullscreenSurface>()
+        .and_then(|f| f.get())
+    {
+        let location: Point<i32, Logical> = (0, 0).into();
+        elements.extend(window
+            .render_elements::<WaylandSurfaceRenderElement<R>>(
+                renderer,
+                (location - window.geometry().loc).to_physical_precise_round(output_scale),
+                Scale::from(output_scale),
+                1.0,
+            ).into_iter().map(CustomRenderElements::Surface)
+        );
+
+        return elements;
+    }
+
+    // get focus
+    let focus = input_manager
+        .get_keyboard_focus()
+        .and_then(|t| match t {
+            KeyboardFocusTarget::Window(w) => Some(w),
+            _ => None,
+        });
+
+    // windows
+    for window in window_manager.mapped_windows(workspace_manager.current_workspace().id()) {
+        let rect = match animation_manager.get_animation_data(window) {
+            Some(rect) => {
+                rect
+            }
+            None => {
+                if let Some(rect) = window
+                    .user_data()
+                    .get::<ExpansionCache>()
+                    .and_then(|cache| cache.0.borrow().clone())
+                    .or_else(|| window.get_rect())
+                {
+                    rect
+                } else {
+                    continue;
+                }
+            }
+        };
+
+        // windows border
+        if let Some(focus) = &focus {
+            if focus == window {
+                elements.extend(self.get_border_render_elements(renderer, rect));
+            }
+        }
+        
+        let render_loc = (rect.loc - window.geometry().loc).to_physical_precise_round(output_scale);
+        
+        // set alpha
+        let mut alpha  = 0.85;
+        if let WindowLayout::Floating = window.get_layout() {
+            alpha = 1.0
+        } else if let Some(val) = window_manager.get_opacity(window) {
+            alpha = val;
+        }
+
+        elements.extend(window
+            .render_elements::<WaylandSurfaceRenderElement<R>>(
+                renderer,
+                render_loc,
+                Scale::from(output_scale),
+                alpha,
+            ).into_iter().map(CustomRenderElements::Surface)
+        );
+    }
+
+    // layer shell bottom and background
+    for layer in [Layer::Bottom, Layer::Background] {
+        for layer_surface in layer_map.layers_on(layer) {
+            let layout_rec = layer_map.layer_geometry(layer_surface).unwrap();
+            elements.extend(
+                layer_surface.render_elements::<WaylandSurfaceRenderElement<R>>(
+                    renderer,
+                    (layout_rec.loc + output_geo.loc).to_physical_precise_round(output_scale),
+                    Scale::from(output_scale),
+                    1.0,
+                ).into_iter().map(CustomRenderElements::Surface),
+            );
+        }
+    }
+
+    elements
+}
+```
+
+
+
+#pagebreak()
+
+
 == Configs manager
 
 Mondrian 致力于打造一个极简而灵活的平铺式窗口管理器，核心理念是将窗口管理逻辑与用户界面完全解耦，将控制权交还给用户。
@@ -2843,6 +3158,8 @@ Mondrian 遵循最小窗口管理器（Minimal Window Manager）的设计原则�
 
 Mondrian 提供了一份默认的美化模板，涵盖基本的主题配色、字体设置、透明度、圆角边框、Waybar 配置等，使用户开箱即用即可获得现代美观的桌面体验。
 同时，用户也可以基于该模板进行深度自定义，例如修改主题色调、调整布局逻辑、替换系统组件，构建属于自己的独特桌面环境。
+
+=== 自定义 shell 脚本
 
 用户还可以实现编写 shell 脚本来绑定快捷键，实现更丰富的内容。
 
@@ -2914,6 +3231,19 @@ rofi -show "${r_mode}" \
      -config "${roconf}"
 
 ```
+
+=== nixos 复现
+
+NixOS 是一个以 函数式配置管理 为核心理念的 Linux 发行版，构建在 Nix 包管理器之上。它最显著的特点之一是强大的 系统状态可复现能力（reproducibility）。
+
+在 NixOS 中，整个系统的配置（包括内核、服务、用户环境等）都通过声明式的 .nix 文件描述，类似于函数的输入参数。只要这些配置文件和对应的 Nix 包版本一致，就能构建出完全相同的系统环境。这种方式使得：
+
+1. 系统可以快速重建或迁移到另一台机器上
+2. 不同机器之间共享一致的开发环境
+
+Mondrian 为 NixOS 的开发制作了开箱即用的开发环境与完整配置 #link("github.com/linermao/nixos");
+
+直接使用 nix develop --impure 即可复现开发环境。
 
 #pagebreak()
 
@@ -3045,6 +3375,11 @@ impl GlobalData {
 == XWayland 协议实现
 
 在 Wayland 架构下，原生应用需通过 Wayland 协议与 Compositor 进行通信。但当前 Linux 桌面软件生态中，仍有大量基于 X11 的应用尚未迁移至 Wayland。为了兼容这些应用，XWayland 提供了一套桥接机制，使得 Wayland Compositor 能够托管 X11 应用窗口，从而保障传统应用的可用性。
+
+#figure(
+  image("introduce/steam.png", width: 100%),
+  caption: "x应用测试"
+)
 
 XWayland 是一个运行在 Wayland 上的 X 服务器（Xwayland 进程），其核心作用是：
 
@@ -3294,7 +3629,41 @@ impl XwmHandler for GlobalData {
 }
 ```
 
+=== 伪全屏实现
 
+在实现 xwayland 并成功运行 Steam 后，我们在测试 黑神话：悟空 时遇到了全屏显示相关的问题。该游戏基于 Unreal Engine 5（UE5）开发，UE5 应用普遍存在不通过标准协议主动发送 fullscreen 请求的现象。这导致我们的 compositor 无法接收到 set_fullscreen 的有效信号，窗口被错误地处理为平铺窗口（tiled window）而非全屏显示。
+
+更复杂的是，当我们尝试强制将该窗口设为全屏（例如通过 surface.set_fullscreen(true)），应用会立即发出 unfullscreen 请求以撤回该状态。如果我们忽略这一请求，游戏在资源加载过程中将出现渲染错误或直接崩溃。
+
+为了解决该问题，我们实现了一种 伪全屏（fake fullscreen） 机制。该策略包括以下几个关键步骤：
+
+1. 将窗口切换为浮动状态（floating）以规避平铺约束；
+2. 设置窗口大小为覆盖整个输出设备（即屏幕）的分辨率；
+3. 临时隐藏所有上层 layer-shell 元素（如 top bar、launcher）；
+4. 在 compositor 内部将该窗口标记为“逻辑全屏”状态，但不向客户端发送 fullscreen 协议事件。
+
+通过这种方式，游戏客户端认为自己仍处于普通窗口模式，避免了 UE5 的兼容性问题；而用户看到的则是完整的全屏体验。该方法在 Wayland 环境下运行 UE5 系游戏提供了良好的兼容性和稳定性。
+
+```rs
+...
+    pub fn map_window(&mut self, window: Window) -> bool {
+        // fake fullscreen, no border fullscreen
+        if let Some(is_fullscreen) = self.window_manager.get_fullscreen(&window) {
+            if is_fullscreen {
+                window.set_layout(WindowLayout::Floating);
+                self.window_manager.raise_window(&window);
+
+                let output = self.output_manager.current_output();
+                let output_rect = self.output_manager.output_geometry(&output).unwrap();
+                window.set_rect_cache(output_rect);
+                window.send_rect(output_rect);
+
+                self.fullscreen(&window, output);
+            }
+        }
+    ...
+    }
+```
 
 #pagebreak()
 
@@ -3363,6 +3732,78 @@ tracy 可以用来方便的跟踪某个函数的生命周期与执行时间，�
   caption: "Tracy profilter 跟踪分析"
 )
 
+整体来看，Mondrian 在稳态渲染场景下可以保持 2ms 内响应，但在高频窗口管理下，存在由 SlotMap 引起的布局延迟和内存瞬时暴涨问题，后续将考虑引入更深入的优化。
+
+== Glmark2-wayland测试
+
+glmark2 本身主要是一个 OpenGL (X11/EGL) 下的基准测试工具，我们使用 glmark2-wayland 来测试渲染的性能。
+
+```sh
+=======================================================
+    OpenGL Information
+    GL_VENDOR:      NVIDIA Corporation
+    GL_RENDERER:    NVIDIA GeForce RTX 4060/PCIe/SSE2
+    GL_VERSION:     4.6.0 NVIDIA 570.153.02
+    Surface Config: buf=32 r=8 g=8 b=8 a=8 depth=24 stencil=0 samples=0
+    Surface Size:   800x600 windowed
+=======================================================
+```
+
+#figure(
+  image("introduce/glmark2.png", width: 100%),
+  caption: "glmark2 空窗测试"
+)
+
+#figure(
+  image("introduce/glmark2-multi.png", width: 100%),
+  caption: "glmark2 正常情况测试"
+)
+
+平均分数比较：
+
+#align(center)[
+  #table(
+    columns: (3),
+    align: center,
+    inset: 5pt,
+    
+    [*程序*], [空窗下分数], [正常窗口下分数],
+    [*hyprland*], [5977], [5927],
+    [*tty模式*], [5234], [5163],
+    [*winit模式*], [7210], [6950],
+  )
+]
+
+本机显卡为 RTX4060，根据基准，超过 5000 就是高性能的象征，5000～6000 属于中高端卡的常见范围（具体取决于驱动、优化和系统环境）。
+
+测试能够体现 Mondrian，图形驱动安装正确，性能发挥良好，在 Winit 模式下，效果非常优秀，能够达到7000的高分，但是在 tty 模式下仍然有优化空间：
+
+1. blur/shadow：明显下降
+
+- Blur: 2532 FPS（0.395ms）
+- Shadow: 3669 FPS（0.273ms）
+
+可能原因：某些 effects 用到了 FBO 或 shader 特效，GPU 优化不足，frame buffer swap 没有完全与 vsync 同步。
+
+2. buffer update 渲染瓶颈
+- buffer 项目 FPS 降至 1380～1798，非常明显的下滑。
+- 对应的 FrameTime 达到了 0.5~0.7ms，说明这里在大量 CPU/GPU 交互 或 buffer map/subdata 中有问题。
+
+可能原因：CPU 和 GPU 同步太频繁，需要 buffer 更新策略（双 buffer 或 persistent map）
+
+3. [terrain], [refract] 项目 FPS 偏低
+- terrain 仅有 982 FPS，refract 为 1910 FPS
+- 它们是 重型 shader + 多层贴图 + geometry 的典型代表
+
+可能原因：没有开启部分高阶 OpenGL feature（比如 anisotropic filtering）， framebuffer 配置没有开启合适的 depth / stencil / FBO attachments。
+
+这些优化问题短时间内难以解决与处理，望后续学习相关内容后继续开发优化。
+
+
+
+#pagebreak()
+
+
 = 项目总结
 
 本项目基于 Rust 语言与 Smithay 框架，自主实现了一个完整的 Wayland 合成器，具备显示服务器与窗口管理器的双重功能。通过底层 DRM/KMS 图形接口实现原生渲染管线，支持离屏绘制与缓冲区交换；在输入管理、窗口调度、协议兼容等方面构建了高度模块化的系统架构。
@@ -3373,4 +3814,3 @@ tracy 可以用来方便的跟踪某个函数的生命周期与执行时间，�
 
 
 #bibliography("ref.bib")
-
